@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HitoLog Support</title>
+  <meta name="description" content="Support information for HitoLog.">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <main class="page">
+    <header class="site-header">
+      <div class="brand">
+        <h1 class="brand-title">HitoLog Support</h1>
+        <p class="brand-copy">HitoLogのサポートページです。</p>
+      </div>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="../">ホーム</a>
+        <a href="../privacy/">プライバシーポリシー</a>
+        <a href="../terms/">利用規約</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <h2>お問い合わせ</h2>
+      <p>不具合、利用方法、アカウント削除、通知、プロフィール、投稿に関するお問い合わせは、GitHub Issuesからご連絡ください。TestFlightをご利用中の場合は、TestFlightアプリからフィードバックを送信することもできます。</p>
+      <div class="button-row">
+        <a class="button" id="issues-link" href="https://github.com/">GitHub Issuesを開く</a>
+        <a class="button secondary" href="../privacy/">データの取り扱いを見る</a>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>よくある確認事項</h2>
+      <div class="list">
+        <article class="item">
+          <h3>サインインできない</h3>
+          <p>通信状態、Apple IDの状態、Sign in with Appleの許可状況を確認してください。改善しない場合は、発生時刻と表示されたエラー内容を添えてお問い合わせください。</p>
+        </article>
+        <article class="item">
+          <h3>通知が届かない</h3>
+          <p>HitoLogの設定画面とiOSの設定アプリの両方で通知がオンになっているか確認してください。コメントといいねの通知に対応しています。</p>
+        </article>
+        <article class="item">
+          <h3>プロフィールが反映されない</h3>
+          <p>通信状態を確認し、アプリを再起動してください。プロフィール画像、表示名、ユーザーID、自己紹介が保存対象です。</p>
+        </article>
+        <article class="item">
+          <h3>アカウントを削除したい</h3>
+          <p>アプリの設定画面から「アカウント削除」を実行できます。削除すると、アカウント情報や投稿などのユーザーデータは削除または非表示化されます。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>サポート時にあると助かる情報</h2>
+      <ul>
+        <li>利用中のiPhone機種とiOSバージョン</li>
+        <li>HitoLogのバージョン</li>
+        <li>発生した画面と操作手順</li>
+        <li>表示されたエラーメッセージ</li>
+        <li>スクリーンショットや画面収録がある場合はその内容</li>
+      </ul>
+    </section>
+
+    <p class="meta">Last updated: 2026-05-24</p>
+  </main>
+
+  <script>
+    (function () {
+      var link = document.getElementById("issues-link");
+      var host = window.location.hostname;
+      var parts = window.location.pathname.split("/").filter(Boolean);
+
+      if (host.endsWith(".github.io") && parts.length > 0) {
+        var owner = host.replace(".github.io", "");
+        var repo = parts[0];
+        link.href = "https://github.com/" + owner + "/" + repo + "/issues";
+      }
+    })();
+  </script>
+</body>
+</html>

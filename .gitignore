@@ -1,0 +1,30 @@
+# OS files
+.DS_Store
+
+# Editor files
+.vscode/
+.idea/
+
+# Xcode user files
+*.xcuserstate
+xcuserdata/
+DerivedData/
+
+# Environment files
+.env
+.env.*
+GoogleService-Info.plist
+*.p8
+*.mobileprovision
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+.next/
+functions/lib/
+functions/.runtimeconfig.json
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/

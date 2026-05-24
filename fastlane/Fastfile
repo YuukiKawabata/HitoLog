@@ -1,0 +1,19 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Build and upload HitoLog to TestFlight"
+  lane :beta do
+    build_app(
+      project: "HitoLog.xcodeproj",
+      scheme: "HitoLog",
+      configuration: "Release",
+      export_method: "app-store",
+      clean: true
+    )
+
+    upload_to_testflight(
+      skip_waiting_for_build_processing: false,
+      distribute_external: false
+    )
+  end
+end

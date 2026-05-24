@@ -1,0 +1,5 @@
+app_identifier("com.yukikawabata.HitoLog")
+team_id("976WT2WW6X")
+
+apple_id(ENV["APPLE_ID"]) if ENV["APPLE_ID"]
+itc_team_id(ENV["APP_STORE_CONNECT_TEAM_ID"]) if ENV["APP_STORE_CONNECT_TEAM_ID"]

@@ -1,0 +1,105 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userID) {
+      return signedIn() && request.auth.uid == userID;
+    }
+
+    function changedOnly(allowed) {
+      return request.resource.data.diff(resource.data).changedKeys().hasOnly(allowed);
+    }
+
+    match /users/{userID} {
+      allow read: if signedIn();
+      allow create: if isOwner(userID)
+        && request.resource.data.keys().hasOnly([
+          'displayName',
+          'handle',
+          'bio',
+          'avatarUrl',
+          'appleUserID',
+          'email',
+          'humanLevel',
+          'humanVerifiedPostRate',
+          'createdAt',
+          'updatedAt',
+          'isDeleted',
+          'notificationsEnabled'
+        ]);
+      allow update: if isOwner(userID)
+        && changedOnly([
+          'displayName',
+          'handle',
+          'bio',
+          'avatarUrl',
+          'email',
+          'updatedAt',
+          'isDeleted',
+          'notificationsEnabled'
+        ]);
+      allow delete: if false;
+    }
+
+    match /posts/{postID} {
+      allow read: if signedIn();
+      allow create: if isOwner(request.resource.data.userID)
+        && request.resource.data.likeCount == 0
+        && request.resource.data.commentCount == 0;
+      allow update: if isOwner(resource.data.userID)
+        && changedOnly(['body', 'updatedAt', 'isDeleted']);
+      allow delete: if false;
+    }
+
+    match /comments/{commentID} {
+      allow read: if signedIn();
+      allow create: if isOwner(request.resource.data.userID);
+      allow update: if isOwner(resource.data.userID)
+        && changedOnly(['body', 'updatedAt', 'isDeleted']);
+      allow delete: if false;
+    }
+
+    match /likes/{likeID} {
+      allow read: if signedIn();
+      allow create: if isOwner(request.resource.data.userID)
+        && likeID == request.resource.data.postID + '_' + request.resource.data.userID;
+      allow delete: if isOwner(resource.data.userID);
+      allow update: if false;
+    }
+
+    match /blocks/{blockID} {
+      allow read: if signedIn();
+      allow create: if isOwner(request.resource.data.blockerID)
+        && blockID == request.resource.data.blockerID + '_' + request.resource.data.blockedUserID;
+      allow delete: if isOwner(resource.data.blockerID);
+      allow update: if false;
+    }
+
+    match /mutes/{muteID} {
+      allow read: if signedIn();
+      allow create: if isOwner(request.resource.data.muterID)
+        && muteID == request.resource.data.muterID + '_' + request.resource.data.mutedUserID;
+      allow delete: if isOwner(resource.data.muterID);
+      allow update: if false;
+    }
+
+    match /reports/{reportID} {
+      allow read: if isOwner(resource.data.reporterID);
+      allow create: if isOwner(request.resource.data.reporterID);
+      allow update, delete: if false;
+    }
+
+    match /notifications/{notificationID} {
+      allow read, update: if isOwner(resource.data.recipientID);
+      allow create, delete: if false;
+    }
+
+    match /fcmTokens/{userID}/tokens/{tokenID} {
+      allow read, write: if isOwner(userID);
+    }
+  }
+}

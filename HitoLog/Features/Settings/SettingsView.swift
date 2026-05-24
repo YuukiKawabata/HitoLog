@@ -1,0 +1,668 @@
+import PhotosUI
+import SwiftUI
+import UIKit
+
+struct SettingsView: View {
+    @EnvironmentObject private var store: AppDataStore
+    @EnvironmentObject private var authSession: AuthSessionStore
+    @EnvironmentObject private var pushService: PushNotificationService
+    @AppStorage("hasCompletedInitialExperience") private var hasCompletedInitialExperience = true
+    @State private var isShowingLogoutConfirmation = false
+    @State private var isShowingDeleteConfirmation = false
+    @State private var accountDeleteErrorMessage: String?
+
+    var body: some View {
+        Form {
+            Section {
+                HStack(spacing: AppSpacing.md) {
+                    BrandIconView(size: 52)
+
+                    VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                        Text("HitoLog")
+                            .font(.headline)
+                        Text(AppConstants.copy)
+                            .font(.caption)
+                            .foregroundStyle(AppColor.textSecondary)
+                    }
+                }
+                .padding(.vertical, AppSpacing.xs)
+            }
+
+            Section("アカウント") {
+                NavigationLink {
+                    ProfileEditView()
+                } label: {
+                    Label("プロフィール編集", systemImage: "person.crop.circle")
+                }
+
+                Button {
+                    isShowingLogoutConfirmation = true
+                } label: {
+                    Label("ログアウト", systemImage: "rectangle.portrait.and.arrow.right")
+                }
+            }
+
+            Section("通知") {
+                Toggle(isOn: Binding(
+                    get: { pushService.isNotificationsEnabled },
+                    set: { isEnabled in
+                        Task {
+                            await pushService.setNotificationsEnabled(isEnabled)
+                        }
+                    }
+                )) {
+                    Label("コメントといいね", systemImage: "bell.badge")
+                }
+
+                if pushService.authorizationStatus == .denied {
+                    Text("iOSの設定で通知がオフになっています。通知を受け取るには設定アプリから許可してください。")
+                        .font(.footnote)
+                        .foregroundStyle(AppColor.textSecondary)
+                }
+            }
+
+            Section("安全") {
+                NavigationLink {
+                    UserManagementListView(mode: .blocked)
+                } label: {
+                    Label("ブロックしたユーザー", systemImage: "hand.raised")
+                }
+
+                NavigationLink {
+                    UserManagementListView(mode: .muted)
+                } label: {
+                    Label("ミュートしたユーザー", systemImage: "speaker.slash")
+                }
+
+                NavigationLink {
+                    ReportHistoryView()
+                } label: {
+                    Label("通報履歴", systemImage: "exclamationmark.bubble")
+                }
+            }
+
+            Section("アプリ") {
+                #if DEBUG
+                Toggle(isOn: Binding(
+                    get: { store.isDemoDataVisible },
+                    set: { isEnabled in
+                        if isEnabled {
+                            store.showScreenshotDemoData()
+                        } else {
+                            Task {
+                                await store.hideScreenshotDemoData()
+                            }
+                        }
+                    }
+                )) {
+                    Label("スクリーンショット用デモデータ", systemImage: "sparkles")
+                }
+
+                Text("オンにすると他ユーザー、投稿、コメントを端末内だけに表示します。Firebaseには保存しません。")
+                    .font(.footnote)
+                    .foregroundStyle(AppColor.textSecondary)
+                #endif
+
+                NavigationLink {
+                    LegalDocumentView(title: "利用規約", bodyText: legalTermsText)
+                } label: {
+                    Label("利用規約", systemImage: "doc.text")
+                }
+
+                NavigationLink {
+                    LegalDocumentView(title: "プライバシーポリシー", bodyText: privacyPolicyText)
+                } label: {
+                    Label("プライバシーポリシー", systemImage: "lock.doc")
+                }
+            }
+
+            Section {
+                Button(role: .destructive) {
+                    isShowingDeleteConfirmation = true
+                } label: {
+                    Text("アカウント削除")
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(AppColor.groupedBackground)
+        .navigationTitle("設定")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert("ログアウトしますか？", isPresented: $isShowingLogoutConfirmation) {
+            Button("キャンセル", role: .cancel) {}
+            Button("ログアウト", role: .destructive) {
+                authSession.signOut()
+                store.deactivateRemoteUser()
+                hasCompletedInitialExperience = false
+            }
+        } message: {
+            Text("この端末では初回画面に戻ります。")
+        }
+        .alert("アカウントを削除しますか？", isPresented: $isShowingDeleteConfirmation) {
+            Button("キャンセル", role: .cancel) {}
+            Button("削除", role: .destructive) {
+                Task {
+                    do {
+                        try await store.deleteCurrentAccountData()
+                        let didDelete = await authSession.deleteAccount()
+                        if didDelete {
+                            await MainActor.run {
+                                store.resetLocalAccount()
+                                hasCompletedInitialExperience = false
+                            }
+                        } else {
+                            await MainActor.run {
+                                accountDeleteErrorMessage = authSession.errorMessage ?? "アカウントを削除できませんでした。もう一度サインインしてからお試しください。"
+                            }
+                        }
+                    } catch {
+                        await MainActor.run {
+                            accountDeleteErrorMessage = "アカウント情報を削除できませんでした。通信状態を確認して、もう一度お試しください。"
+                        }
+                    }
+                }
+            }
+        } message: {
+            Text("アカウント情報を削除し、この端末のローカル状態も初期化します。")
+        }
+        .alert("削除できません", isPresented: Binding(
+            get: { accountDeleteErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    accountDeleteErrorMessage = nil
+                }
+            }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(accountDeleteErrorMessage ?? "")
+        }
+        .task {
+            await pushService.refreshAuthorizationStatus()
+        }
+    }
+}
+
+private struct ProfileEditView: View {
+    @EnvironmentObject private var store: AppDataStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var displayName = ""
+    @State private var handle = ""
+    @State private var bio = ""
+    @State private var avatarDataURL: String?
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var avatarProcessingError: String?
+    @State private var isShowingValidationError = false
+    @State private var isSavingProfile = false
+    @State private var profileSaveErrorMessage: String?
+    @State private var hasEditedDisplayName = false
+    @State private var hasEditedHandle = false
+
+    var body: some View {
+        Form {
+            Section {
+                HStack(spacing: AppSpacing.md) {
+                    AvatarView(user: previewUser, size: 56)
+                    VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                        Text(previewUser.displayName)
+                            .font(.headline)
+                        Text("@\(previewUser.handle)")
+                            .font(.subheadline)
+                            .foregroundStyle(AppColor.textSecondary)
+                    }
+                }
+                .padding(.vertical, AppSpacing.xs)
+            }
+
+            Section("プロフィール画像") {
+                HStack(spacing: AppSpacing.md) {
+                    AvatarView(user: previewUser, size: 72)
+
+                    VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                        PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                            Label("写真を選択", systemImage: "photo")
+                        }
+
+                        Button(role: .destructive) {
+                            avatarDataURL = nil
+                            selectedPhotoItem = nil
+                            avatarProcessingError = nil
+                        } label: {
+                            Label("画像を削除", systemImage: "trash")
+                        }
+                        .disabled(avatarDataURL == nil)
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .padding(.vertical, AppSpacing.xs)
+
+                if let avatarProcessingError {
+                    ValidationMessage(
+                        text: avatarProcessingError,
+                        color: .red,
+                        systemImage: "exclamationmark.circle.fill"
+                    )
+                }
+            }
+
+            Section("プロフィール") {
+                VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                    TextField("表示名", text: $displayName)
+                        .onChange(of: displayName) { _, _ in
+                            hasEditedDisplayName = true
+                        }
+
+                    if hasEditedDisplayName && trimmedDisplayName.isEmpty {
+                        ValidationMessage(
+                            text: "表示名を入力してください。",
+                            color: .red,
+                            systemImage: "exclamationmark.circle.fill"
+                        )
+                    }
+                }
+                VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                    TextField("ユーザーID", text: $handle)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .onChange(of: handle) { _, _ in
+                            hasEditedHandle = true
+                        }
+
+                    ValidationMessage(
+                        text: handleValidationText,
+                        color: handleValidationColor,
+                        systemImage: handleValidationIcon
+                    )
+                }
+                TextField("自己紹介", text: $bio, axis: .vertical)
+                    .lineLimit(3...6)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(AppColor.groupedBackground)
+        .navigationTitle("プロフィール編集")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button(isSavingProfile ? "保存中" : "保存") {
+                    Task {
+                        await save()
+                    }
+                }
+                .disabled(!canSave || isSavingProfile)
+            }
+        }
+        .onAppear {
+            displayName = store.currentUser.displayName
+            handle = store.currentUser.handle
+            bio = store.currentUser.bio
+            avatarDataURL = store.currentUser.avatarUrl
+        }
+        .task(id: selectedPhotoItem) {
+            await loadSelectedPhoto()
+        }
+        .alert("保存できません", isPresented: $isShowingValidationError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("表示名とユーザーIDを確認してください。")
+        }
+        .alert("保存できません", isPresented: Binding(
+            get: { profileSaveErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    profileSaveErrorMessage = nil
+                }
+            }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(profileSaveErrorMessage ?? "通信状態を確認して、もう一度お試しください。")
+        }
+    }
+
+    private func save() async {
+        let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedHandle = handle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard canSave else {
+            isShowingValidationError = true
+            return
+        }
+
+        isSavingProfile = true
+        defer { isSavingProfile = false }
+
+        do {
+            try await store.updateCurrentUser(displayName: trimmedName, handle: trimmedHandle, bio: bio, avatarUrl: avatarDataURL)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            dismiss()
+        } catch {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            profileSaveErrorMessage = "プロフィールを保存できませんでした。通信状態を確認して、もう一度お試しください。"
+        }
+    }
+
+    private func loadSelectedPhoto() async {
+        guard let selectedPhotoItem else { return }
+
+        do {
+            guard let data = try await selectedPhotoItem.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data),
+                  let dataURL = ProfileAvatarEncoder.dataURL(from: image) else {
+                avatarProcessingError = "画像を読み込めませんでした。別の写真を選択してください。"
+                return
+            }
+
+            avatarDataURL = dataURL
+            avatarProcessingError = nil
+        } catch {
+            avatarProcessingError = "画像を読み込めませんでした。別の写真を選択してください。"
+        }
+    }
+
+    private var canSave: Bool {
+        !trimmedDisplayName.isEmpty && ValidationUtil.isValidHandle(trimmedHandle)
+    }
+
+    private var trimmedDisplayName: String {
+        displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedHandle: String {
+        handle.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var handleValidationResult: ValidationUtil.HandleValidationResult {
+        return ValidationUtil.validateHandle(trimmedHandle)
+    }
+
+    private var handleValidationText: String {
+        if let message = handleValidationResult.message, hasEditedHandle {
+            return message
+        }
+        return "3〜20文字の英数字とアンダースコアのみ使えます。"
+    }
+
+    private var handleValidationColor: Color {
+        handleValidationResult == .valid || !hasEditedHandle ? AppColor.textSecondary : .red
+    }
+
+    private var handleValidationIcon: String {
+        handleValidationResult == .valid || !hasEditedHandle ? "info.circle" : "exclamationmark.circle.fill"
+    }
+
+    private var previewUser: AppUser {
+        var user = store.currentUser
+        let previewName = trimmedDisplayName.isEmpty ? displayName : trimmedDisplayName
+        let previewHandle = trimmedHandle.isEmpty ? handle : trimmedHandle
+        user.displayName = previewName.isEmpty ? store.currentUser.displayName : previewName
+        user.handle = previewHandle.isEmpty ? store.currentUser.handle : previewHandle
+        user.avatarUrl = avatarDataURL
+        return user
+    }
+}
+
+private enum ProfileAvatarEncoder {
+    private static let targetSize = CGSize(width: 256, height: 256)
+
+    static func dataURL(from image: UIImage) -> String? {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+
+        let renderer = UIGraphicsImageRenderer(size: targetSize, format: format)
+        let renderedImage = renderer.image { context in
+            UIColor.systemBackground.setFill()
+            context.fill(CGRect(origin: .zero, size: targetSize))
+
+            let scale = max(targetSize.width / image.size.width, targetSize.height / image.size.height)
+            let scaledSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+            let origin = CGPoint(
+                x: (targetSize.width - scaledSize.width) / 2,
+                y: (targetSize.height - scaledSize.height) / 2
+            )
+
+            image.draw(in: CGRect(origin: origin, size: scaledSize))
+        }
+
+        for quality in stride(from: 0.72, through: 0.46, by: -0.08) {
+            guard let data = renderedImage.jpegData(compressionQuality: quality) else { continue }
+            if data.count <= 300_000 {
+                return "data:image/jpeg;base64,\(data.base64EncodedString())"
+            }
+        }
+
+        guard let data = renderedImage.jpegData(compressionQuality: 0.4) else { return nil }
+        return "data:image/jpeg;base64,\(data.base64EncodedString())"
+    }
+}
+
+private struct ValidationMessage: View {
+    let text: String
+    let color: Color
+    let systemImage: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: AppSpacing.xs) {
+            Image(systemName: systemImage)
+                .font(.caption)
+                .foregroundStyle(color)
+                .frame(width: 14)
+
+            Text(text)
+                .font(.footnote)
+                .foregroundStyle(color)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private enum UserManagementMode {
+    case blocked
+    case muted
+
+    var title: String {
+        switch self {
+        case .blocked:
+            return "ブロックしたユーザー"
+        case .muted:
+            return "ミュートしたユーザー"
+        }
+    }
+
+    var emptyText: String {
+        switch self {
+        case .blocked:
+            return "ブロック中のユーザーはいません。"
+        case .muted:
+            return "ミュート中のユーザーはいません。"
+        }
+    }
+
+    var activeButtonTitle: String {
+        switch self {
+        case .blocked:
+            return "解除"
+        case .muted:
+            return "解除"
+        }
+    }
+
+    var candidateButtonTitle: String {
+        switch self {
+        case .blocked:
+            return "ブロック"
+        case .muted:
+            return "ミュート"
+        }
+    }
+}
+
+private struct UserManagementListView: View {
+    @EnvironmentObject private var store: AppDataStore
+    let mode: UserManagementMode
+
+    var body: some View {
+        List {
+            Section(mode.title) {
+                if activeUsers.isEmpty {
+                    Text(mode.emptyText)
+                        .foregroundStyle(AppColor.textSecondary)
+                } else {
+                    ForEach(activeUsers) { user in
+                        ManagedUserRow(user: user, buttonTitle: mode.activeButtonTitle) {
+                            remove(user)
+                        }
+                    }
+                }
+            }
+
+            Section("追加候補") {
+                if candidateUsers.isEmpty {
+                    Text("追加できるユーザーはいません。")
+                        .foregroundStyle(AppColor.textSecondary)
+                } else {
+                    ForEach(candidateUsers) { user in
+                        ManagedUserRow(user: user, buttonTitle: mode.candidateButtonTitle) {
+                            add(user)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(mode.title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var activeUsers: [AppUser] {
+        switch mode {
+        case .blocked:
+            return store.blockedUsers()
+        case .muted:
+            return store.mutedUsers()
+        }
+    }
+
+    private var candidateUsers: [AppUser] {
+        store.users.filter { user in
+            user.id != store.currentUser.id && !activeUsers.contains(where: { $0.id == user.id })
+        }
+    }
+
+    private func add(_ user: AppUser) {
+        switch mode {
+        case .blocked:
+            store.block(user.id)
+        case .muted:
+            store.mute(user.id)
+        }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    private func remove(_ user: AppUser) {
+        switch mode {
+        case .blocked:
+            store.unblock(user.id)
+        case .muted:
+            store.unmute(user.id)
+        }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+}
+
+private struct ManagedUserRow: View {
+    let user: AppUser
+    let buttonTitle: String
+    let action: () -> Void
+
+    var body: some View {
+        HStack(spacing: AppSpacing.md) {
+            AvatarView(user: user, size: 38)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(user.displayName)
+                    .font(.subheadline.weight(.semibold))
+                Text("@\(user.handle)")
+                    .font(.caption)
+                    .foregroundStyle(AppColor.textSecondary)
+            }
+            Spacer()
+            Button(buttonTitle, action: action)
+                .font(.caption.weight(.semibold))
+        }
+        .padding(.vertical, AppSpacing.xs)
+    }
+}
+
+private struct ReportHistoryView: View {
+    @EnvironmentObject private var store: AppDataStore
+
+    var body: some View {
+        List {
+            if store.reportHistory.isEmpty {
+                ContentUnavailableView("通報履歴はありません", systemImage: "exclamationmark.bubble")
+                    .listRowBackground(Color.clear)
+            } else {
+                ForEach(store.reportHistory) { report in
+                    VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                        Text(report.targetDescription)
+                            .font(.subheadline.weight(.semibold))
+                        Text("理由: \(report.reason)")
+                            .font(.caption)
+                            .foregroundStyle(AppColor.textSecondary)
+                        Text("\(DateFormatterUtil.relativeString(from: report.createdAt)) ・ \(report.status)")
+                            .font(.caption2)
+                            .foregroundStyle(AppColor.textTertiary)
+                    }
+                    .padding(.vertical, AppSpacing.xs)
+                }
+            }
+        }
+        .navigationTitle("通報履歴")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct LegalDocumentView: View {
+    let title: String
+    let bodyText: String
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: AppSpacing.md) {
+                Text(title)
+                    .font(.title2.weight(.bold))
+                Text(bodyText)
+                    .font(.body)
+                    .foregroundStyle(AppColor.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(AppSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(AppColor.groupedBackground)
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private let legalTermsText = """
+HitoLogは、本人がアプリ内で入力した言葉を投稿するためのSNSです。
+
+ユーザーは、自分が投稿またはコメントする内容について責任を持つものとします。第三者の権利を侵害する内容、誹謗中傷、違法または不適切な内容、スパム行為、サービスの運営を妨げる行為は禁止します。
+
+HitoLogでは、投稿、コメント、いいね、ブロック、ミュート、通報などの機能を提供します。運営上必要な場合、不適切な投稿やアカウントの表示制限、削除、利用停止を行うことがあります。
+
+アカウント削除は設定画面から実行できます。削除すると、アカウント情報、投稿、コメント、通知トークンなどのユーザーデータは削除または非表示化されます。安全確認や法令対応のため、通報記録など一部の情報を必要な期間保持する場合があります。
+"""
+
+private let privacyPolicyText = """
+HitoLogは、アカウント作成、投稿、コメント、通知、安全機能を提供するために必要な情報を扱います。
+
+収集する情報には、Sign in with AppleおよびFirebase Authのアカウント識別子、プロフィール情報、投稿、コメント、いいね、ブロック、ミュート、通報、投稿時の入力時間や編集回数などの入力指標、通知を有効にした場合のFirebase Cloud Messagingトークンが含まれます。
+
+これらの情報は、タイムラインやプロフィールの表示、安全機能の提供、通報対応、コメントといいねの通知配信、サービスの保護のために利用します。通知トークンはHitoLogの通知配信にのみ利用します。
+
+HitoLogはFirebase Auth、Cloud Firestore、App Check、Cloud Messaging、Cloud Functionsを利用します。収集したデータを販売することはありません。
+
+ユーザーはアプリ内の設定から通知をオフにできます。また、設定画面からアカウント削除を実行できます。
+"""
