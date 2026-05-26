@@ -22,6 +22,7 @@ final class AppDataStore: ObservableObject {
     private let initialComments: [Comment]
     private let initialLikedPostIDs: Set<String>
     private var remoteUserID: String?
+    private var currentUserBeforeDemoData: AppUser?
 
     var recentPostCount: Int {
         let oneHourAgo = Date().addingTimeInterval(-3600)
@@ -301,6 +302,7 @@ final class AppDataStore: ObservableObject {
         mutedUserIDs = []
         reportHistory = []
         isDemoDataVisible = false
+        currentUserBeforeDemoData = nil
         deactivateRemoteUser()
     }
 
@@ -338,20 +340,26 @@ final class AppDataStore: ObservableObject {
     }
 
     func showScreenshotDemoData() {
+        if !isDemoDataVisible {
+            currentUserBeforeDemoData = currentUser
+        }
         isDemoDataVisible = true
         applyScreenshotDemoData()
     }
 
     func hideScreenshotDemoData() async {
         isDemoDataVisible = false
+        restoreCurrentUserAfterDemoData()
 
         if isRemoteSyncEnabled {
             do {
                 try await reloadRemoteSnapshot()
             } catch {
+                removeLocalDemoData()
                 recordRemoteError(error)
             }
         } else {
+            currentUser = initialCurrentUser
             users = initialUsers
             posts = initialPosts
             comments = initialComments
@@ -401,17 +409,42 @@ final class AppDataStore: ObservableObject {
     private func applyScreenshotDemoData() {
         let seed = MockDataStore()
         let seedCurrentUserID = seed.currentUser.id
+        let activeCurrentUserID = currentUser.id
         let demoUsers = seed.users
             .filter { $0.id != seedCurrentUserID && $0.id != currentUser.id }
 
+        currentUser = seed.currentUser.demoProfileCopy(
+            currentUserID: activeCurrentUserID,
+            appleUserID: currentUser.appleUserId
+        )
         users = mergeCurrentUser(into: uniqueUsers(users + demoUsers))
         posts = uniquePosts(posts.filter { !$0.id.hasPrefix("demo-") } + seed.posts.map { post in
-            post.demoCopy(currentUserID: currentUser.id, seedCurrentUserID: seedCurrentUserID)
+            post.demoCopy(currentUserID: activeCurrentUserID, seedCurrentUserID: seedCurrentUserID)
         })
         comments = uniqueComments(comments.filter { !$0.id.hasPrefix("demo-") } + seed.comments.map { comment in
-            comment.demoCopy(currentUserID: currentUser.id, seedCurrentUserID: seedCurrentUserID)
+            comment.demoCopy(currentUserID: activeCurrentUserID, seedCurrentUserID: seedCurrentUserID)
         })
+        likedPostIDs = Set(likedPostIDs.filter { !$0.hasPrefix("demo-") })
         likedPostIDs.formUnion(seed.likedPostIDs.map { "demo-\($0)" })
+        blockedUserIDs.subtract(demoUsers.map(\.id))
+        mutedUserIDs.subtract(demoUsers.map(\.id))
+    }
+
+    private func restoreCurrentUserAfterDemoData() {
+        if let currentUserBeforeDemoData {
+            currentUser = currentUserBeforeDemoData
+            self.currentUserBeforeDemoData = nil
+        }
+    }
+
+    private func removeLocalDemoData() {
+        let demoUserIDs = Set(MockDataStore().users.map(\.id))
+        users = mergeCurrentUser(into: users.filter { !demoUserIDs.contains($0.id) })
+        posts = posts.filter { !$0.id.hasPrefix("demo-") }
+        comments = comments.filter { !$0.id.hasPrefix("demo-") }
+        likedPostIDs = Set(likedPostIDs.filter { !$0.hasPrefix("demo-") })
+        blockedUserIDs.subtract(demoUserIDs)
+        mutedUserIDs.subtract(demoUserIDs)
     }
 
     private func uniqueUsers(_ users: [AppUser]) -> [AppUser] {
@@ -521,6 +554,24 @@ final class AppDataStore: ObservableObject {
 
     private func recordRemoteError(_ error: Error) {
         lastSyncErrorMessage = error.localizedDescription
+    }
+}
+
+private extension AppUser {
+    func demoProfileCopy(currentUserID: String, appleUserID: String?) -> AppUser {
+        AppUser(
+            id: currentUserID,
+            displayName: displayName,
+            handle: handle,
+            bio: bio,
+            avatarUrl: avatarUrl,
+            appleUserId: appleUserID,
+            humanLevel: humanLevel,
+            humanVerifiedPostRate: humanVerifiedPostRate,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            isDeleted: isDeleted
+        )
     }
 }
 

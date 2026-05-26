@@ -10,6 +10,10 @@ struct BrandIconView: View {
             .scaledToFit()
             .frame(width: size, height: size)
             .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
-            .shadow(color: .black.opacity(showsShadow ? 0.12 : 0), radius: 14, y: 8)
+            .overlay {
+                RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
+                    .stroke(AppColor.border.opacity(0.74), lineWidth: 0.6)
+            }
+            .shadow(color: showsShadow ? AppColor.shadow : .clear, radius: 14, y: 8)
     }
 }

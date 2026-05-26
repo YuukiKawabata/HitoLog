@@ -21,11 +21,10 @@ struct ProfileView: View {
                         )
                         .padding(AppSpacing.md)
 
-                        Text("投稿")
-                            .font(.headline)
+                        SectionKicker(text: "Posts", systemImage: "text.bubble")
                             .padding(.horizontal, AppSpacing.md)
                             .padding(.top, AppSpacing.sm)
-                            .padding(.bottom, AppSpacing.xs)
+                            .padding(.bottom, AppSpacing.sm)
 
                         let posts = profilePosts(for: user)
                         if posts.isEmpty {
@@ -59,7 +58,7 @@ struct ProfileView: View {
                 ContentUnavailableView("ユーザーが見つかりません", systemImage: "person.crop.circle.badge.questionmark")
             }
         }
-        .background(AppColor.groupedBackground)
+        .background(PaperCanvas())
         .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $editingPost) { post in
@@ -124,8 +123,10 @@ private struct ProfileHeaderView: View {
                 AvatarView(user: user, size: 76)
 
                 VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                    SectionKicker(text: "Profile")
+
                     Text(user.displayName)
-                        .font(.title2.weight(.bold))
+                        .font(AppFont.title)
                     Text("@\(user.handle)")
                         .font(.subheadline)
                         .foregroundStyle(AppColor.textSecondary)
@@ -137,7 +138,8 @@ private struct ProfileHeaderView: View {
             }
 
             Text(user.bio)
-                .font(.body)
+                .font(AppFont.body)
+                .lineSpacing(5)
                 .foregroundStyle(AppColor.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -161,7 +163,7 @@ private struct ProfileHeaderView: View {
             }
         }
         .padding(AppSpacing.md)
-        .background(AppColor.background, in: RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
+        .paperSurface()
     }
 }
 
@@ -173,11 +175,18 @@ private struct ProfileCount: View {
         VStack(alignment: .leading, spacing: AppSpacing.xs) {
             Text(value)
                 .font(.headline)
+                .foregroundStyle(AppColor.textPrimary)
             Text(title)
                 .font(.caption)
                 .foregroundStyle(AppColor.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(AppSpacing.sm)
+        .background(AppColor.surface, in: RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                .stroke(AppColor.border, lineWidth: 0.5)
+        }
     }
 }
 
@@ -202,5 +211,9 @@ private struct ProfileSignalTile: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(AppSpacing.sm)
         .background(AppColor.surface, in: RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                .stroke(AppColor.border, lineWidth: 0.5)
+        }
     }
 }

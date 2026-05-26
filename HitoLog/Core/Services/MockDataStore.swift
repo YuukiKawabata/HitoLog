@@ -43,152 +43,192 @@ final class MockDataStore: ObservableObject {
 
     init() {
         let now = Date()
+        let calendar = Calendar.current
         let currentUser = AppUser(
-            id: "user-yuuki",
-            displayName: "Yuuki",
-            handle: "kakabata",
-            bio: "AI時代に、自分の言葉を残すSNSを作っています。",
+            id: "user-nagi",
+            displayName: "Nagi",
+            handle: "nagi_words",
+            bio: "AI時代に、自分で考えて入力した言葉を残しています。",
             avatarUrl: nil,
             appleUserId: nil,
             humanLevel: 4,
-            humanVerifiedPostRate: 0.98,
-            createdAt: Calendar.current.date(byAdding: .day, value: -14, to: now) ?? now,
+            humanVerifiedPostRate: 0.97,
+            createdAt: calendar.date(byAdding: .day, value: -32, to: now) ?? now,
             updatedAt: now,
             isDeleted: false
         )
 
         let secondUser = AppUser(
-            id: "user-mio",
-            displayName: "Mio",
-            handle: "mio_words",
-            bio: "日々の考えを短く残しています。",
+            id: "user-aoi",
+            displayName: "Aoi",
+            handle: "aoi_note",
+            bio: "夜に少しだけ、考えたことを書き残します。",
             avatarUrl: nil,
             appleUserId: nil,
-            humanLevel: 3,
-            humanVerifiedPostRate: 0.91,
-            createdAt: Calendar.current.date(byAdding: .day, value: -40, to: now) ?? now,
+            humanLevel: 5,
+            humanVerifiedPostRate: 0.99,
+            createdAt: calendar.date(byAdding: .day, value: -118, to: now) ?? now,
             updatedAt: now,
             isDeleted: false
         )
 
         let thirdUser = AppUser(
-            id: "user-riku",
-            displayName: "Riku",
-            handle: "riku_notes",
-            bio: "プロダクトの手触りを観察しています。",
+            id: "user-ren",
+            displayName: "Ren",
+            handle: "ren_thinks",
+            bio: "速さより、自分で考えた言葉を大事にしています。",
             avatarUrl: nil,
             appleUserId: nil,
-            humanLevel: 2,
-            humanVerifiedPostRate: 0.86,
-            createdAt: Calendar.current.date(byAdding: .day, value: -9, to: now) ?? now,
+            humanLevel: 4,
+            humanVerifiedPostRate: 0.94,
+            createdAt: calendar.date(byAdding: .day, value: -76, to: now) ?? now,
             updatedAt: now,
             isDeleted: false
         )
 
         let fourthUser = AppUser(
-            id: "user-sana",
-            displayName: "Sana",
-            handle: "sana_daily",
-            bio: "考えごとをゆっくり書きます。",
+            id: "user-mio",
+            displayName: "Mio",
+            handle: "mio_daily",
+            bio: "日々の小さな違和感や発見を短く書きます。",
             avatarUrl: nil,
             appleUserId: nil,
-            humanLevel: 5,
-            humanVerifiedPostRate: 0.99,
-            createdAt: Calendar.current.date(byAdding: .day, value: -120, to: now) ?? now,
+            humanLevel: 3,
+            humanVerifiedPostRate: 0.91,
+            createdAt: calendar.date(byAdding: .day, value: -44, to: now) ?? now,
             updatedAt: now,
             isDeleted: false
         )
 
-        let users = [currentUser, secondUser, thirdUser, fourthUser]
+        let fifthUser = AppUser(
+            id: "user-haru",
+            displayName: "Haru",
+            handle: "haru_log",
+            bio: "SNSをゆっくり使いたい人です。",
+            avatarUrl: nil,
+            appleUserId: nil,
+            humanLevel: 3,
+            humanVerifiedPostRate: 0.89,
+            createdAt: calendar.date(byAdding: .day, value: -21, to: now) ?? now,
+            updatedAt: now,
+            isDeleted: false
+        )
+
+        let post1Body = "AIが文章をすぐ作れる時代だからこそ、少し迷いながら自分で入力した言葉を残しておきたい。今日はその一文だけで十分。"
+        let post2Body = "貼り付けではなく、その場で考えながら打った言葉には、その人の温度が残る気がする。HitoLogはその小さな跡を大切にしたい。"
+        let post3Body = "速く投稿するより、自分の言葉になるまで少し待つ。AIのきれいな文章より、今の自分にしか書けない違和感を残したい。"
+        let post4Body = "今日はうまく言えない気持ちを、そのまま書いた。整っていない文章でも、自分で入力した跡があると少し安心する。"
+        let post5Body = "SNSを開くたびに急かされる感じが苦手だった。ここでは短くても、自分で打った言葉だけをゆっくり読めるのがいい。"
+        let post6Body = "コメントも短くていい。読んだ人が、自分の言葉で返してくれるだけで十分うれしい。"
+
+        let users = [currentUser, secondUser, thirdUser, fourthUser, fifthUser]
         let posts = [
             Post(
                 id: "post-1",
-                userId: currentUser.id,
-                body: "今日は朝散歩しながら、アプリのことを考えていた。自分の言葉で投稿するSNS、意外と需要ありそう。",
-                humanScore: 92,
+                userId: secondUser.id,
+                body: post1Body,
+                humanScore: 96,
                 humanBadge: .verified,
-                inputDurationMs: 42_000,
-                characterCount: 52,
-                editCount: 8,
-                deleteCount: 3,
+                inputDurationMs: 74_000,
+                characterCount: post1Body.count,
+                editCount: 12,
+                deleteCount: 5,
                 suspiciousBulkInputCount: 0,
                 appCheckVerified: true,
-                likeCount: 12,
+                likeCount: 34,
                 commentCount: 2,
-                createdAt: now.addingTimeInterval(-300),
-                updatedAt: now.addingTimeInterval(-300),
+                createdAt: now.addingTimeInterval(-240),
+                updatedAt: now.addingTimeInterval(-240),
                 isDeleted: false
             ),
             Post(
                 id: "post-2",
-                userId: secondUser.id,
-                body: "短い言葉でも、手で入力した跡が残ると読み方が変わる気がする。",
-                humanScore: 88,
+                userId: currentUser.id,
+                body: post2Body,
+                humanScore: 94,
                 humanBadge: .verified,
-                inputDurationMs: 31_000,
-                characterCount: 31,
-                editCount: 5,
-                deleteCount: 1,
-                suspiciousBulkInputCount: 0,
-                appCheckVerified: true,
-                likeCount: 7,
-                commentCount: 0,
-                createdAt: now.addingTimeInterval(-1600),
-                updatedAt: now.addingTimeInterval(-1600),
-                isDeleted: false
-            ),
-            Post(
-                id: "post-3",
-                userId: fourthUser.id,
-                body: "下書きから貼るのではなく、その場で考えながら書くと、文章に迷いが残る。その迷いまで読める場所にしたい。",
-                humanScore: 95,
-                humanBadge: .verified,
-                inputDurationMs: 68_000,
-                characterCount: 55,
-                editCount: 13,
+                inputDurationMs: 82_000,
+                characterCount: post2Body.count,
+                editCount: 15,
                 deleteCount: 6,
                 suspiciousBulkInputCount: 0,
                 appCheckVerified: true,
                 likeCount: 28,
+                commentCount: 3,
+                createdAt: now.addingTimeInterval(-1_100),
+                updatedAt: now.addingTimeInterval(-1_100),
+                isDeleted: false
+            ),
+            Post(
+                id: "post-3",
+                userId: thirdUser.id,
+                body: post3Body,
+                humanScore: 92,
+                humanBadge: .verified,
+                inputDurationMs: 69_000,
+                characterCount: post3Body.count,
+                editCount: 10,
+                deleteCount: 4,
+                suspiciousBulkInputCount: 0,
+                appCheckVerified: true,
+                likeCount: 21,
                 commentCount: 1,
-                createdAt: now.addingTimeInterval(-4_900),
-                updatedAt: now.addingTimeInterval(-4_900),
+                createdAt: now.addingTimeInterval(-3_600),
+                updatedAt: now.addingTimeInterval(-3_600),
                 isDeleted: false
             ),
             Post(
                 id: "post-4",
-                userId: thirdUser.id,
-                body: "Human Scoreは点数を見せるより、読む側に小さな安心感だけ渡すほうがよさそう。見せすぎると攻略ゲームになる。",
-                humanScore: 76,
-                humanBadge: .checking,
-                inputDurationMs: 24_000,
-                characterCount: 57,
-                editCount: 2,
-                deleteCount: 0,
-                suspiciousBulkInputCount: 1,
+                userId: fourthUser.id,
+                body: post4Body,
+                humanScore: 95,
+                humanBadge: .verified,
+                inputDurationMs: 91_000,
+                characterCount: post4Body.count,
+                editCount: 18,
+                deleteCount: 8,
+                suspiciousBulkInputCount: 0,
                 appCheckVerified: true,
-                likeCount: 9,
-                commentCount: 0,
-                createdAt: now.addingTimeInterval(-7_200),
-                updatedAt: now.addingTimeInterval(-7_200),
+                likeCount: 26,
+                commentCount: 1,
+                createdAt: now.addingTimeInterval(-6_800),
+                updatedAt: now.addingTimeInterval(-6_800),
                 isDeleted: false
             ),
             Post(
                 id: "post-5",
-                userId: currentUser.id,
-                body: "MVPは小さくていい。ただ、最初の投稿画面だけは思想が伝わる品質にしたい。",
-                humanScore: 90,
+                userId: fifthUser.id,
+                body: post5Body,
+                humanScore: 88,
                 humanBadge: .verified,
-                inputDurationMs: 39_000,
-                characterCount: 38,
-                editCount: 7,
-                deleteCount: 2,
+                inputDurationMs: 58_000,
+                characterCount: post5Body.count,
+                editCount: 9,
+                deleteCount: 3,
                 suspiciousBulkInputCount: 0,
                 appCheckVerified: true,
-                likeCount: 18,
+                likeCount: 17,
                 commentCount: 0,
-                createdAt: now.addingTimeInterval(-12_800),
-                updatedAt: now.addingTimeInterval(-12_800),
+                createdAt: now.addingTimeInterval(-10_400),
+                updatedAt: now.addingTimeInterval(-10_400),
+                isDeleted: false
+            ),
+            Post(
+                id: "post-6",
+                userId: currentUser.id,
+                body: post6Body,
+                humanScore: 79,
+                humanBadge: .checking,
+                inputDurationMs: 33_000,
+                characterCount: post6Body.count,
+                editCount: 4,
+                deleteCount: 1,
+                suspiciousBulkInputCount: 1,
+                appCheckVerified: true,
+                likeCount: 12,
+                commentCount: 1,
+                createdAt: now.addingTimeInterval(-15_200),
+                updatedAt: now.addingTimeInterval(-15_200),
                 isDeleted: false
             )
         ]
@@ -196,31 +236,81 @@ final class MockDataStore: ObservableObject {
             Comment(
                 id: "comment-1",
                 postId: "post-1",
-                userId: secondUser.id,
-                body: "この方向性、読み手にも書き手にも効きそうです。",
-                humanScore: 87,
-                createdAt: now.addingTimeInterval(-260),
-                updatedAt: now.addingTimeInterval(-260),
+                userId: currentUser.id,
+                body: "この感覚わかります。整いすぎていない言葉のほうが、あとで読み返したくなります。",
+                humanScore: 93,
+                createdAt: now.addingTimeInterval(-210),
+                updatedAt: now.addingTimeInterval(-210),
                 isDeleted: false
             ),
             Comment(
                 id: "comment-2",
                 postId: "post-1",
-                userId: fourthUser.id,
-                body: "コピペ禁止より、本人入力という言い方のほうが好き。",
-                humanScore: 94,
-                createdAt: now.addingTimeInterval(-220),
-                updatedAt: now.addingTimeInterval(-220),
+                userId: fifthUser.id,
+                body: "本人入力バッジがあると、読む前の安心感が少し変わりますね。",
+                humanScore: 89,
+                createdAt: now.addingTimeInterval(-180),
+                updatedAt: now.addingTimeInterval(-180),
                 isDeleted: false
             ),
             Comment(
                 id: "comment-3",
-                postId: "post-3",
-                userId: currentUser.id,
-                body: "その迷いを消さない設計にしたいですね。",
+                postId: "post-2",
+                userId: secondUser.id,
+                body: "HitoLogらしさが一番伝わる言葉だと思います。",
+                humanScore: 96,
+                createdAt: now.addingTimeInterval(-900),
+                updatedAt: now.addingTimeInterval(-900),
+                isDeleted: false
+            ),
+            Comment(
+                id: "comment-4",
+                postId: "post-2",
+                userId: thirdUser.id,
+                body: "コピペ禁止というより、本人の入力を大切にする感じがいいですね。",
+                humanScore: 91,
+                createdAt: now.addingTimeInterval(-760),
+                updatedAt: now.addingTimeInterval(-760),
+                isDeleted: false
+            ),
+            Comment(
+                id: "comment-5",
+                postId: "post-2",
+                userId: fourthUser.id,
+                body: "AI時代のSNSとして、最初に伝える価値がはっきりしています。",
                 humanScore: 92,
-                createdAt: now.addingTimeInterval(-4_600),
-                updatedAt: now.addingTimeInterval(-4_600),
+                createdAt: now.addingTimeInterval(-610),
+                updatedAt: now.addingTimeInterval(-610),
+                isDeleted: false
+            ),
+            Comment(
+                id: "comment-6",
+                postId: "post-3",
+                userId: fifthUser.id,
+                body: "速さを競わない場所、ちょうど欲しかったです。",
+                humanScore: 88,
+                createdAt: now.addingTimeInterval(-3_100),
+                updatedAt: now.addingTimeInterval(-3_100),
+                isDeleted: false
+            ),
+            Comment(
+                id: "comment-7",
+                postId: "post-4",
+                userId: secondUser.id,
+                body: "そのまま残せる場所があるだけで、書くハードルが下がります。",
+                humanScore: 94,
+                createdAt: now.addingTimeInterval(-6_200),
+                updatedAt: now.addingTimeInterval(-6_200),
+                isDeleted: false
+            ),
+            Comment(
+                id: "comment-8",
+                postId: "post-6",
+                userId: thirdUser.id,
+                body: "短いコメントでも、本人の言葉だとちゃんと届きますね。",
+                humanScore: 90,
+                createdAt: now.addingTimeInterval(-14_600),
+                updatedAt: now.addingTimeInterval(-14_600),
                 isDeleted: false
             )
         ]
@@ -228,22 +318,22 @@ final class MockDataStore: ObservableObject {
         self.initialUsers = users
         self.initialPosts = posts
         self.initialComments = comments
-        self.initialLikedPostIDs = ["post-2"]
+        self.initialLikedPostIDs = ["post-1", "post-5"]
 
         self.currentUser = currentUser
         self.users = users
         self.posts = posts
         self.comments = comments
-        self.likedPostIDs = ["post-2"]
-        self.blockedUserIDs = [thirdUser.id]
+        self.likedPostIDs = ["post-1", "post-5"]
+        self.blockedUserIDs = []
         self.mutedUserIDs = []
         self.reportHistory = [
             ReportRecord(
                 id: "report-1",
-                targetDescription: "@riku_notes の投稿",
+                targetDescription: "@sample_spam の投稿",
                 reason: "spam",
                 createdAt: now.addingTimeInterval(-86_400),
-                status: "確認待ち"
+                status: "対応済み"
             )
         ]
     }

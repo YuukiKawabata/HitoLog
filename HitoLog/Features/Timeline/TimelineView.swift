@@ -9,14 +9,15 @@ struct TimelineView: View {
         let posts = store.timelinePosts
 
         ScrollView {
-            LazyVStack(spacing: 0) {
+            LazyVStack(spacing: AppSpacing.sm) {
                 TimelineHeaderView()
-                .padding(.horizontal, AppSpacing.md)
-                .padding(.top, AppSpacing.md)
-                .padding(.bottom, AppSpacing.sm)
+                    .padding(.horizontal, AppSpacing.md)
+                    .padding(.top, AppSpacing.md)
+                    .padding(.bottom, AppSpacing.xs)
 
                 if posts.isEmpty {
                     EmptyTimelineView()
+                        .padding(.horizontal, AppSpacing.md)
                         .padding(.top, 96)
                 } else {
                     ForEach(posts) { post in
@@ -43,8 +44,9 @@ struct TimelineView: View {
                     }
                 }
             }
+            .padding(.bottom, AppSpacing.lg)
         }
-        .background(AppColor.groupedBackground)
+        .background(PaperCanvas())
         .refreshable {
             await store.refresh()
         }
@@ -89,23 +91,24 @@ private struct TimelineHeaderView: View {
                 BrandIconView(size: 44, showsShadow: false)
 
                 VStack(alignment: .leading, spacing: AppSpacing.xs) {
-                    Text("Human Timeline")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppColor.accent)
-                        .textCase(.uppercase)
+                    SectionKicker(text: "Human Timeline", systemImage: "pencil.and.outline")
                     Text("いま書かれた言葉")
-                        .font(.title2.weight(.bold))
+                        .font(AppFont.title)
                         .foregroundStyle(AppColor.textPrimary)
                 }
+
+                Spacer(minLength: 0)
             }
 
-            Text("貼り付けではなく、入力の過程が残る投稿だけを集めています。")
+            Text("書いた時間の温度が、そのまま残るタイムライン。")
                 .font(.subheadline)
                 .foregroundStyle(AppColor.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            InkDivider()
         }
         .padding(AppSpacing.md)
-        .background(AppColor.background, in: RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
+        .paperSurface()
     }
 }
 
@@ -114,16 +117,18 @@ private struct EmptyTimelineView: View {
         VStack(spacing: AppSpacing.md) {
             Image(systemName: "text.bubble")
                 .font(.system(size: 40))
-                .foregroundStyle(AppColor.textSecondary)
+                .foregroundStyle(AppColor.accent)
 
             Text("まだ投稿がありません")
-                .font(.headline)
+                .font(AppFont.sectionTitle)
 
             Text("あなたの言葉で、最初の投稿をしてみましょう。")
                 .font(.subheadline)
                 .foregroundStyle(AppColor.textSecondary)
                 .multilineTextAlignment(.center)
         }
-        .padding(.horizontal, AppSpacing.lg)
+        .frame(maxWidth: .infinity)
+        .padding(AppSpacing.xl)
+        .paperSurface()
     }
 }

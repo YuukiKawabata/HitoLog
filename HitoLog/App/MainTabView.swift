@@ -90,7 +90,7 @@ private struct PostSubmittedCelebration: View {
 
                 VStack(spacing: 2) {
                     Text("投稿しました")
-                        .font(.headline)
+                        .font(AppFont.sectionTitle)
                         .foregroundStyle(AppColor.textPrimary)
                     Text("タイムラインに反映されました")
                         .font(.caption)
@@ -99,8 +99,12 @@ private struct PostSubmittedCelebration: View {
             }
             .padding(.vertical, AppSpacing.lg)
             .padding(.horizontal, AppSpacing.xl)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
-            .shadow(color: .black.opacity(0.14), radius: 18, y: 10)
+            .background(AppColor.background, in: RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                    .stroke(AppColor.border, lineWidth: 0.7)
+            }
+            .shadow(color: AppColor.shadow, radius: 18, y: 10)
         }
         .onAppear {
             isAnimating = false
@@ -122,8 +126,12 @@ private struct PostSubmittedToast: View {
         }
         .padding(.vertical, 10)
         .padding(.horizontal, AppSpacing.md)
-        .background(.regularMaterial, in: Capsule())
-        .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
+        .background(AppColor.background, in: RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                .stroke(AppColor.border, lineWidth: 0.7)
+        }
+        .shadow(color: AppColor.shadow, radius: 12, y: 6)
     }
 }
 
@@ -131,19 +139,26 @@ private struct ComposeEntryView: View {
     let onComposeTap: () -> Void
 
     var body: some View {
-        VStack(spacing: AppSpacing.xl) {
+        VStack(spacing: AppSpacing.lg) {
             VStack(spacing: AppSpacing.md) {
                 BrandIconView(size: 78)
 
-                Text("いま、あなたの言葉で。")
-                    .font(.title2.weight(.bold))
+                SectionKicker(text: "Draft Desk", systemImage: "pencil.line")
 
-                Text("貼り付けではなく、ここで考えながら書いた投稿に本人入力バッジが付きます。")
+                Text("いま、あなたの言葉で。")
+                    .font(AppFont.title)
+                    .foregroundStyle(AppColor.textPrimary)
+
+                Text("一息ぶんの沈黙も、書き直した跡も、あなたの言葉の一部として残ります。")
                     .font(.subheadline)
                     .foregroundStyle(AppColor.textSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
+
+                InkDivider()
             }
+            .padding(AppSpacing.lg)
+            .paperSurface()
 
             Button(action: onComposeTap) {
                 Label("投稿を書く", systemImage: "pencil")
@@ -152,7 +167,7 @@ private struct ComposeEntryView: View {
         }
         .padding(AppSpacing.lg)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AppColor.groupedBackground)
+        .background(PaperCanvas())
         .navigationTitle("投稿")
         .navigationBarTitleDisplayMode(.inline)
     }

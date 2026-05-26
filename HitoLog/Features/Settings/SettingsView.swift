@@ -125,7 +125,7 @@ struct SettingsView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(AppColor.groupedBackground)
+        .background(PaperCanvas())
         .navigationTitle("設定")
         .navigationBarTitleDisplayMode(.inline)
         .alert("ログアウトしますか？", isPresented: $isShowingLogoutConfirmation) {
@@ -279,7 +279,7 @@ private struct ProfileEditView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(AppColor.groupedBackground)
+        .background(PaperCanvas())
         .navigationTitle("プロフィール編集")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -630,16 +630,17 @@ private struct LegalDocumentView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: AppSpacing.md) {
                 Text(title)
-                    .font(.title2.weight(.bold))
+                    .font(AppFont.title)
                 Text(bodyText)
-                    .font(.body)
+                    .font(AppFont.body)
+                    .lineSpacing(5)
                     .foregroundStyle(AppColor.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(AppSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(AppColor.groupedBackground)
+        .background(PaperCanvas())
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
     }

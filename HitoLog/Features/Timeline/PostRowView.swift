@@ -13,89 +13,93 @@ struct PostRowView: View {
     var onDelete: () -> Void = {}
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: AppSpacing.md) {
             HStack(alignment: .top, spacing: AppSpacing.md) {
                 authorAvatar
 
-                VStack(alignment: .leading, spacing: AppSpacing.sm) {
-                    HStack(alignment: .firstTextBaseline, spacing: AppSpacing.xs) {
+                VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                    HStack(alignment: .firstTextBaseline, spacing: AppSpacing.sm) {
                         authorName
-
-                        Text("・")
-                            .font(.subheadline)
-                            .foregroundStyle(AppColor.textTertiary)
-
-                        Text(DateFormatterUtil.relativeString(from: post.createdAt))
-                            .font(.subheadline)
-                            .foregroundStyle(AppColor.textSecondary)
 
                         Spacer(minLength: AppSpacing.xs)
 
-                        if showsOwnerActions {
-                            Menu {
-                                Button(action: onEdit) {
-                                    Label("編集", systemImage: "pencil")
-                                }
-                                Button(role: .destructive, action: onDelete) {
-                                    Label("削除", systemImage: "trash")
-                                }
-                            } label: {
-                                Image(systemName: "ellipsis")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(AppColor.textSecondary)
-                                    .frame(width: 32, height: 28)
-                                    .contentShape(Rectangle())
-                            }
-                        }
-                    }
-
-                    Text(post.body)
-                        .font(.body)
-                        .lineSpacing(4)
-                        .foregroundStyle(AppColor.textPrimary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    HStack(spacing: AppSpacing.sm) {
-                        HumanBadgeView(badge: post.humanBadge)
-                        Text("\(post.inputDurationMs / 1000)秒で入力")
+                        Text(DateFormatterUtil.relativeString(from: post.createdAt))
                             .font(.caption)
                             .foregroundStyle(AppColor.textSecondary)
                     }
+                }
 
-                    HStack(spacing: AppSpacing.lg) {
-                        Button(action: onLike) {
-                            PostActionView(
-                                systemImage: isLiked ? "heart.fill" : "heart",
-                                value: post.likeCount,
-                                isActive: isLiked
-                            )
+                Spacer(minLength: 0)
+
+                if showsOwnerActions {
+                    Menu {
+                        Button(action: onEdit) {
+                            Label("編集", systemImage: "pencil")
                         }
-                        .buttonStyle(.plain)
-
-                        if let commentDestination {
-                            NavigationLink(destination: commentDestination) {
-                                PostActionView(systemImage: "bubble.right", value: post.commentCount)
-                            }
-                            .buttonStyle(.plain)
-                        } else {
-                            PostActionView(systemImage: "bubble.right", value: post.commentCount)
+                        Button(role: .destructive, action: onDelete) {
+                            Label("削除", systemImage: "trash")
                         }
-
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppColor.textSecondary)
+                            .frame(width: 32, height: 28)
+                            .contentShape(Rectangle())
                     }
-                    .padding(.top, 2)
                 }
             }
+
+            Text(post.body)
+                .font(AppFont.body)
+                .lineSpacing(6)
+                .foregroundStyle(AppColor.textPrimary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: AppSpacing.sm) {
+                HumanBadgeView(badge: post.humanBadge)
+
+                Label("\(post.inputDurationMs / 1000)秒", systemImage: "keyboard")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(AppColor.textSecondary)
+
+                Spacer(minLength: 0)
+            }
+
+            InkDivider()
+
+            HStack(spacing: AppSpacing.sm) {
+                Button(action: onLike) {
+                    PostActionView(
+                        systemImage: isLiked ? "heart.fill" : "heart",
+                        value: post.likeCount,
+                        isActive: isLiked
+                    )
+                }
+                .buttonStyle(.plain)
+
+                if let commentDestination {
+                    NavigationLink(destination: commentDestination) {
+                        PostActionView(systemImage: "bubble.right", value: post.commentCount)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    PostActionView(systemImage: "bubble.right", value: post.commentCount)
+                }
+
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(AppSpacing.md)
+        .paperSurface()
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(AppColor.accent.opacity(0.72))
+                .frame(width: 2)
+                .padding(.vertical, AppSpacing.md)
         }
         .padding(.horizontal, AppSpacing.md)
-        .padding(.vertical, AppSpacing.md + 2)
-        .background(AppColor.background)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(AppColor.border)
-                .frame(height: 0.5)
-                .padding(.leading, 68)
-        }
+        .padding(.bottom, AppSpacing.xs)
     }
 
     @ViewBuilder
@@ -114,11 +118,11 @@ struct PostRowView: View {
     private var authorName: some View {
         let label = HStack(alignment: .firstTextBaseline, spacing: AppSpacing.xs) {
             Text(author.displayName)
-                .font(.subheadline.weight(.semibold))
+                .font(AppFont.userName)
                 .foregroundStyle(AppColor.textPrimary)
 
             Text("@\(author.handle)")
-                .font(.subheadline)
+                .font(.caption)
                 .foregroundStyle(AppColor.textSecondary)
                 .lineLimit(1)
         }
@@ -166,11 +170,7 @@ struct PostEditSheet: View {
                                 .padding(.vertical, AppSpacing.md + 2)
                         }
                     }
-                    .background(AppColor.background, in: RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                            .stroke(AppColor.border, lineWidth: 0.5)
-                    }
+                    .paperSurface(shadow: false)
 
                     VStack(spacing: AppSpacing.xs) {
                         ProgressView(
@@ -191,7 +191,7 @@ struct PostEditSheet: View {
                 }
                 .padding(AppSpacing.md)
             }
-            .background(AppColor.groupedBackground)
+            .background(PaperCanvas())
             .navigationTitle("投稿を編集")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -249,15 +249,21 @@ private struct PostActionView: View {
     var body: some View {
         HStack(spacing: AppSpacing.xs) {
             Image(systemName: systemImage)
-                .font(.subheadline)
+                .font(.caption.weight(.semibold))
             if let value {
                 Text("\(value)")
-                    .font(.subheadline)
+                    .font(.caption.weight(.semibold))
             }
         }
-        .foregroundStyle(isActive ? AppColor.accent : AppColor.textSecondary)
-        .frame(minWidth: 44, minHeight: 28, alignment: .leading)
-        .contentShape(Rectangle())
+        .foregroundStyle(isActive ? AppColor.stamp : AppColor.textSecondary)
+        .padding(.horizontal, AppSpacing.sm)
+        .frame(minWidth: 52, minHeight: 32, alignment: .center)
+        .background((isActive ? AppColor.stamp.opacity(0.08) : AppColor.surface), in: RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                .stroke(isActive ? AppColor.stamp.opacity(0.22) : AppColor.border, lineWidth: 0.5)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
     }
 }
 
@@ -270,7 +276,7 @@ struct AvatarView: View {
             Circle()
                 .fill(
                     LinearGradient(
-                        colors: [AppColor.accent.opacity(0.24), AppColor.accent.opacity(0.08)],
+                        colors: [AppColor.accentSoft, AppColor.background],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
@@ -282,7 +288,7 @@ struct AvatarView: View {
                     .scaledToFill()
             } else {
                 Text(user.initials)
-                    .font(.system(size: size * 0.36, weight: .semibold))
+                    .font(.system(size: size * 0.34, weight: .semibold, design: .serif))
                     .foregroundStyle(AppColor.accent)
             }
         }
@@ -290,8 +296,9 @@ struct AvatarView: View {
         .clipShape(Circle())
         .overlay {
             Circle()
-                .stroke(AppColor.border, lineWidth: 0.5)
+                .stroke(AppColor.border, lineWidth: 0.8)
         }
+        .shadow(color: AppColor.shadow, radius: 6, y: 3)
     }
 }
 
@@ -321,7 +328,11 @@ struct HumanBadgeView: View {
         .foregroundStyle(badge == .verified ? AppColor.accent : AppColor.textSecondary)
         .padding(.horizontal, AppSpacing.sm)
         .padding(.vertical, AppSpacing.xs)
-        .background((badge == .verified ? AppColor.accent.opacity(0.12) : AppColor.surface), in: Capsule())
+        .background((badge == .verified ? AppColor.accentSoft : AppColor.surface), in: RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                .stroke(badge == .verified ? AppColor.accent.opacity(0.28) : AppColor.border, lineWidth: 0.5)
+        }
         .accessibilityElement(children: .combine)
     }
 }

@@ -13,6 +13,7 @@ struct OnboardingView: View {
             TabView(selection: $selection) {
                 OnboardingPage(
                     icon: nil,
+                    kicker: "First Note",
                     title: "自分の言葉で書く",
                     text: "HitoLogでは、投稿欄で入力した言葉を大切にします。",
                     detail: "貼り付けではなく、その場で考えながら書く体験を中心にします。"
@@ -21,6 +22,7 @@ struct OnboardingView: View {
 
                 OnboardingPage(
                     icon: "doc.on.clipboard",
+                    kicker: "No Paste",
                     title: "ペーストできない投稿欄",
                     text: "投稿作成ではコピー＆ペーストを使えません。",
                     detail: "音声入力や通常の編集は残しつつ、量産投稿を入りにくくします。"
@@ -29,6 +31,7 @@ struct OnboardingView: View {
 
                 OnboardingPage(
                     icon: "checkmark.seal",
+                    kicker: "Human Check",
                     title: "本人入力バッジ",
                     text: "入力時間、編集、削除の流れからHuman Checkを行います。",
                     detail: "点数で人を評価するのではなく、読む人に小さな信頼感を渡します。"
@@ -44,7 +47,7 @@ struct OnboardingView: View {
             .padding(.horizontal, AppSpacing.lg)
             .padding(.bottom, AppSpacing.lg)
         }
-        .background(AppColor.groupedBackground)
+        .background(PaperCanvas())
         .navigationTitle("HitoLog")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -62,12 +65,13 @@ struct OnboardingView: View {
 
 private struct OnboardingPage: View {
     let icon: String?
+    let kicker: String
     let title: String
     let text: String
     let detail: String
 
     var body: some View {
-        VStack(spacing: AppSpacing.xl) {
+        VStack(spacing: AppSpacing.lg) {
             Spacer()
 
             if let icon {
@@ -75,15 +79,22 @@ private struct OnboardingPage: View {
                     .font(.system(size: 42, weight: .regular))
                     .foregroundStyle(AppColor.accent)
                     .frame(width: 88, height: 88)
-                    .background(AppColor.accent.opacity(0.12), in: Circle())
+                    .background(AppColor.accentSoft, in: RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
+                            .stroke(AppColor.border, lineWidth: 0.7)
+                    }
             } else {
                 BrandIconView(size: 88)
             }
 
             VStack(spacing: AppSpacing.md) {
+                SectionKicker(text: kicker)
+
                 Text(title)
-                    .font(.title2.weight(.bold))
+                    .font(AppFont.title)
                     .multilineTextAlignment(.center)
+                    .foregroundStyle(AppColor.textPrimary)
                 Text(text)
                     .font(.body)
                     .foregroundStyle(AppColor.textPrimary)
@@ -92,11 +103,15 @@ private struct OnboardingPage: View {
                     .font(.subheadline)
                     .foregroundStyle(AppColor.textSecondary)
                     .multilineTextAlignment(.center)
+
+                InkDivider()
             }
             .padding(.horizontal, AppSpacing.lg)
 
             Spacer()
         }
+        .padding(AppSpacing.lg)
+        .paperSurface()
         .padding(AppSpacing.lg)
     }
 }

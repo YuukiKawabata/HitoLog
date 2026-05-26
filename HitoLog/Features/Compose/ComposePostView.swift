@@ -19,16 +19,22 @@ struct ComposePostView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: AppSpacing.lg) {
-                    VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                    VStack(alignment: .leading, spacing: AppSpacing.md) {
+                        SectionKicker(text: "Draft Desk", systemImage: "pencil.line")
+
                         Text("いま、あなたの言葉で。")
-                            .font(.title2.weight(.bold))
+                            .font(AppFont.title)
                             .foregroundStyle(AppColor.textPrimary)
 
-                        Text("貼り付けではなく、ここで考えながら書いた言葉だけを投稿します。")
+                        Text("考えて、消して、また書く。その時間ごと投稿に残します。")
                             .font(.subheadline)
                             .foregroundStyle(AppColor.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
+
+                        InkDivider()
                     }
+                    .padding(AppSpacing.md)
+                    .paperSurface()
 
                     if hasSavedDraft {
                         Label("下書きを復元しました", systemImage: "tray.and.arrow.down.fill")
@@ -54,10 +60,7 @@ struct ComposePostView: View {
                             }
                         }
                         .background(AppColor.background, in: RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                                .stroke(AppColor.border, lineWidth: 0.5)
-                        }
+                        .paperSurface(shadow: false)
 
                         VStack(spacing: AppSpacing.xs) {
                             ProgressView(value: min(Double(viewModel.text.count), Double(AppConstants.maxPostLength)), total: Double(AppConstants.maxPostLength))
@@ -87,14 +90,14 @@ struct ComposePostView: View {
                     HumanCheckPanel(metrics: viewModel.metrics, statusText: viewModel.humanCheckText)
 
                     HStack(spacing: AppSpacing.sm) {
-                        MetricPill(title: "入力時間", value: viewModel.metrics.durationText)
-                        MetricPill(title: "編集", value: "\(viewModel.metrics.editCount)")
-                        MetricPill(title: "削除", value: "\(viewModel.metrics.deleteCount)")
+                        PaperMetricTile(title: "入力時間", value: viewModel.metrics.durationText, systemImage: "timer")
+                        PaperMetricTile(title: "編集", value: "\(viewModel.metrics.editCount)", systemImage: "pencil")
+                        PaperMetricTile(title: "削除", value: "\(viewModel.metrics.deleteCount)", systemImage: "delete.left")
                     }
                 }
                 .padding(AppSpacing.md)
             }
-            .background(AppColor.groupedBackground)
+            .background(PaperCanvas())
             .navigationTitle("投稿")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -185,26 +188,14 @@ private struct HumanCheckPanel: View {
     let statusText: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: AppSpacing.md) {
-            Image(systemName: metrics.suspiciousBulkInputCount == 0 ? "checkmark.seal.fill" : "clock.badge.questionmark")
-                .font(.title3)
-                .foregroundStyle(metrics.suspiciousBulkInputCount == 0 ? AppColor.accent : AppColor.warning)
-                .frame(width: 28)
-
-            VStack(alignment: .leading, spacing: AppSpacing.xs) {
-                Text(statusText)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppColor.textPrimary)
-                Text("入力時間、編集、削除の流れをもとに本人入力らしさを判定します。")
-                    .font(.caption)
-                    .foregroundStyle(AppColor.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: 0)
-        }
+        HumanSignalStrip(
+            title: statusText,
+            detail: "入力の速度と編集の揺らぎを、読む人への小さな署名にします。",
+            systemImage: metrics.suspiciousBulkInputCount == 0 ? "checkmark.seal.fill" : "clock.badge.questionmark",
+            tint: metrics.suspiciousBulkInputCount == 0 ? AppColor.accent : AppColor.warning
+        )
         .padding(AppSpacing.md)
-        .background(AppColor.background, in: RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
+        .paperSurface()
     }
 }
 

@@ -23,8 +23,9 @@ struct PostDetailView: View {
 
                                 NavigationLink(destination: ProfileView(userID: author.id)) {
                                     VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                                        SectionKicker(text: "Original Note")
                                         Text(author.displayName)
-                                            .font(.headline)
+                                            .font(AppFont.userName)
                                             .foregroundStyle(AppColor.textPrimary)
                                         Text("@\(author.handle)")
                                             .font(.subheadline)
@@ -58,35 +59,39 @@ struct PostDetailView: View {
                             }
 
                             Text(post.body)
-                                .font(.title3)
-                                .lineSpacing(6)
+                                .font(AppFont.title)
+                                .lineSpacing(7)
                                 .foregroundStyle(AppColor.textPrimary)
                                 .fixedSize(horizontal: false, vertical: true)
 
-                            HumanBadgeView(badge: post.humanBadge)
+                            HumanSignalStrip(
+                                title: post.humanBadge.displayText,
+                                detail: "\(post.inputDurationMs / 1000)秒かけて書かれた投稿です。",
+                                systemImage: post.humanBadge.systemImage
+                            )
 
-                            Divider()
+                            InkDivider()
 
-                            HStack(spacing: AppSpacing.lg) {
+                            HStack(spacing: AppSpacing.sm) {
                                 Button {
                                     store.toggleLike(for: post.id)
                                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                 } label: {
-                                    PostDetailMetric(
+                                    PaperMetricTile(
                                         title: "いいね",
                                         value: "\(post.likeCount)",
                                         systemImage: store.likedPostIDs.contains(post.id) ? "heart.fill" : "heart",
-                                        isActive: store.likedPostIDs.contains(post.id)
+                                        tint: store.likedPostIDs.contains(post.id) ? AppColor.stamp : AppColor.accent
                                     )
                                 }
                                 .buttonStyle(.plain)
 
-                                PostDetailMetric(title: "コメント", value: "\(post.commentCount)", systemImage: "bubble.right")
-                                PostDetailMetric(title: "入力", value: "\(post.inputDurationMs / 1000)秒", systemImage: "keyboard")
+                                PaperMetricTile(title: "コメント", value: "\(post.commentCount)", systemImage: "bubble.right")
+                                PaperMetricTile(title: "入力", value: "\(post.inputDurationMs / 1000)秒", systemImage: "keyboard")
                             }
                         }
                         .padding(AppSpacing.md)
-                        .background(AppColor.background, in: RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
+                        .paperSurface()
 
                         CommentComposer(
                             text: $commentText,
@@ -97,8 +102,7 @@ struct PostDetailView: View {
                         )
 
                         VStack(alignment: .leading, spacing: AppSpacing.md) {
-                            Text("コメント")
-                                .font(.headline)
+                            SectionKicker(text: "Comments", systemImage: "bubble.right")
 
                             let comments = store.comments(for: post.id)
                             if comments.isEmpty {
@@ -118,12 +122,13 @@ struct PostDetailView: View {
                                 }
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(AppSpacing.md)
-                        .background(AppColor.background, in: RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
+                        .paperSurface()
                     }
                     .padding(AppSpacing.md)
                 }
-                .background(AppColor.groupedBackground)
+                .background(PaperCanvas())
             } else {
                 ContentUnavailableView("投稿が見つかりません", systemImage: "text.bubble")
             }
@@ -207,11 +212,15 @@ private struct CommentComposer: View {
                     }
                 }
                 .background(AppColor.surface, in: RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                        .stroke(AppColor.border, lineWidth: 0.5)
+                }
 
                 Button(action: onSend) {
                     Image(systemName: "paperplane.fill")
                         .frame(width: 38, height: 38)
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(AppColor.background)
                         .background(canSend ? AppColor.accent : AppColor.textTertiary, in: Circle())
                 }
                 .disabled(!canSend)
@@ -225,7 +234,7 @@ private struct CommentComposer: View {
             }
         }
         .padding(AppSpacing.md)
-        .background(AppColor.background, in: RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
+        .paperSurface()
         .animation(.snappy, value: didSendComment)
     }
 
@@ -253,13 +262,18 @@ private struct CommentRow: View {
                         .font(.caption)
                         .foregroundStyle(AppColor.textSecondary)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 Text(comment.body)
                     .font(.subheadline)
+                    .lineSpacing(4)
                     .foregroundStyle(AppColor.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, AppSpacing.sm)
     }
 

@@ -69,9 +69,9 @@ final class AuthSessionStore: NSObject, ObservableObject {
     }
 
     func continueWithLocalPreview() {
-        currentUserID = "user-yuuki"
+        currentUserID = "user-nagi"
         appleUserID = nil
-        displayName = "Yuuki"
+        displayName = "Nagi"
         email = nil
         state = .ready
     }

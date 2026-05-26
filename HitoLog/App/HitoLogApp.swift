@@ -20,18 +20,29 @@ struct HitoLogApp: App {
                 .environmentObject(authSession)
                 .environmentObject(pushService)
                 .task {
-                    authSession.start()
+                    let isScreenshotDemoMode = isScreenshotDemoLaunch
+                    if isScreenshotDemoMode {
+                        hasCompletedInitialExperience = true
+                        authSession.continueWithLocalPreview()
+                    } else {
+                        authSession.start()
+                    }
+
                     appDelegate.installFirebaseMessagingDelegate()
                     await store.activateRemoteUser(
-                        uid: authSession.currentUserID,
-                        appleUserID: authSession.appleUserID,
+                        uid: isScreenshotDemoMode ? nil : authSession.currentUserID,
+                        appleUserID: isScreenshotDemoMode ? nil : authSession.appleUserID,
                         displayName: authSession.displayName,
-                        email: authSession.email
+                        email: isScreenshotDemoMode ? nil : authSession.email
                     )
-                    await pushService.configure(userID: authSession.currentUserID)
+                    if isScreenshotDemoMode {
+                        store.showScreenshotDemoData()
+                    }
+                    await pushService.configure(userID: isScreenshotDemoMode ? nil : authSession.currentUserID)
                 }
                 .onChange(of: authSession.currentUserID) { _, userID in
                     Task {
+                        guard !isScreenshotDemoLaunch else { return }
                         await store.activateRemoteUser(
                             uid: userID,
                             appleUserID: authSession.appleUserID,
@@ -42,6 +53,14 @@ struct HitoLogApp: App {
                     }
                 }
         }
+    }
+
+    private var isScreenshotDemoLaunch: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-HitoLogScreenshotDemo")
+        #else
+        false
+        #endif
     }
 }
 
