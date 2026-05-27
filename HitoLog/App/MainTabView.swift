@@ -89,6 +89,7 @@ private struct UserSearchView: View {
     @State private var query = ""
     @State private var scope: SearchScope = .users
     @State private var searchTask: Task<Void, Never>?
+    @State private var selectedStarterPack: StarterPackCategory = .writers
 
     var body: some View {
         List {
@@ -101,6 +102,25 @@ private struct UserSearchView: View {
             .listRowBackground(Color.clear)
 
             if scope == .users && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Section("スターターパック") {
+                    Picker("カテゴリ", selection: $selectedStarterPack) {
+                        ForEach(StarterPackCategory.allCases) { category in
+                            Text(category.title).tag(category)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    let starterUsers = store.starterPackUsers(for: selectedStarterPack)
+                    if starterUsers.isEmpty {
+                        ContentUnavailableView("候補はまだありません", systemImage: selectedStarterPack.systemImage)
+                            .listRowBackground(Color.clear)
+                    } else {
+                        ForEach(starterUsers) { user in
+                            UserSearchRow(user: user)
+                        }
+                    }
+                }
+
                 Section("フォロー候補") {
                     if store.followSuggestions.isEmpty {
                         ContentUnavailableView("候補はまだありません", systemImage: "person.crop.circle.badge.plus")

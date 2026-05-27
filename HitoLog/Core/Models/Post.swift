@@ -10,6 +10,7 @@ struct Post: Identifiable, Codable, Equatable {
     let shareType: PostShareType
     let sourcePostID: String?
     let sourceUserID: String?
+    var commentPermission: CommentPermission
     let humanScore: Int
     let humanBadge: HumanBadge
     let inputDurationMs: Int
@@ -39,6 +40,7 @@ struct Post: Identifiable, Codable, Equatable {
         shareType: PostShareType = .original,
         sourcePostID: String? = nil,
         sourceUserID: String? = nil,
+        commentPermission: CommentPermission = .everyone,
         humanScore: Int,
         humanBadge: HumanBadge,
         inputDurationMs: Int,
@@ -67,6 +69,7 @@ struct Post: Identifiable, Codable, Equatable {
         self.shareType = shareType
         self.sourcePostID = sourcePostID
         self.sourceUserID = sourceUserID
+        self.commentPermission = commentPermission
         self.humanScore = humanScore
         self.humanBadge = humanBadge
         self.inputDurationMs = inputDurationMs
@@ -97,6 +100,7 @@ struct Post: Identifiable, Codable, Equatable {
         case shareType
         case sourcePostID
         case sourceUserID
+        case commentPermission
         case humanScore
         case humanBadge
         case inputDurationMs
@@ -128,6 +132,7 @@ struct Post: Identifiable, Codable, Equatable {
         shareType = try container.decodeIfPresent(PostShareType.self, forKey: .shareType) ?? .original
         sourcePostID = try container.decodeIfPresent(String.self, forKey: .sourcePostID)
         sourceUserID = try container.decodeIfPresent(String.self, forKey: .sourceUserID)
+        commentPermission = try container.decodeIfPresent(CommentPermission.self, forKey: .commentPermission) ?? .everyone
         humanScore = try container.decode(Int.self, forKey: .humanScore)
         humanBadge = try container.decode(HumanBadge.self, forKey: .humanBadge)
         inputDurationMs = try container.decode(Int.self, forKey: .inputDurationMs)
@@ -155,6 +160,47 @@ enum PostShareType: String, Codable, Equatable {
     case quote
 }
 
+enum CommentPermission: String, Codable, CaseIterable, Identifiable, Equatable {
+    case everyone
+    case following
+    case closed
+
+    var id: String { rawValue }
+
+    var displayText: String {
+        switch self {
+        case .everyone:
+            return "全員"
+        case .following:
+            return "フォロー中のみ"
+        case .closed:
+            return "不可"
+        }
+    }
+
+    var detailText: String {
+        switch self {
+        case .everyone:
+            return "すべてのユーザーがコメントできます。"
+        case .following:
+            return "あなたがフォローしているユーザーだけコメントできます。"
+        case .closed:
+            return "この投稿にはコメントできません。"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .everyone:
+            return "bubble.right"
+        case .following:
+            return "person.2"
+        case .closed:
+            return "bubble.right.slash"
+        }
+    }
+}
+
 enum ModerationStatus: String, Codable, Equatable {
     case active
     case reviewRequired
@@ -167,6 +213,61 @@ struct TopicTrend: Identifiable, Equatable {
 
     var id: String { topic }
     var displayText: String { "#\(topic)" }
+}
+
+struct MutedWord: Identifiable, Codable, Equatable {
+    let id: String
+    let userID: String
+    let word: String
+    let normalizedWord: String
+    let createdAt: Date
+
+    static func makeID(userID: String, normalizedWord: String) -> String {
+        "\(userID)_\(stableIDComponent(for: normalizedWord))"
+    }
+
+    private static func stableIDComponent(for value: String) -> String {
+        dataBytes(for: value)
+            .map { String(format: "%02x", $0) }
+            .joined()
+            .prefix(64)
+            .description
+    }
+
+    private static func dataBytes(for value: String) -> [UInt8] {
+        Array(value.data(using: .utf8) ?? Data())
+    }
+}
+
+enum MutedWordNormalizer {
+    static func normalize(_ value: String) -> String {
+        let folded = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? value
+        return folded
+            .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current)
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func normalizedPostText(_ post: Post) -> String {
+        normalize(([post.body] + post.topics.map { "#\($0)" }).joined(separator: " "))
+    }
+
+    static func containsMutedWord(in post: Post, mutedWords: [MutedWord]) -> Bool {
+        containsMutedWord(inNormalizedText: normalizedPostText(post), mutedWords: mutedWords)
+    }
+
+    static func containsMutedWord(in comment: Comment, mutedWords: [MutedWord]) -> Bool {
+        containsMutedWord(inNormalizedText: normalize(comment.body), mutedWords: mutedWords)
+    }
+
+    private static func containsMutedWord(inNormalizedText text: String, mutedWords: [MutedWord]) -> Bool {
+        guard !text.isEmpty, !mutedWords.isEmpty else { return false }
+        return mutedWords.contains { word in
+            !word.normalizedWord.isEmpty && text.contains(word.normalizedWord)
+        }
+    }
 }
 
 enum TopicExtractor {

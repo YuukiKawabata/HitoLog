@@ -1,6 +1,46 @@
 import Combine
 import Foundation
 
+struct CommentPermissionState: Equatable {
+    let canComment: Bool
+    let message: String?
+}
+
+enum StarterPackCategory: String, CaseIterable, Identifiable {
+    case writers
+    case daily
+    case creative
+    case learning
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .writers:
+            return "言葉を書く人"
+        case .daily:
+            return "日常ログ"
+        case .creative:
+            return "創作"
+        case .learning:
+            return "学び"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .writers:
+            return "pencil.and.outline"
+        case .daily:
+            return "sun.max"
+        case .creative:
+            return "paintbrush"
+        case .learning:
+            return "book"
+        }
+    }
+}
+
 @MainActor
 final class AppDataStore: ObservableObject {
     @Published private(set) var currentUser: AppUser
@@ -11,6 +51,7 @@ final class AppDataStore: ObservableObject {
     @Published private(set) var bookmarkedPostIDs: Set<String>
     @Published private(set) var blockedUserIDs: Set<String>
     @Published private(set) var mutedUserIDs: Set<String>
+    @Published private(set) var mutedWords: [MutedWord]
     @Published private(set) var followingUserIDs: Set<String>
     @Published private(set) var followerCountsByUserID: [String: Int]
     @Published private(set) var followingCountsByUserID: [String: Int]
@@ -35,6 +76,7 @@ final class AppDataStore: ObservableObject {
     private let initialComments: [Comment]
     private let initialLikedPostIDs: Set<String>
     private let initialBookmarkedPostIDs: Set<String>
+    private let initialMutedWords: [MutedWord]
     private let initialFollowingUserIDs: Set<String>
     private let initialFollowerCountsByUserID: [String: Int]
     private let initialFollowingCountsByUserID: [String: Int]
@@ -61,6 +103,7 @@ final class AppDataStore: ObservableObject {
             && post.userId != currentUser.id
             && !blockedUserIDs.contains(post.userId)
             && !mutedUserIDs.contains(post.userId)
+            && !containsMutedWord(post)
             && (post.shareType == .original || sourcePost(for: post) != nil)
         }
         .sorted {
@@ -74,6 +117,16 @@ final class AppDataStore: ObservableObject {
         }
     }
 
+    var recommendedTimelinePosts: [Post] {
+        timelinePosts
+            .filter { post in
+                !followingUserIDs.contains(post.userId) || recommendationScore(for: post) >= 28
+            }
+            .sorted {
+                recommendationScore(for: $0) > recommendationScore(for: $1)
+            }
+    }
+
     var timelineVerifiedPostRate: Double {
         guard !timelinePosts.isEmpty else { return 0 }
         let verifiedCount = timelinePosts.filter { $0.humanBadge == .verified }.count
@@ -85,20 +138,12 @@ final class AppDataStore: ObservableObject {
     }
 
     var followSuggestions: [AppUser] {
-        users
-            .filter { user in
-                user.id != currentUser.id
-                && !user.isDeleted
-                && !user.isSuspended
-                && !followingUserIDs.contains(user.id)
-                && !blockedUserIDs.contains(user.id)
-                && !mutedUserIDs.contains(user.id)
-            }
+        starterPackCandidates()
             .sorted {
-                let firstPostDate = mostRecentPostDate(for: $0.id)
-                let secondPostDate = mostRecentPostDate(for: $1.id)
-                if firstPostDate != secondPostDate {
-                    return firstPostDate > secondPostDate
+                let firstScore = userRecommendationScore($0)
+                let secondScore = userRecommendationScore($1)
+                if firstScore != secondScore {
+                    return firstScore > secondScore
                 }
                 return $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
             }
@@ -113,6 +158,7 @@ final class AppDataStore: ObservableObject {
                 && isVisiblePost($0)
                 && !blockedUserIDs.contains($0.userId)
                 && !mutedUserIDs.contains($0.userId)
+                && !containsMutedWord($0)
                 && ($0.shareType == .original || sourcePost(for: $0) != nil)
             }
             .sorted { $0.createdAt > $1.createdAt }
@@ -128,7 +174,7 @@ final class AppDataStore: ObservableObject {
 
     var trendingTopics: [TopicTrend] {
         var counts: [String: Int] = [:]
-        for post in timelinePosts + posts.filter({ $0.userId == currentUser.id && isVisiblePost($0) }) {
+        for post in timelinePosts + posts.filter({ $0.userId == currentUser.id && isVisiblePost($0) && !containsMutedWord($0) }) {
             for topic in post.topics {
                 counts[topic, default: 0] += 1
             }
@@ -155,6 +201,7 @@ final class AppDataStore: ObservableObject {
         self.initialComments = seed.comments
         self.initialLikedPostIDs = seed.likedPostIDs
         self.initialBookmarkedPostIDs = seed.likedPostIDs
+        self.initialMutedWords = []
         self.initialFollowingUserIDs = seed.followingUserIDs
         self.initialFollowerCountsByUserID = seed.followerCountsByUserID
         self.initialFollowingCountsByUserID = seed.followingCountsByUserID
@@ -168,6 +215,7 @@ final class AppDataStore: ObservableObject {
         self.bookmarkedPostIDs = seed.likedPostIDs
         self.blockedUserIDs = seed.blockedUserIDs
         self.mutedUserIDs = seed.mutedUserIDs
+        self.mutedWords = []
         self.followingUserIDs = seed.followingUserIDs
         self.followerCountsByUserID = seed.followerCountsByUserID
         self.followingCountsByUserID = seed.followingCountsByUserID
@@ -217,6 +265,7 @@ final class AppDataStore: ObservableObject {
             && isVisiblePost($0)
             && !blockedUserIDs.contains($0.userId)
             && !mutedUserIDs.contains($0.userId)
+            && !containsMutedWord($0)
         }
     }
 
@@ -227,6 +276,7 @@ final class AppDataStore: ObservableObject {
             && isVisiblePost($0)
             && !blockedUserIDs.contains($0.userId)
             && !mutedUserIDs.contains($0.userId)
+            && !containsMutedWord($0)
         }
     }
 
@@ -237,6 +287,31 @@ final class AppDataStore: ObservableObject {
 
     func isReposted(_ postID: String) -> Bool {
         repostedSourcePostIDs.contains(postID)
+    }
+
+    func commentPermissionStatus(for post: Post) -> CommentPermissionState {
+        guard canCurrentUserCreateContent else {
+            return CommentPermissionState(canComment: false, message: "このアカウントは現在コメントできません。")
+        }
+
+        switch post.commentPermission {
+        case .everyone:
+            return CommentPermissionState(canComment: true, message: nil)
+        case .following:
+            if post.userId == currentUser.id || followingByUserID[post.userId, default: []].contains(currentUser.id) {
+                return CommentPermissionState(canComment: true, message: nil)
+            }
+            return CommentPermissionState(canComment: false, message: "この投稿は、投稿者がフォローしているユーザーだけコメントできます。")
+        case .closed:
+            return CommentPermissionState(canComment: false, message: "この投稿へのコメントは閉じられています。")
+        }
+    }
+
+    func commentPermissionStatus(for postID: String) -> CommentPermissionState {
+        guard let post = post(for: postID) else {
+            return CommentPermissionState(canComment: false, message: "投稿が見つかりません。")
+        }
+        return commentPermissionStatus(for: post)
     }
 
     func insert(_ post: Post) {
@@ -309,6 +384,7 @@ final class AppDataStore: ObservableObject {
             shareType: .repost,
             sourcePostID: sourcePost.id,
             sourceUserID: sourcePost.userId,
+            commentPermission: .closed,
             humanScore: 100,
             humanBadge: .verified,
             inputDurationMs: 0,
@@ -363,6 +439,7 @@ final class AppDataStore: ObservableObject {
             shareType: .quote,
             sourcePostID: sourcePost.id,
             sourceUserID: sourcePost.userId,
+            commentPermission: .everyone,
             humanScore: score,
             humanBadge: humanScoreService.badge(for: score),
             inputDurationMs: metrics.inputDurationMs,
@@ -462,13 +539,21 @@ final class AppDataStore: ObservableObject {
 
     func comments(for postID: String) -> [Comment] {
         comments
-            .filter { $0.postId == postID && isVisibleComment($0) }
+            .filter {
+                $0.postId == postID
+                && isVisibleComment($0)
+                && !containsMutedWord($0)
+            }
             .sorted { $0.createdAt < $1.createdAt }
     }
 
     func addComment(body: String, to postID: String) {
         let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedBody.isEmpty, canCurrentUserCreateContent, post(for: postID) != nil else { return }
+        guard !trimmedBody.isEmpty,
+              canCurrentUserCreateContent,
+              commentPermissionStatus(for: postID).canComment else {
+            return
+        }
 
         let now = Date()
         let comment = Comment(
@@ -493,8 +578,44 @@ final class AppDataStore: ObservableObject {
         }
     }
 
+    func deleteComment(commentID: String) {
+        guard let index = comments.firstIndex(where: { $0.id == commentID && $0.userId == currentUser.id && isVisibleComment($0) }) else {
+            return
+        }
+
+        let postID = comments[index].postId
+        comments[index].isDeleted = true
+        comments[index].updatedAt = Date()
+        adjustCommentCount(postID: postID, amount: -1)
+
+        guard !commentID.hasPrefix("demo-") else { return }
+        runRemoteWrite {
+            try await self.remoteStore.deleteComment(commentID: commentID)
+        }
+    }
+
+    func hideComment(commentID: String) {
+        guard let index = comments.firstIndex(where: { $0.id == commentID && isVisibleComment($0) }),
+              let post = posts.first(where: { $0.id == comments[index].postId }),
+              post.userId == currentUser.id else {
+            return
+        }
+
+        let postID = comments[index].postId
+        comments[index].moderationStatus = .hidden
+        comments[index].hiddenReason = "post_owner_hidden"
+        comments[index].hiddenAt = Date()
+        comments[index].updatedAt = Date()
+        adjustCommentCount(postID: postID, amount: -1)
+
+        guard !commentID.hasPrefix("demo-") else { return }
+        runRemoteWrite {
+            try await self.remoteStore.hideComment(commentID: commentID, reason: "post_owner_hidden")
+        }
+    }
+
     func postCount(for userID: String) -> Int {
-        posts.filter { $0.userId == userID && isVisiblePost($0) }.count
+        posts.filter { $0.userId == userID && isVisiblePost($0) && !containsMutedWord($0) }.count
     }
 
     func isFollowing(_ userID: String) -> Bool {
@@ -550,6 +671,67 @@ final class AppDataStore: ObservableObject {
 
     func mutedUsers() -> [AppUser] {
         users.filter { mutedUserIDs.contains($0.id) }
+    }
+
+    func addMutedWord(_ rawWord: String) {
+        let word = rawWord.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedWord = MutedWordNormalizer.normalize(word)
+        guard !word.isEmpty,
+              !normalizedWord.isEmpty,
+              word.count <= AppConstants.maxMutedWordLength,
+              !mutedWords.contains(where: { $0.normalizedWord == normalizedWord }) else {
+            return
+        }
+
+        let mutedWord = MutedWord(
+            id: MutedWord.makeID(userID: currentUser.id, normalizedWord: normalizedWord),
+            userID: currentUser.id,
+            word: word,
+            normalizedWord: normalizedWord,
+            createdAt: Date()
+        )
+        mutedWords.insert(mutedWord, at: 0)
+        refilterSearchResults()
+
+        runRemoteWrite {
+            try await self.remoteStore.setMutedWord(mutedWord, isMuted: true)
+        }
+    }
+
+    func removeMutedWord(_ mutedWord: MutedWord) {
+        mutedWords.removeAll { $0.id == mutedWord.id }
+        refilterSearchResults()
+
+        runRemoteWrite {
+            try await self.remoteStore.setMutedWord(mutedWord, isMuted: false)
+        }
+    }
+
+    func starterPackUsers(for category: StarterPackCategory) -> [AppUser] {
+        starterPackCandidates()
+            .sorted {
+                let firstScore = starterPackScore(for: $0, category: category)
+                let secondScore = starterPackScore(for: $1, category: category)
+                if firstScore != secondScore {
+                    return firstScore > secondScore
+                }
+                return $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
+            .prefix(8)
+            .map { $0 }
+    }
+
+    func visibleProfilePosts(for userID: String) -> [Post] {
+        posts
+            .filter {
+                $0.userId == userID
+                && isVisiblePost($0)
+                && !blockedUserIDs.contains($0.userId)
+                && !mutedUserIDs.contains($0.userId)
+                && !containsMutedWord($0)
+                && ($0.shareType == .original || sourcePost(for: $0) != nil)
+            }
+            .sorted { $0.createdAt > $1.createdAt }
     }
 
     func block(_ userID: String) {
@@ -775,6 +957,7 @@ final class AppDataStore: ObservableObject {
                     && post.topics.contains(topic)
                     && !blockedUserIDs.contains(post.userId)
                     && !mutedUserIDs.contains(post.userId)
+                    && !containsMutedWord(post)
                 }
                 posts = uniquePosts(posts + page.posts)
                 users = mergeCurrentUser(into: uniqueUsers(users + page.users))
@@ -792,6 +975,7 @@ final class AppDataStore: ObservableObject {
                 && $0.userId != currentUser.id
                 && !blockedUserIDs.contains($0.userId)
                 && !mutedUserIDs.contains($0.userId)
+                && !containsMutedWord($0)
             }
             .sorted { $0.createdAt > $1.createdAt }
     }
@@ -810,6 +994,7 @@ final class AppDataStore: ObservableObject {
                     post.userId != currentUser.id
                     && !blockedUserIDs.contains(post.userId)
                     && !mutedUserIDs.contains(post.userId)
+                    && !containsMutedWord(post)
                     && PostSearchTokenizer.matches(post, query: trimmed)
                 }
                 posts = uniquePosts(posts + page.posts)
@@ -827,6 +1012,7 @@ final class AppDataStore: ObservableObject {
                 && $0.userId != currentUser.id
                 && !blockedUserIDs.contains($0.userId)
                 && !mutedUserIDs.contains($0.userId)
+                && !containsMutedWord($0)
                 && PostSearchTokenizer.matches($0, query: trimmed)
             }
             .sorted { $0.createdAt > $1.createdAt }
@@ -874,9 +1060,11 @@ final class AppDataStore: ObservableObject {
             }
         case .comment:
             if let index = comments.firstIndex(where: { $0.id == targetID }) {
+                let postID = comments[index].postId
                 comments[index].moderationStatus = .hidden
                 comments[index].hiddenReason = reason
                 comments[index].hiddenAt = Date()
+                adjustCommentCount(postID: postID, amount: -1)
             }
         case .user, .other:
             return
@@ -927,6 +1115,7 @@ final class AppDataStore: ObservableObject {
         bookmarkedPostIDs = initialBookmarkedPostIDs
         blockedUserIDs = []
         mutedUserIDs = []
+        mutedWords = initialMutedWords
         followingUserIDs = initialFollowingUserIDs
         followerCountsByUserID = initialFollowerCountsByUserID
         followingCountsByUserID = initialFollowingCountsByUserID
@@ -977,6 +1166,7 @@ final class AppDataStore: ObservableObject {
         bookmarkedPostIDs.removeAll()
         blockedUserIDs.removeAll()
         mutedUserIDs.removeAll()
+        mutedWords.removeAll()
         followingUserIDs.removeAll()
         followerCountsByUserID.removeAll()
         followingCountsByUserID.removeAll()
@@ -1019,6 +1209,7 @@ final class AppDataStore: ObservableObject {
             bookmarkedPostIDs = initialBookmarkedPostIDs
             blockedUserIDs = []
             mutedUserIDs = []
+            mutedWords = initialMutedWords
             followingUserIDs = initialFollowingUserIDs
             followerCountsByUserID = initialFollowerCountsByUserID
             followingCountsByUserID = initialFollowingCountsByUserID
@@ -1065,6 +1256,7 @@ final class AppDataStore: ObservableObject {
         bookmarkedPostIDs = snapshot.bookmarkedPostIDs
         blockedUserIDs = snapshot.blockedUserIDs
         mutedUserIDs = snapshot.mutedUserIDs
+        mutedWords = snapshot.mutedWords
         followingUserIDs = snapshot.followingUserIDs
         followerCountsByUserID = snapshot.followerCountsByUserID
         followingCountsByUserID = snapshot.followingCountsByUserID
@@ -1207,6 +1399,11 @@ final class AppDataStore: ObservableObject {
         }
     }
 
+    private func adjustCommentCount(postID: String, amount: Int) {
+        guard let index = posts.firstIndex(where: { $0.id == postID }) else { return }
+        posts[index].commentCount = max(posts[index].commentCount + amount, 0)
+    }
+
     private func mergeDemoFollows(from seed: MockDataStore, activeCurrentUserID: String, seedCurrentUserID: String) {
         let knownUserIDs = Set(users.map(\.id))
         for (followerID, followeeIDs) in seed.followingByUserID {
@@ -1229,6 +1426,14 @@ final class AppDataStore: ObservableObject {
         !currentUser.isDeleted && !currentUser.isSuspended
     }
 
+    private func containsMutedWord(_ post: Post) -> Bool {
+        MutedWordNormalizer.containsMutedWord(in: post, mutedWords: mutedWords)
+    }
+
+    private func containsMutedWord(_ comment: Comment) -> Bool {
+        MutedWordNormalizer.containsMutedWord(in: comment, mutedWords: mutedWords)
+    }
+
     private func isVisiblePost(_ post: Post) -> Bool {
         guard !post.isDeleted else { return false }
         if currentUser.isAdmin { return true }
@@ -1243,9 +1448,80 @@ final class AppDataStore: ObservableObject {
 
     private func mostRecentPostDate(for userID: String) -> Date {
         posts
-            .filter { $0.userId == userID && isVisiblePost($0) }
+            .filter { $0.userId == userID && isVisiblePost($0) && !containsMutedWord($0) }
             .map(\.createdAt)
             .max() ?? Date.distantPast
+    }
+
+    private func preferredTopics() -> Set<String> {
+        let ownTopics = posts
+            .filter { $0.userId == currentUser.id && isVisiblePost($0) && !containsMutedWord($0) }
+            .flatMap(\.topics)
+        let followedTopics = posts
+            .filter { followingUserIDs.contains($0.userId) && isVisiblePost($0) && !containsMutedWord($0) }
+            .flatMap(\.topics)
+        return Set(ownTopics + followedTopics)
+    }
+
+    private func recommendationScore(for post: Post) -> Double {
+        let author = user(for: post.userId)
+        let engagement = post.likeCount + post.commentCount * 2 + post.repostCount * 3 + post.quoteCount * 4
+        let humanRateScore = (author?.humanVerifiedPostRate ?? 0) * 30
+        let humanLevelScore = Double(author?.humanLevel ?? 1) * 4
+        let engagementScore = log(Double(max(engagement, 0)) + 1) * 12
+        let topicScore = Double(Set(post.topics).intersection(preferredTopics()).count) * 8
+        let ageHours = max(Date().timeIntervalSince(post.createdAt) / 3600, 0)
+        let recencyScore = max(0, 20 - min(ageHours, 72) / 72 * 20)
+        let verifiedPostScore = post.humanBadge == .verified ? 8.0 : 0.0
+        return humanRateScore + humanLevelScore + engagementScore + topicScore + recencyScore + verifiedPostScore
+    }
+
+    private func starterPackCandidates() -> [AppUser] {
+        users.filter { user in
+            user.id != currentUser.id
+            && !user.isDeleted
+            && !user.isSuspended
+            && !followingUserIDs.contains(user.id)
+            && !blockedUserIDs.contains(user.id)
+            && !mutedUserIDs.contains(user.id)
+            && user.humanVerifiedPostRate >= 0.75
+            && postCount(for: user.id) > 0
+            && followerCount(for: user.id) >= AppConstants.minimumStarterPackFollowerCount
+        }
+    }
+
+    private func starterPackScore(for user: AppUser, category: StarterPackCategory) -> Double {
+        userRecommendationScore(user) + (matchesStarterPackCategory(user, category: category) ? 40 : 0)
+    }
+
+    private func userRecommendationScore(_ user: AppUser) -> Double {
+        let postActivity = Double(postCount(for: user.id)) * 3
+        let followerScore = log(Double(max(followerCount(for: user.id), 0)) + 1) * 12
+        let recencyScore = mostRecentPostDate(for: user.id) == .distantPast
+            ? 0
+            : max(0, 20 - min(Date().timeIntervalSince(mostRecentPostDate(for: user.id)) / 3600, 72) / 72 * 20)
+        return user.humanVerifiedPostRate * 40 + Double(user.humanLevel) * 5 + followerScore + postActivity + recencyScore
+    }
+
+    private func matchesStarterPackCategory(_ user: AppUser, category: StarterPackCategory) -> Bool {
+        let corpus = MutedWordNormalizer.normalize(
+            ([user.displayName, user.handle, user.bio] + posts.filter { $0.userId == user.id }.map(\.body)).joined(separator: " ")
+        )
+        switch category {
+        case .writers:
+            return corpus.contains("言葉") || corpus.contains("文章") || corpus.contains("入力")
+        case .daily:
+            return corpus.contains("日常") || corpus.contains("日々") || corpus.contains("今日")
+        case .creative:
+            return corpus.contains("創作") || corpus.contains("作品") || corpus.contains("物語")
+        case .learning:
+            return corpus.contains("学び") || corpus.contains("学習") || corpus.contains("考え")
+        }
+    }
+
+    private func refilterSearchResults() {
+        topicSearchResults = topicSearchResults.filter { !containsMutedWord($0) }
+        postSearchResults = postSearchResults.filter { !containsMutedWord($0) }
     }
 
     private func timelinePaginationCursorDate() -> Date? {
@@ -1417,6 +1693,7 @@ private extension Post {
             shareType: shareType,
             sourcePostID: sourcePostID,
             sourceUserID: sourceUserID,
+            commentPermission: commentPermission,
             humanScore: humanScore,
             humanBadge: humanBadge,
             inputDurationMs: inputDurationMs,
@@ -1449,6 +1726,7 @@ private extension Post {
             shareType: shareType,
             sourcePostID: sourcePostID.map { "demo-\($0)" },
             sourceUserID: sourceUserID == seedCurrentUserID ? currentUserID : sourceUserID,
+            commentPermission: commentPermission,
             humanScore: humanScore,
             humanBadge: humanBadge,
             inputDurationMs: inputDurationMs,

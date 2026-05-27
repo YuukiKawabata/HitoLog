@@ -210,14 +210,19 @@ struct PostDetailView: View {
                         .padding(AppSpacing.md)
                         .paperSurface()
 
-                        CommentComposer(
-                            text: $commentText,
-                            didSendComment: didSendComment,
-                            isDisabled: store.currentUser.isSuspended,
-                            onSend: {
-                                sendComment(to: post.id)
-                            }
-                        )
+                        let permissionState = store.commentPermissionStatus(for: post)
+                        if permissionState.canComment {
+                            CommentComposer(
+                                text: $commentText,
+                                didSendComment: didSendComment,
+                                isDisabled: store.currentUser.isSuspended,
+                                onSend: {
+                                    sendComment(to: post.id)
+                                }
+                            )
+                        } else if let message = permissionState.message {
+                            CommentPermissionNotice(message: message, permission: post.commentPermission)
+                        }
 
                         VStack(alignment: .leading, spacing: AppSpacing.md) {
                             SectionKicker(text: "Comments", systemImage: "bubble.right")
@@ -235,6 +240,16 @@ struct PostDetailView: View {
                                             comment: comment,
                                             author: user,
                                             authorDestination: AnyView(ProfileView(userID: user.id)),
+                                            canDelete: comment.userId == store.currentUser.id,
+                                            canHide: post.userId == store.currentUser.id && comment.userId != store.currentUser.id,
+                                            onDelete: {
+                                                store.deleteComment(commentID: comment.id)
+                                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                            },
+                                            onHide: {
+                                                store.hideComment(commentID: comment.id)
+                                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                            },
                                             onReport: {
                                                 store.addReport(
                                                     targetType: .comment,
@@ -344,6 +359,20 @@ private struct PostDetailMetric: View {
     }
 }
 
+private struct CommentPermissionNotice: View {
+    let message: String
+    let permission: CommentPermission
+
+    var body: some View {
+        Label(message, systemImage: permission.systemImage)
+            .font(.subheadline)
+            .foregroundStyle(AppColor.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(AppSpacing.md)
+            .paperSurface()
+    }
+}
+
 private struct CommentComposer: View {
     @Binding var text: String
     let didSendComment: Bool
@@ -409,6 +438,10 @@ private struct CommentRow: View {
     let comment: Comment
     let author: AppUser
     let authorDestination: AnyView?
+    var canDelete = false
+    var canHide = false
+    var onDelete: () -> Void = {}
+    var onHide: () -> Void = {}
     var onReport: () -> Void = {}
 
     var body: some View {
@@ -437,8 +470,22 @@ private struct CommentRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Menu {
-                Button(role: .destructive, action: onReport) {
-                    Label("通報", systemImage: "exclamationmark.bubble")
+                if canHide {
+                    Button(role: .destructive, action: onHide) {
+                        Label("非表示", systemImage: "eye.slash")
+                    }
+                }
+
+                if canDelete {
+                    Button(role: .destructive, action: onDelete) {
+                        Label("削除", systemImage: "trash")
+                    }
+                }
+
+                if !canDelete {
+                    Button(role: .destructive, action: onReport) {
+                        Label("通報", systemImage: "exclamationmark.bubble")
+                    }
                 }
             } label: {
                 Image(systemName: "ellipsis")

@@ -13,6 +13,7 @@ const db = getFirestore();
 type NotificationType = "comment" | "like" | "follow" | "repost" | "quote";
 type ModerationStatus = "active" | "reviewRequired" | "hidden";
 type PostShareType = "original" | "repost" | "quote";
+type CommentPermission = "everyone" | "following" | "closed";
 
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const POST_LIMIT_PER_HOUR = 20;
@@ -27,12 +28,16 @@ interface PostRecord {
   sourcePostID?: string;
   sourceUserID?: string;
   isDeleted?: boolean;
+  commentPermission?: CommentPermission;
 }
 
 interface CommentRecord {
   postID: string;
   userID: string;
   body: string;
+  isDeleted?: boolean;
+  moderationStatus?: ModerationStatus;
+  counted?: boolean;
 }
 
 interface LikeRecord {
@@ -98,6 +103,12 @@ export const onCommentCreated = onDocumentCreated("comments/{commentID}", async 
   const post = postSnapshot.data() as PostRecord | undefined;
   if (!post) {
     logger.warn("Comment created for missing post", { commentID: event.params.commentID, postID: comment.postID });
+    await hideDocument(commentRef, "missing_post");
+    return;
+  }
+
+  if (!(await canCreateComment(comment, post))) {
+    await hideDocument(commentRef, "comment_permission");
     return;
   }
 
@@ -105,6 +116,7 @@ export const onCommentCreated = onDocumentCreated("comments/{commentID}", async 
     commentCount: FieldValue.increment(1),
     updatedAt: FieldValue.serverTimestamp()
   });
+  await commentRef.set({ counted: true }, { merge: true });
 
   await createAndSendNotification({
     type: "comment",
@@ -113,6 +125,23 @@ export const onCommentCreated = onDocumentCreated("comments/{commentID}", async 
     postID: comment.postID,
     body: comment.body
   });
+});
+
+export const onCommentUpdated = onDocumentUpdated("comments/{commentID}", async (event) => {
+  const before = event.data?.before.data() as CommentRecord | undefined;
+  const after = event.data?.after.data() as CommentRecord | undefined;
+  if (!before || !after || before.postID !== after.postID) {
+    return;
+  }
+
+  const beforeCounted = before.counted === true && isCountableComment(before);
+  const afterCounted = after.counted === true && isCountableComment(after);
+  if (beforeCounted && !afterCounted) {
+    await adjustCommentCount(after.postID, -1);
+    if (after.counted === true) {
+      await db.collection("comments").doc(event.params.commentID).set({ counted: false }, { merge: true });
+    }
+  }
 });
 
 export const onLikeCreated = onDocumentCreated("likes/{likeID}", async (event) => {
@@ -310,6 +339,43 @@ async function updateShareCount(post: PostRecord, amount: 1 | -1) {
     [field]: FieldValue.increment(amount),
     updatedAt: FieldValue.serverTimestamp()
   }, { merge: true });
+}
+
+async function canCreateComment(comment: CommentRecord, post: PostRecord): Promise<boolean> {
+  if (!post.userID || post.isDeleted === true || (post.moderationStatus ?? "active") !== "active") {
+    return false;
+  }
+
+  const permission = post.commentPermission ?? "everyone";
+  if (permission === "everyone") {
+    return true;
+  }
+  if (permission === "closed") {
+    return false;
+  }
+  if (post.userID === comment.userID) {
+    return true;
+  }
+
+  const followSnapshot = await db.collection("follows").doc(`${post.userID}_${comment.userID}`).get();
+  return followSnapshot.exists;
+}
+
+function isCountableComment(comment: CommentRecord): boolean {
+  return comment.isDeleted !== true && (comment.moderationStatus ?? "active") === "active";
+}
+
+async function adjustCommentCount(postID: string, amount: -1 | 1) {
+  const postRef = db.collection("posts").doc(postID);
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(postRef);
+    const current = snapshot.get("commentCount");
+    const currentCount = typeof current === "number" ? current : 0;
+    transaction.set(postRef, {
+      commentCount: Math.max(currentCount + amount, 0),
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+  });
 }
 
 async function updateFollowCounts(followerID: string, followeeID: string, amount: 1 | -1) {

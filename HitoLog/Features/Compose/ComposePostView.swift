@@ -11,6 +11,7 @@ struct ComposePostView: View {
     @State private var isShowingDeleteDraftConfirmation = false
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var selectedMediaItems: [ComposeMediaItem] = []
+    @State private var commentPermission: CommentPermission = .everyone
     @State private var isLoadingMedia = false
     @State private var isSubmitting = false
     @State private var mediaErrorMessage: String?
@@ -103,6 +104,8 @@ struct ComposePostView: View {
                     }
 
                     mediaAttachmentPanel
+
+                    commentPermissionPanel
 
                     HumanCheckPanel(metrics: viewModel.metrics, statusText: viewModel.humanCheckText)
 
@@ -262,6 +265,26 @@ struct ComposePostView: View {
         .paperSurface()
     }
 
+    private var commentPermissionPanel: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.md) {
+            SectionKicker(text: "Comments", systemImage: "bubble.right")
+
+            Picker("コメント", selection: $commentPermission) {
+                ForEach(CommentPermission.allCases) { permission in
+                    Text(permission.displayText).tag(permission)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Label(commentPermission.detailText, systemImage: commentPermission.systemImage)
+                .font(.caption)
+                .foregroundStyle(AppColor.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(AppSpacing.md)
+        .paperSurface()
+    }
+
     @MainActor
     private func submitPost() async {
         guard canSubmit else { return }
@@ -289,7 +312,8 @@ struct ComposePostView: View {
                 id: postID,
                 using: store.currentUser,
                 recentPostCount: store.recentPostCount,
-                mediaItems: mediaItems
+                mediaItems: mediaItems,
+                commentPermission: commentPermission
             )
             store.insert(post)
             clearDraft()
@@ -345,6 +369,7 @@ struct ComposePostView: View {
         viewModel.clearDraft()
         selectedMediaItems = []
         selectedPhotoItems = []
+        commentPermission = .everyone
         mediaErrorMessage = nil
         draftPayload = ""
         didRestoreExistingDraft = false

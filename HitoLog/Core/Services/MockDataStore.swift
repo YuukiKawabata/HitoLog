@@ -341,7 +341,8 @@ final class MockDataStore: ObservableObject {
         self.initialLikedPostIDs = ["post-1", "post-5"]
         let initialFollowingByUserID: [String: Set<String>] = [
             currentUser.id: [secondUser.id, thirdUser.id],
-            secondUser.id: [currentUser.id],
+            secondUser.id: [currentUser.id, fourthUser.id],
+            thirdUser.id: [fifthUser.id],
             fourthUser.id: [currentUser.id]
         ]
         let initialFollowersByUserID = Self.followersByUserID(from: initialFollowingByUserID)

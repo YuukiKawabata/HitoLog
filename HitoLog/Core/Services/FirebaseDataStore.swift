@@ -12,6 +12,7 @@ struct RemoteDataSnapshot {
     var bookmarkedPostIDs: Set<String>
     var blockedUserIDs: Set<String>
     var mutedUserIDs: Set<String>
+    var mutedWords: [MutedWord]
     var followingUserIDs: Set<String>
     var followerCountsByUserID: [String: Int]
     var followingCountsByUserID: [String: Int]
@@ -71,6 +72,11 @@ struct FirebaseDataStore {
         async let mutesSnapshot = db.collection("mutes")
             .whereField("muterID", isEqualTo: currentUserID)
             .getDocuments()
+        async let mutedWordsSnapshot = db.collection("mutedWords")
+            .whereField("userID", isEqualTo: currentUserID)
+            .order(by: "createdAt", descending: true)
+            .limit(to: 200)
+            .getDocuments()
         async let followingSnapshot = db.collection("follows")
             .whereField("followerID", isEqualTo: currentUserID)
             .getDocuments()
@@ -94,6 +100,7 @@ struct FirebaseDataStore {
         let bookmarksResult = try await bookmarksSnapshot
         let blocksResult = try await blocksSnapshot
         let mutesResult = try await mutesSnapshot
+        let mutedWordsResult = try await mutedWordsSnapshot
         let followingResult = try await followingSnapshot
         let followersResult = try await followersSnapshot
         let reportsResult = try await reportsSnapshot
@@ -111,6 +118,7 @@ struct FirebaseDataStore {
         let bookmarkedPostIDs = Set(bookmarksResult.documents.compactMap { $0.data()["postID"] as? String })
         let blockedUserIDs = Set(blocksResult.documents.compactMap { $0.data()["blockedUserID"] as? String })
         let mutedUserIDs = Set(mutesResult.documents.compactMap { $0.data()["mutedUserID"] as? String })
+        let mutedWords = mutedWordsResult.documents.compactMap(mapMutedWord)
         let followRecords = (followingResult.documents + followersResult.documents).compactMap(mapFollow).filter {
             activeUserIDs.contains($0.followerID) && activeUserIDs.contains($0.followeeID)
         }
@@ -129,6 +137,7 @@ struct FirebaseDataStore {
             bookmarkedPostIDs: bookmarkedPostIDs,
             blockedUserIDs: blockedUserIDs,
             mutedUserIDs: mutedUserIDs,
+            mutedWords: mutedWords,
             followingUserIDs: followState.followingUserIDs,
             followerCountsByUserID: followState.followerCountsByUserID,
             followingCountsByUserID: followState.followingCountsByUserID,
@@ -148,6 +157,7 @@ struct FirebaseDataStore {
             bookmarkedPostIDs: [],
             blockedUserIDs: [],
             mutedUserIDs: [],
+            mutedWords: [],
             followingUserIDs: [],
             followerCountsByUserID: [:],
             followingCountsByUserID: [:],
@@ -458,6 +468,32 @@ struct FirebaseDataStore {
         #endif
     }
 
+    func deleteComment(commentID: String) async throws {
+        #if canImport(FirebaseFirestore)
+        try await Firestore.firestore()
+            .collection("comments")
+            .document(commentID)
+            .setData([
+                "isDeleted": true,
+                "updatedAt": FieldValue.serverTimestamp()
+            ], merge: true)
+        #endif
+    }
+
+    func hideComment(commentID: String, reason: String) async throws {
+        #if canImport(FirebaseFirestore)
+        try await Firestore.firestore()
+            .collection("comments")
+            .document(commentID)
+            .setData([
+                "moderationStatus": ModerationStatus.hidden.rawValue,
+                "hiddenReason": reason,
+                "hiddenAt": FieldValue.serverTimestamp(),
+                "updatedAt": FieldValue.serverTimestamp()
+            ], merge: true)
+        #endif
+    }
+
     func setLike(postID: String, userID: String, isLiked: Bool) async throws {
         #if canImport(FirebaseFirestore)
         let ref = Firestore.firestore().collection("likes").document("\(postID)_\(userID)")
@@ -511,6 +547,22 @@ struct FirebaseDataStore {
                 "muterID": muterID,
                 "mutedUserID": mutedUserID,
                 "createdAt": FieldValue.serverTimestamp()
+            ], merge: true)
+        } else {
+            try await ref.delete()
+        }
+        #endif
+    }
+
+    func setMutedWord(_ mutedWord: MutedWord, isMuted: Bool) async throws {
+        #if canImport(FirebaseFirestore)
+        let ref = Firestore.firestore().collection("mutedWords").document(mutedWord.id)
+        if isMuted {
+            try await ref.setData([
+                "userID": mutedWord.userID,
+                "word": mutedWord.word,
+                "normalizedWord": mutedWord.normalizedWord,
+                "createdAt": Timestamp(date: mutedWord.createdAt)
             ], merge: true)
         } else {
             try await ref.delete()
@@ -716,6 +768,13 @@ struct FirebaseDataStore {
             try await document.reference.delete()
         }
 
+        let mutedWords = try await db.collection("mutedWords")
+            .whereField("userID", isEqualTo: userID)
+            .getDocuments()
+        for document in mutedWords.documents {
+            try await document.reference.delete()
+        }
+
         let following = try await db.collection("follows")
             .whereField("followerID", isEqualTo: userID)
             .getDocuments()
@@ -849,6 +908,7 @@ private extension FirebaseDataStore {
             shareType: PostShareType(rawValue: stringValue(data["shareType"], fallback: PostShareType.original.rawValue)) ?? .original,
             sourcePostID: nonEmptyString(data["sourcePostID"]),
             sourceUserID: nonEmptyString(data["sourceUserID"]),
+            commentPermission: CommentPermission(rawValue: stringValue(data["commentPermission"], fallback: CommentPermission.everyone.rawValue)) ?? .everyone,
             humanScore: intValue(data["humanScore"], fallback: 0),
             humanBadge: HumanBadge(rawValue: stringValue(data["humanBadge"], fallback: HumanBadge.checking.rawValue)) ?? .checking,
             inputDurationMs: intValue(data["inputDurationMs"], fallback: 0),
@@ -890,6 +950,25 @@ private extension FirebaseDataStore {
             moderationStatus: ModerationStatus(rawValue: stringValue(data["moderationStatus"], fallback: ModerationStatus.active.rawValue)) ?? .active,
             hiddenReason: data["hiddenReason"] as? String,
             hiddenAt: optionalDateValue(data["hiddenAt"])
+        )
+    }
+
+    func mapMutedWord(_ document: QueryDocumentSnapshot) -> MutedWord? {
+        let data = document.data()
+        guard let userID = data["userID"] as? String,
+              let word = data["word"] as? String else {
+            return nil
+        }
+
+        let normalizedWord = stringValue(data["normalizedWord"], fallback: MutedWordNormalizer.normalize(word))
+        guard !normalizedWord.isEmpty else { return nil }
+
+        return MutedWord(
+            id: document.documentID,
+            userID: userID,
+            word: word,
+            normalizedWord: normalizedWord,
+            createdAt: dateValue(data["createdAt"], fallback: Date())
         )
     }
 
@@ -1080,6 +1159,7 @@ private extension Post {
             "shareType": shareType.rawValue,
             "sourcePostID": sourcePostID ?? "",
             "sourceUserID": sourceUserID ?? "",
+            "commentPermission": commentPermission.rawValue,
             "humanScore": humanScore,
             "humanBadge": humanBadge.rawValue,
             "inputDurationMs": inputDurationMs,

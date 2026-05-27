@@ -83,6 +83,12 @@ struct SettingsView: View {
                 }
 
                 NavigationLink {
+                    MutedWordsView()
+                } label: {
+                    Label("ミュートワード", systemImage: "text.badge.xmark")
+                }
+
+                NavigationLink {
                     ReportHistoryView()
                 } label: {
                     Label("通報履歴", systemImage: "exclamationmark.bubble")
@@ -604,6 +610,82 @@ private struct ManagedUserRow: View {
                 .font(.caption.weight(.semibold))
         }
         .padding(.vertical, AppSpacing.xs)
+    }
+}
+
+private struct MutedWordsView: View {
+    @EnvironmentObject private var store: AppDataStore
+    @State private var word = ""
+
+    var body: some View {
+        Form {
+            Section("追加") {
+                HStack(spacing: AppSpacing.sm) {
+                    TextField("単語または短いフレーズ", text: $word)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+
+                    Button("追加") {
+                        addWord()
+                    }
+                    .font(.caption.weight(.semibold))
+                    .disabled(!canAdd)
+                }
+
+                Text("投稿本文、トピック、コメント本文に含まれる内容を非表示にします。大文字小文字と全角半角は最小限そろえて判定します。")
+                    .font(.footnote)
+                    .foregroundStyle(AppColor.textSecondary)
+            }
+
+            Section("登録済み") {
+                if store.mutedWords.isEmpty {
+                    Text("ミュートワードはありません。")
+                        .foregroundStyle(AppColor.textSecondary)
+                } else {
+                    ForEach(store.mutedWords) { mutedWord in
+                        HStack(spacing: AppSpacing.md) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(mutedWord.word)
+                                    .font(.subheadline.weight(.semibold))
+                                Text("判定: \(mutedWord.normalizedWord)")
+                                    .font(.caption2)
+                                    .foregroundStyle(AppColor.textSecondary)
+                                    .lineLimit(1)
+                            }
+
+                            Spacer()
+
+                            Button(role: .destructive) {
+                                store.removeMutedWord(mutedWord)
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                        .padding(.vertical, AppSpacing.xs)
+                    }
+                }
+            }
+        }
+        .navigationTitle("ミュートワード")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var canAdd: Bool {
+        let trimmed = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = MutedWordNormalizer.normalize(trimmed)
+        return !trimmed.isEmpty
+            && !normalized.isEmpty
+            && trimmed.count <= AppConstants.maxMutedWordLength
+            && !store.mutedWords.contains { $0.normalizedWord == normalized }
+    }
+
+    private func addWord() {
+        guard canAdd else { return }
+        store.addMutedWord(word)
+        word = ""
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 }
 

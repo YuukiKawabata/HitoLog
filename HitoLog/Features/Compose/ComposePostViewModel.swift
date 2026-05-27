@@ -67,7 +67,8 @@ final class ComposePostViewModel: ObservableObject {
         id: String = UUID().uuidString,
         using user: AppUser,
         recentPostCount: Int,
-        mediaItems: [PostMedia] = []
+        mediaItems: [PostMedia] = [],
+        commentPermission: CommentPermission = .everyone
     ) -> Post {
         let input = HumanScoreInput(
             inputDurationMs: metrics.inputDurationMs,
@@ -87,6 +88,7 @@ final class ComposePostViewModel: ObservableObject {
             userId: user.id,
             body: text.trimmingCharacters(in: .whitespacesAndNewlines),
             mediaItems: mediaItems,
+            commentPermission: commentPermission,
             humanScore: score,
             humanBadge: humanScoreService.badge(for: score),
             inputDurationMs: metrics.inputDurationMs,

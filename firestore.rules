@@ -48,6 +48,11 @@ service cloud.firestore {
         || (data.searchTokens is list && data.searchTokens.size() <= 80);
     }
 
+    function validCommentPermission(data) {
+      return data.keys().hasAll(['commentPermission'])
+        && data.commentPermission in ['everyone', 'following', 'closed'];
+    }
+
     function validPostShare(data) {
       return data.keys().hasAll(['shareType'])
         && data.shareType in ['original', 'repost', 'quote']
@@ -69,6 +74,23 @@ service cloud.firestore {
             && data.sourcePostID.size() > 0
             && data.sourceUserID is string
             && data.sourceUserID.size() > 0)
+        );
+    }
+
+    function postForComment(data) {
+      return get(/databases/$(database)/documents/posts/$(data.postID));
+    }
+
+    function canCreateComment(data) {
+      return exists(/databases/$(database)/documents/posts/$(data.postID))
+        && postForComment(data).data.isDeleted != true
+        && postForComment(data).data.moderationStatus == 'active'
+        && (
+          !postForComment(data).data.keys().hasAny(['commentPermission'])
+          || postForComment(data).data.commentPermission == 'everyone'
+          || (postForComment(data).data.commentPermission == 'following'
+            && (postForComment(data).data.userID == data.userID
+              || exists(/databases/$(database)/documents/follows/$(postForComment(data).data.userID + '_' + data.userID))))
         );
     }
 
@@ -151,6 +173,7 @@ service cloud.firestore {
           'shareType',
           'sourcePostID',
           'sourceUserID',
+          'commentPermission',
           'humanScore',
           'humanBadge',
           'inputDurationMs',
@@ -171,6 +194,7 @@ service cloud.firestore {
           'searchTokens'
         ])
         && validPostShare(request.resource.data)
+        && validCommentPermission(request.resource.data)
         && request.resource.data.moderationStatus == 'active'
         && validPostMediaItems(request.resource.data)
         && validPostTopics(request.resource.data)
@@ -180,9 +204,11 @@ service cloud.firestore {
         && request.resource.data.repostCount == 0
         && request.resource.data.quoteCount == 0;
       allow update: if isOwner(resource.data.userID)
-        && changedOnly(['body', 'topics', 'searchTokens', 'editCount', 'updatedAt', 'isDeleted'])
+        && changedOnly(['body', 'topics', 'searchTokens', 'editCount', 'updatedAt', 'isDeleted', 'commentPermission'])
         && validPostTopics(request.resource.data)
-        && validPostSearchTokens(request.resource.data);
+        && validPostSearchTokens(request.resource.data)
+        && (!request.resource.data.diff(resource.data).changedKeys().hasAny(['commentPermission'])
+          || validCommentPermission(request.resource.data));
       allow update: if isAdmin()
         && changedOnly([
           'moderationStatus',
@@ -208,11 +234,25 @@ service cloud.firestore {
           'isDeleted',
           'moderationStatus'
         ])
+        && request.resource.data.postID is string
+        && request.resource.data.userID is string
         && request.resource.data.body is string
         && request.resource.data.body.size() > 0
-        && request.resource.data.moderationStatus == 'active';
+        && request.resource.data.moderationStatus == 'active'
+        && canCreateComment(request.resource.data);
       allow update: if isOwner(resource.data.userID)
-        && changedOnly(['body', 'updatedAt', 'isDeleted']);
+        && changedOnly(['updatedAt', 'isDeleted'])
+        && request.resource.data.isDeleted == true;
+      allow update: if signedIn()
+        && exists(/databases/$(database)/documents/posts/$(resource.data.postID))
+        && get(/databases/$(database)/documents/posts/$(resource.data.postID)).data.userID == request.auth.uid
+        && changedOnly([
+          'moderationStatus',
+          'hiddenReason',
+          'hiddenAt',
+          'updatedAt'
+        ])
+        && request.resource.data.moderationStatus == 'hidden';
       allow update: if isAdmin()
         && changedOnly([
           'moderationStatus',
@@ -273,6 +313,20 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['muterID', 'mutedUserID', 'createdAt'])
         && muteID == request.resource.data.muterID + '_' + request.resource.data.mutedUserID;
       allow delete: if isOwner(resource.data.muterID);
+      allow update: if false;
+    }
+
+    match /mutedWords/{wordID} {
+      allow read: if isOwner(resource.data.userID);
+      allow create: if isOwner(request.resource.data.userID)
+        && request.resource.data.keys().hasOnly(['userID', 'word', 'normalizedWord', 'createdAt'])
+        && request.resource.data.word is string
+        && request.resource.data.word.size() > 0
+        && request.resource.data.word.size() <= 40
+        && request.resource.data.normalizedWord is string
+        && request.resource.data.normalizedWord.size() > 0
+        && wordID.size() > request.resource.data.userID.size() + 1;
+      allow delete: if isOwner(resource.data.userID);
       allow update: if false;
     }
 

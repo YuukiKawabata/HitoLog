@@ -5,9 +5,10 @@ struct TimelineView: View {
     @State private var editingPost: Post?
     @State private var deletingPost: Post?
     @State private var selectedFilter: TimelineFilter = .all
+    @State private var selectedStarterPack: StarterPackCategory = .writers
 
     var body: some View {
-        let posts = selectedFilter == .all ? store.timelinePosts : store.followingTimelinePosts
+        let posts = postsForSelectedFilter
 
         ScrollView {
             LazyVStack(spacing: AppSpacing.sm) {
@@ -26,12 +27,20 @@ struct TimelineView: View {
                 .padding(.bottom, AppSpacing.xs)
 
                 if posts.isEmpty {
-                    EmptyTimelineView(
-                        title: selectedFilter.emptyTitle,
-                        message: selectedFilter.emptyMessage
-                    )
+                    if selectedFilter == .following || selectedFilter == .recommended {
+                        TimelineStarterPackEmptyView(
+                            title: selectedFilter.emptyTitle,
+                            message: selectedFilter.emptyMessage,
+                            selectedCategory: $selectedStarterPack
+                        )
+                    } else {
+                        EmptyTimelineView(
+                            title: selectedFilter.emptyTitle,
+                            message: selectedFilter.emptyMessage
+                        )
                         .padding(.horizontal, AppSpacing.md)
                         .padding(.top, 96)
+                    }
                 } else {
                     ForEach(posts) { post in
                         if let author = store.user(for: post.userId) {
@@ -99,6 +108,12 @@ struct TimelineView: View {
         .refreshable {
             await store.refresh()
         }
+        .onChange(of: selectedFilter) { _, newValue in
+            guard newValue == .recommended, store.isRemoteSyncEnabled, store.hasMoreTimelinePosts else { return }
+            Task {
+                await store.loadMoreTimelinePosts()
+            }
+        }
         .navigationTitle("HitoLog")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $editingPost) { post in
@@ -131,11 +146,23 @@ struct TimelineView: View {
             Text("削除した投稿はタイムラインに表示されなくなります。")
         }
     }
+
+    private var postsForSelectedFilter: [Post] {
+        switch selectedFilter {
+        case .all:
+            return store.timelinePosts
+        case .following:
+            return store.followingTimelinePosts
+        case .recommended:
+            return store.recommendedTimelinePosts
+        }
+    }
 }
 
 private enum TimelineFilter: String, CaseIterable, Identifiable {
     case all
     case following
+    case recommended
 
     var id: String { rawValue }
 
@@ -145,6 +172,8 @@ private enum TimelineFilter: String, CaseIterable, Identifiable {
             return "すべて"
         case .following:
             return "フォロー中"
+        case .recommended:
+            return "おすすめ"
         }
     }
 
@@ -154,6 +183,8 @@ private enum TimelineFilter: String, CaseIterable, Identifiable {
             return "まだ表示できる投稿がありません"
         case .following:
             return "フォロー中の投稿はまだありません"
+        case .recommended:
+            return "おすすめできる投稿はまだありません"
         }
     }
 
@@ -163,6 +194,8 @@ private enum TimelineFilter: String, CaseIterable, Identifiable {
             return "他の人の投稿が届くと、ここに表示されます。"
         case .following:
             return "気になる人をフォローすると、ここに投稿が表示されます。"
+        case .recommended:
+            return "反応や本人入力率の高い投稿が見つかると、ここに表示されます。"
         }
     }
 }
@@ -192,6 +225,82 @@ private struct TimelineHeaderView: View {
         }
         .padding(AppSpacing.md)
         .paperSurface()
+    }
+}
+
+private struct TimelineStarterPackEmptyView: View {
+    @EnvironmentObject private var store: AppDataStore
+    let title: String
+    let message: String
+    @Binding var selectedCategory: StarterPackCategory
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.md) {
+            EmptyTimelineView(title: title, message: message)
+
+            VStack(alignment: .leading, spacing: AppSpacing.md) {
+                SectionKicker(text: "Starter Pack", systemImage: selectedCategory.systemImage)
+
+                Picker("スターターパック", selection: $selectedCategory) {
+                    ForEach(StarterPackCategory.allCases) { category in
+                        Text(category.title).tag(category)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                let users = store.starterPackUsers(for: selectedCategory)
+                if users.isEmpty {
+                    Text("候補ユーザーはまだありません。")
+                        .font(.subheadline)
+                        .foregroundStyle(AppColor.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    ForEach(users) { user in
+                        StarterPackUserRow(user: user)
+                    }
+                }
+            }
+            .padding(AppSpacing.md)
+            .paperSurface()
+        }
+        .padding(.horizontal, AppSpacing.md)
+        .padding(.top, 64)
+    }
+}
+
+private struct StarterPackUserRow: View {
+    @EnvironmentObject private var store: AppDataStore
+    let user: AppUser
+
+    var body: some View {
+        HStack(spacing: AppSpacing.md) {
+            NavigationLink(destination: ProfileView(userID: user.id)) {
+                HStack(spacing: AppSpacing.sm) {
+                    AvatarView(user: user, size: 38)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(user.displayName)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppColor.textPrimary)
+                        Text("@\(user.handle)")
+                            .font(.caption)
+                            .foregroundStyle(AppColor.textSecondary)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+
+            Button {
+                store.toggleFollow(userID: user.id)
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            } label: {
+                Label(store.isFollowing(user.id) ? "フォロー中" : "フォロー", systemImage: store.isFollowing(user.id) ? "checkmark" : "plus")
+                    .font(.caption.weight(.semibold))
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(.vertical, AppSpacing.xs)
     }
 }
 

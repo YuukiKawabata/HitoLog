@@ -9,4 +9,6 @@ enum AppConstants {
     static let maxPostVideoDurationSeconds = 60.0
     static let maxPostVideoSizeBytes: Int64 = 100 * 1024 * 1024
     static let maxPostImageDimension: CGFloat = 1_600
+    static let maxMutedWordLength = 40
+    static let minimumStarterPackFollowerCount = 1
 }

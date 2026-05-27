@@ -139,16 +139,7 @@ struct ProfileView: View {
     }
 
     private func profilePosts(for user: AppUser) -> [Post] {
-        store.posts
-            .filter {
-                $0.userId == user.id
-                && !$0.isDeleted
-                && !store.blockedUserIDs.contains($0.userId)
-                && !store.mutedUserIDs.contains($0.userId)
-                && (store.currentUser.isAdmin || $0.moderationStatus == .active)
-                && ($0.shareType == .original || store.sourcePost(for: $0) != nil)
-            }
-            .sorted { $0.createdAt > $1.createdAt }
+        store.visibleProfilePosts(for: user.id)
     }
 }
 
