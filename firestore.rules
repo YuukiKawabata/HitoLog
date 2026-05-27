@@ -10,8 +10,94 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == userID;
     }
 
+    function signedInUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && signedInUser().data.isAdmin == true
+        && signedInUser().data.isDeleted != true
+        && signedInUser().data.isSuspended != true;
+    }
+
+    function isActiveAccount() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && signedInUser().data.isDeleted != true
+        && signedInUser().data.isSuspended != true;
+    }
+
     function changedOnly(allowed) {
       return request.resource.data.diff(resource.data).changedKeys().hasOnly(allowed);
+    }
+
+    function validPostMediaItems(data) {
+      return !data.keys().hasAny(['mediaItems'])
+        || (data.mediaItems is list && data.mediaItems.size() <= 4);
+    }
+
+    function validPostTopics(data) {
+      return !data.keys().hasAny(['topics'])
+        || (data.topics is list && data.topics.size() <= 8);
+    }
+
+    function validPostSearchTokens(data) {
+      return !data.keys().hasAny(['searchTokens'])
+        || (data.searchTokens is list && data.searchTokens.size() <= 80);
+    }
+
+    function validPostShare(data) {
+      return data.keys().hasAll(['shareType'])
+        && data.shareType in ['original', 'repost', 'quote']
+        && (
+          (data.shareType == 'original'
+            && data.body is string
+            && data.body.size() > 0)
+          || (data.shareType == 'repost'
+            && data.body is string
+            && data.body.size() == 0
+            && data.sourcePostID is string
+            && data.sourcePostID.size() > 0
+            && data.sourceUserID is string
+            && data.sourceUserID.size() > 0)
+          || (data.shareType == 'quote'
+            && data.body is string
+            && data.body.size() > 0
+            && data.sourcePostID is string
+            && data.sourcePostID.size() > 0
+            && data.sourceUserID is string
+            && data.sourceUserID.size() > 0)
+        );
+    }
+
+    function ownerUserUpdateKeysAreSafe() {
+      let changed = request.resource.data.diff(resource.data).changedKeys();
+      return changed.hasOnly([
+        'displayName',
+        'displayNameLowercase',
+        'handle',
+        'handleLowercase',
+        'bio',
+        'avatarUrl',
+        'email',
+        'updatedAt',
+        'isDeleted',
+        'notificationsEnabled',
+        'isAdmin',
+        'isSuspended',
+        'followerCount',
+        'followingCount'
+      ])
+      && (!changed.hasAny(['isAdmin'])
+        || (!resource.data.keys().hasAny(['isAdmin']) && request.resource.data.isAdmin == false))
+      && (!changed.hasAny(['isSuspended'])
+        || (!resource.data.keys().hasAny(['isSuspended']) && request.resource.data.isSuspended == false))
+      && (!changed.hasAny(['followerCount'])
+        || (!resource.data.keys().hasAny(['followerCount']) && request.resource.data.followerCount is int))
+      && (!changed.hasAny(['followingCount'])
+        || (!resource.data.keys().hasAny(['followingCount']) && request.resource.data.followingCount is int));
     }
 
     match /users/{userID} {
@@ -19,7 +105,9 @@ service cloud.firestore {
       allow create: if isOwner(userID)
         && request.resource.data.keys().hasOnly([
           'displayName',
+          'displayNameLowercase',
           'handle',
+          'handleLowercase',
           'bio',
           'avatarUrl',
           'appleUserID',
@@ -29,18 +117,25 @@ service cloud.firestore {
           'createdAt',
           'updatedAt',
           'isDeleted',
+          'isAdmin',
+          'isSuspended',
+          'followerCount',
+          'followingCount',
           'notificationsEnabled'
-        ]);
+        ])
+        && request.resource.data.isAdmin == false
+        && request.resource.data.isSuspended == false
+        && request.resource.data.followerCount == 0
+        && request.resource.data.followingCount == 0;
       allow update: if isOwner(userID)
+        && ownerUserUpdateKeysAreSafe();
+      allow update: if isAdmin()
         && changedOnly([
-          'displayName',
-          'handle',
-          'bio',
-          'avatarUrl',
-          'email',
-          'updatedAt',
-          'isDeleted',
-          'notificationsEnabled'
+          'isSuspended',
+          'suspensionReason',
+          'suspendedAt',
+          'suspendedBy',
+          'updatedAt'
         ]);
       allow delete: if false;
     }
@@ -48,32 +143,125 @@ service cloud.firestore {
     match /posts/{postID} {
       allow read: if signedIn();
       allow create: if isOwner(request.resource.data.userID)
+        && isActiveAccount()
+        && request.resource.data.keys().hasOnly([
+          'userID',
+          'body',
+          'mediaItems',
+          'shareType',
+          'sourcePostID',
+          'sourceUserID',
+          'humanScore',
+          'humanBadge',
+          'inputDurationMs',
+          'characterCount',
+          'editCount',
+          'deleteCount',
+          'suspiciousBulkInputCount',
+          'appCheckVerified',
+          'likeCount',
+          'commentCount',
+          'repostCount',
+          'quoteCount',
+          'createdAt',
+          'updatedAt',
+          'isDeleted',
+          'moderationStatus',
+          'topics',
+          'searchTokens'
+        ])
+        && validPostShare(request.resource.data)
+        && request.resource.data.moderationStatus == 'active'
+        && validPostMediaItems(request.resource.data)
+        && validPostTopics(request.resource.data)
+        && validPostSearchTokens(request.resource.data)
         && request.resource.data.likeCount == 0
-        && request.resource.data.commentCount == 0;
+        && request.resource.data.commentCount == 0
+        && request.resource.data.repostCount == 0
+        && request.resource.data.quoteCount == 0;
       allow update: if isOwner(resource.data.userID)
-        && changedOnly(['body', 'updatedAt', 'isDeleted']);
+        && changedOnly(['body', 'topics', 'searchTokens', 'editCount', 'updatedAt', 'isDeleted'])
+        && validPostTopics(request.resource.data)
+        && validPostSearchTokens(request.resource.data);
+      allow update: if isAdmin()
+        && changedOnly([
+          'moderationStatus',
+          'hiddenReason',
+          'hiddenAt',
+          'hiddenBy',
+          'updatedAt'
+        ]);
       allow delete: if false;
     }
 
     match /comments/{commentID} {
       allow read: if signedIn();
-      allow create: if isOwner(request.resource.data.userID);
+      allow create: if isOwner(request.resource.data.userID)
+        && isActiveAccount()
+        && request.resource.data.keys().hasOnly([
+          'postID',
+          'userID',
+          'body',
+          'humanScore',
+          'createdAt',
+          'updatedAt',
+          'isDeleted',
+          'moderationStatus'
+        ])
+        && request.resource.data.body is string
+        && request.resource.data.body.size() > 0
+        && request.resource.data.moderationStatus == 'active';
       allow update: if isOwner(resource.data.userID)
         && changedOnly(['body', 'updatedAt', 'isDeleted']);
+      allow update: if isAdmin()
+        && changedOnly([
+          'moderationStatus',
+          'hiddenReason',
+          'hiddenAt',
+          'hiddenBy',
+          'updatedAt'
+        ]);
       allow delete: if false;
     }
 
     match /likes/{likeID} {
       allow read: if signedIn();
       allow create: if isOwner(request.resource.data.userID)
+        && isActiveAccount()
+        && request.resource.data.keys().hasOnly(['postID', 'userID', 'createdAt'])
         && likeID == request.resource.data.postID + '_' + request.resource.data.userID;
       allow delete: if isOwner(resource.data.userID);
+      allow update: if false;
+    }
+
+    match /bookmarks/{bookmarkID} {
+      allow read: if isOwner(resource.data.userID);
+      allow create: if isOwner(request.resource.data.userID)
+        && isActiveAccount()
+        && request.resource.data.keys().hasOnly(['postID', 'userID', 'createdAt'])
+        && request.resource.data.postID is string
+        && bookmarkID == request.resource.data.userID + '_' + request.resource.data.postID;
+      allow delete: if isOwner(resource.data.userID);
+      allow update: if false;
+    }
+
+    match /follows/{followID} {
+      allow read: if signedIn();
+      allow create: if isOwner(request.resource.data.followerID)
+        && isActiveAccount()
+        && request.resource.data.keys().hasOnly(['followerID', 'followeeID', 'createdAt'])
+        && request.resource.data.followerID is string
+        && request.resource.data.followeeID is string
+        && request.resource.data.followerID != request.resource.data.followeeID
+        && followID == request.resource.data.followerID + '_' + request.resource.data.followeeID;
+      allow delete: if isOwner(resource.data.followerID);
       allow update: if false;
     }
 
     match /blocks/{blockID} {
       allow read: if signedIn();
       allow create: if isOwner(request.resource.data.blockerID)
+        && request.resource.data.keys().hasOnly(['blockerID', 'blockedUserID', 'createdAt'])
         && blockID == request.resource.data.blockerID + '_' + request.resource.data.blockedUserID;
       allow delete: if isOwner(resource.data.blockerID);
       allow update: if false;
@@ -82,19 +270,35 @@ service cloud.firestore {
     match /mutes/{muteID} {
       allow read: if signedIn();
       allow create: if isOwner(request.resource.data.muterID)
+        && request.resource.data.keys().hasOnly(['muterID', 'mutedUserID', 'createdAt'])
         && muteID == request.resource.data.muterID + '_' + request.resource.data.mutedUserID;
       allow delete: if isOwner(resource.data.muterID);
       allow update: if false;
     }
 
     match /reports/{reportID} {
-      allow read: if isOwner(resource.data.reporterID);
-      allow create: if isOwner(request.resource.data.reporterID);
-      allow update, delete: if false;
+      allow read: if isOwner(resource.data.reporterID) || isAdmin();
+      allow create: if isOwner(request.resource.data.reporterID)
+        && request.resource.data.keys().hasOnly([
+          'reporterID',
+          'targetType',
+          'targetID',
+          'targetOwnerID',
+          'targetDescription',
+          'reason',
+          'status',
+          'createdAt'
+        ])
+        && request.resource.data.status == '確認待ち';
+      allow update: if isAdmin()
+        && changedOnly(['status', 'adminNote', 'resolvedAt', 'resolvedBy']);
+      allow delete: if false;
     }
 
     match /notifications/{notificationID} {
-      allow read, update: if isOwner(resource.data.recipientID);
+      allow read: if isOwner(resource.data.recipientID);
+      allow update: if isOwner(resource.data.recipientID)
+        && changedOnly(['isRead', 'readAt']);
       allow create, delete: if false;
     }
 

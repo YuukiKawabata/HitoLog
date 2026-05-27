@@ -51,7 +51,7 @@ struct SettingsView: View {
                         }
                     }
                 )) {
-                    Label("コメントといいね", systemImage: "bell.badge")
+                    Label("コメント・いいね・フォロー", systemImage: "bell.badge")
                 }
 
                 if pushService.authorizationStatus == .denied {
@@ -62,6 +62,14 @@ struct SettingsView: View {
             }
 
             Section("安全") {
+                if store.currentUser.isAdmin {
+                    NavigationLink {
+                        AdminReportManagementView()
+                    } label: {
+                        Label("通報管理", systemImage: "checkmark.shield")
+                    }
+                }
+
                 NavigationLink {
                     UserManagementListView(mode: .blocked)
                 } label: {
@@ -107,6 +115,12 @@ struct SettingsView: View {
                     LegalDocumentView(title: "利用規約", bodyText: legalTermsText)
                 } label: {
                     Label("利用規約", systemImage: "doc.text")
+                }
+
+                NavigationLink {
+                    LegalDocumentView(title: "コミュニティガイドライン", bodyText: communityGuidelinesText)
+                } label: {
+                    Label("コミュニティガイドライン", systemImage: "checkmark.shield")
                 }
 
                 NavigationLink {
@@ -622,6 +636,120 @@ private struct ReportHistoryView: View {
     }
 }
 
+private struct AdminReportManagementView: View {
+    @EnvironmentObject private var store: AppDataStore
+
+    var body: some View {
+        List {
+            if store.adminReports.isEmpty {
+                ContentUnavailableView("未対応の通報はありません", systemImage: "checkmark.shield")
+                    .listRowBackground(Color.clear)
+            } else {
+                ForEach(store.adminReports) { report in
+                    AdminReportRow(report: report)
+                }
+            }
+        }
+        .navigationTitle("通報管理")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await store.loadAdminReports()
+        }
+        .refreshable {
+            await store.loadAdminReports()
+        }
+    }
+}
+
+private struct AdminReportRow: View {
+    @EnvironmentObject private var store: AppDataStore
+    let report: ReportRecord
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.sm) {
+            HStack {
+                Label(report.targetType.displayText, systemImage: report.targetType.systemImage)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColor.accent)
+                Spacer()
+                Text(report.status)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(report.status == "確認待ち" ? AppColor.warning : AppColor.textSecondary)
+            }
+
+            Text(report.targetDescription)
+                .font(.subheadline.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("理由: \(report.reason)")
+                .font(.caption)
+                .foregroundStyle(AppColor.textSecondary)
+
+            Text("通報: \(DateFormatterUtil.relativeString(from: report.createdAt))")
+                .font(.caption2)
+                .foregroundStyle(AppColor.textTertiary)
+
+            if let adminNote = report.adminNote {
+                Text("メモ: \(adminNote)")
+                    .font(.caption2)
+                    .foregroundStyle(AppColor.textSecondary)
+            }
+
+            HStack(spacing: AppSpacing.sm) {
+                if report.targetType == .post || report.targetType == .comment {
+                    Button(role: .destructive) {
+                        Task {
+                            await store.hideReportedContent(report)
+                        }
+                    } label: {
+                        Label("非表示", systemImage: "eye.slash")
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.caption.weight(.semibold))
+                }
+
+                if report.targetType == .user || report.targetOwnerID != nil {
+                    Button(role: .destructive) {
+                        Task {
+                            await store.suspendReportedUser(report)
+                        }
+                    } label: {
+                        Label("停止", systemImage: "person.crop.circle.badge.xmark")
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.caption.weight(.semibold))
+                }
+
+                Button {
+                    Task {
+                        await store.resolveReport(report, status: "対応済み", adminNote: "確認のみ")
+                    }
+                } label: {
+                    Label("対応済み", systemImage: "checkmark")
+                }
+                .buttonStyle(.bordered)
+                .font(.caption.weight(.semibold))
+            }
+        }
+        .padding(.vertical, AppSpacing.xs)
+    }
+}
+
+private extension ReportTargetType {
+    var systemImage: String {
+        switch self {
+        case .post:
+            return "text.bubble"
+        case .comment:
+            return "bubble.right"
+        case .user:
+            return "person.crop.circle"
+        case .other:
+            return "exclamationmark.bubble"
+        }
+    }
+}
+
 private struct LegalDocumentView: View {
     let title: String
     let bodyText: String
@@ -654,6 +782,17 @@ HitoLogは、本人がアプリ内で入力した言葉を投稿するためのS
 HitoLogでは、投稿、コメント、いいね、ブロック、ミュート、通報などの機能を提供します。運営上必要な場合、不適切な投稿やアカウントの表示制限、削除、利用停止を行うことがあります。
 
 アカウント削除は設定画面から実行できます。削除すると、アカウント情報、投稿、コメント、通知トークンなどのユーザーデータは削除または非表示化されます。安全確認や法令対応のため、通報記録など一部の情報を必要な期間保持する場合があります。
+"""
+
+private let communityGuidelinesText = """
+HitoLogでは、本人が入力した言葉を安心して読める場にするため、以下の行為を禁止します。
+
+・誹謗中傷、脅迫、嫌がらせ、差別的な表現
+・性的、暴力的、違法、または他者に危害を与える内容
+・個人情報、なりすまし、権利侵害、無断転載
+・スパム、過度な連投、サービスの安全性を損なう行為
+
+問題のある投稿、コメント、ユーザーは通報できます。運営は通報内容を確認し、必要に応じて投稿やコメントの非表示、アカウントの利用制限を行います。
 """
 
 private let privacyPolicyText = """

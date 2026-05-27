@@ -9,9 +9,41 @@ struct RemoteDataSnapshot {
     var posts: [Post]
     var comments: [Comment]
     var likedPostIDs: Set<String>
+    var bookmarkedPostIDs: Set<String>
     var blockedUserIDs: Set<String>
     var mutedUserIDs: Set<String>
+    var followingUserIDs: Set<String>
+    var followerCountsByUserID: [String: Int]
+    var followingCountsByUserID: [String: Int]
+    var followersByUserID: [String: Set<String>]
+    var followingByUserID: [String: Set<String>]
     var reports: [ReportRecord]
+    var notifications: [AppNotification]
+    var adminReports: [ReportRecord]
+    var hasMorePosts: Bool
+}
+
+struct TimelinePostPage {
+    var posts: [Post]
+    var users: [AppUser]
+    var hasMore: Bool
+}
+
+struct RemoteFollowState {
+    var users: [AppUser]
+    var followerIDs: Set<String>
+    var followingIDs: Set<String>
+}
+
+struct RemoteBookmarkState {
+    var postIDs: Set<String>
+    var posts: [Post]
+    var users: [AppUser]
+}
+
+private struct FollowRecord {
+    let followerID: String
+    let followeeID: String
 }
 
 struct FirebaseDataStore {
@@ -24,18 +56,14 @@ struct FirebaseDataStore {
         let db = Firestore.firestore()
 
         async let usersSnapshot = db.collection("users").whereField("isDeleted", isEqualTo: false).getDocuments()
-        async let postsSnapshot = db.collection("posts")
-            .whereField("isDeleted", isEqualTo: false)
-            .order(by: "createdAt", descending: true)
-            .limit(to: 100)
-            .getDocuments()
-        async let commentsSnapshot = db.collection("comments")
-            .whereField("isDeleted", isEqualTo: false)
-            .order(by: "createdAt")
-            .limit(to: 300)
-            .getDocuments()
+        async let postsSnapshot = timelinePostsQuery(db: db, before: nil).getDocuments()
         async let likesSnapshot = db.collection("likes")
             .whereField("userID", isEqualTo: currentUserID)
+            .getDocuments()
+        async let bookmarksSnapshot = db.collection("bookmarks")
+            .whereField("userID", isEqualTo: currentUserID)
+            .order(by: "createdAt", descending: true)
+            .limit(to: 100)
             .getDocuments()
         async let blocksSnapshot = db.collection("blocks")
             .whereField("blockerID", isEqualTo: currentUserID)
@@ -43,36 +71,73 @@ struct FirebaseDataStore {
         async let mutesSnapshot = db.collection("mutes")
             .whereField("muterID", isEqualTo: currentUserID)
             .getDocuments()
+        async let followingSnapshot = db.collection("follows")
+            .whereField("followerID", isEqualTo: currentUserID)
+            .getDocuments()
+        async let followersSnapshot = db.collection("follows")
+            .whereField("followeeID", isEqualTo: currentUserID)
+            .getDocuments()
         async let reportsSnapshot = db.collection("reports")
             .whereField("reporterID", isEqualTo: currentUserID)
+            .order(by: "createdAt", descending: true)
+            .limit(to: 50)
+            .getDocuments()
+        async let notificationsSnapshot = db.collection("notifications")
+            .whereField("recipientID", isEqualTo: currentUserID)
             .order(by: "createdAt", descending: true)
             .limit(to: 50)
             .getDocuments()
 
         let usersResult = try await usersSnapshot
         let postsResult = try await postsSnapshot
-        let commentsResult = try await commentsSnapshot
         let likesResult = try await likesSnapshot
+        let bookmarksResult = try await bookmarksSnapshot
         let blocksResult = try await blocksSnapshot
         let mutesResult = try await mutesSnapshot
+        let followingResult = try await followingSnapshot
+        let followersResult = try await followersSnapshot
         let reportsResult = try await reportsSnapshot
+        let notificationsResult = try await notificationsSnapshot
 
         let users = usersResult.documents.compactMap(mapUser)
-        let posts = postsResult.documents.compactMap(mapPost)
-        let comments = commentsResult.documents.compactMap(mapComment)
+        let activeUserIDs = Set(users.map(\.id))
+        let loadedPosts = postsResult.documents.compactMap(mapPost)
+            .filter { $0.moderationStatus == .active }
+        let sourcePostIDs = loadedPosts.compactMap(\.sourcePostID)
+        let sourcePosts = try await loadPosts(postIDs: sourcePostIDs)
+            .filter { !$0.isDeleted && $0.moderationStatus == .active }
+        let posts = uniquePosts(loadedPosts + sourcePosts)
         let likedPostIDs = Set(likesResult.documents.compactMap { $0.data()["postID"] as? String })
+        let bookmarkedPostIDs = Set(bookmarksResult.documents.compactMap { $0.data()["postID"] as? String })
         let blockedUserIDs = Set(blocksResult.documents.compactMap { $0.data()["blockedUserID"] as? String })
         let mutedUserIDs = Set(mutesResult.documents.compactMap { $0.data()["mutedUserID"] as? String })
+        let followRecords = (followingResult.documents + followersResult.documents).compactMap(mapFollow).filter {
+            activeUserIDs.contains($0.followerID) && activeUserIDs.contains($0.followeeID)
+        }
+        let followState = followState(from: followRecords, currentUserID: currentUserID)
         let reports = reportsResult.documents.compactMap(mapReport)
+        let notifications = notificationsResult.documents.compactMap(mapNotification)
+        let adminReports = users.first(where: { $0.id == currentUserID })?.isAdmin == true
+            ? try await loadAdminReports()
+            : []
 
         return RemoteDataSnapshot(
             users: users,
             posts: posts,
-            comments: comments,
+            comments: [],
             likedPostIDs: likedPostIDs,
+            bookmarkedPostIDs: bookmarkedPostIDs,
             blockedUserIDs: blockedUserIDs,
             mutedUserIDs: mutedUserIDs,
-            reports: reports
+            followingUserIDs: followState.followingUserIDs,
+            followerCountsByUserID: followState.followerCountsByUserID,
+            followingCountsByUserID: followState.followingCountsByUserID,
+            followersByUserID: followState.followersByUserID,
+            followingByUserID: followState.followingByUserID,
+            reports: reports,
+            notifications: notifications,
+            adminReports: adminReports,
+            hasMorePosts: postsResult.documents.count >= Self.timelinePageSize
         )
         #else
         return RemoteDataSnapshot(
@@ -80,9 +145,18 @@ struct FirebaseDataStore {
             posts: [],
             comments: [],
             likedPostIDs: [],
+            bookmarkedPostIDs: [],
             blockedUserIDs: [],
             mutedUserIDs: [],
-            reports: []
+            followingUserIDs: [],
+            followerCountsByUserID: [:],
+            followingCountsByUserID: [:],
+            followersByUserID: [:],
+            followingByUserID: [:],
+            reports: [],
+            notifications: [],
+            adminReports: [],
+            hasMorePosts: false
         )
         #endif
     }
@@ -104,11 +178,198 @@ struct FirebaseDataStore {
         #endif
     }
 
+    func loadTimelinePosts(currentUserID: String, before cursor: Date?, limit: Int = 25) async throws -> TimelinePostPage {
+        #if canImport(FirebaseFirestore)
+        let db = Firestore.firestore()
+        let snapshot = try await timelinePostsQuery(db: db, before: cursor, limit: limit + 1).getDocuments()
+        let documents = Array(snapshot.documents.prefix(limit))
+        let loadedPosts = documents.compactMap(mapPost).filter { $0.moderationStatus == .active }
+        let sourcePosts = try await loadPosts(postIDs: loadedPosts.compactMap(\.sourcePostID))
+            .filter { !$0.isDeleted && $0.moderationStatus == .active }
+        let posts = uniquePosts(loadedPosts + sourcePosts)
+        let authorIDs = Array(Set(posts.map(\.userId) + [currentUserID]))
+        let users = try await loadUsers(userIDs: authorIDs)
+        return TimelinePostPage(posts: posts, users: users, hasMore: snapshot.documents.count > limit)
+        #else
+        return TimelinePostPage(posts: [], users: [], hasMore: false)
+        #endif
+    }
+
+    func loadTopicPosts(topic: String, limit: Int = 50) async throws -> TimelinePostPage {
+        #if canImport(FirebaseFirestore)
+        let snapshot = try await Firestore.firestore()
+            .collection("posts")
+            .whereField("topics", arrayContains: topic)
+            .whereField("isDeleted", isEqualTo: false)
+            .order(by: "createdAt", descending: true)
+            .limit(to: limit)
+            .getDocuments()
+
+        let loadedPosts = snapshot.documents.compactMap(mapPost).filter { $0.moderationStatus == .active }
+        let sourcePosts = try await loadPosts(postIDs: loadedPosts.compactMap(\.sourcePostID))
+            .filter { !$0.isDeleted && $0.moderationStatus == .active }
+        let posts = uniquePosts(loadedPosts + sourcePosts)
+        let users = try await loadUsers(userIDs: Array(Set(posts.map(\.userId))))
+        return TimelinePostPage(posts: posts, users: users, hasMore: snapshot.documents.count >= limit)
+        #else
+        return TimelinePostPage(posts: [], users: [], hasMore: false)
+        #endif
+    }
+
+    func searchPosts(query: String, limit: Int = 50) async throws -> TimelinePostPage {
+        #if canImport(FirebaseFirestore)
+        guard let token = PostSearchTokenizer.primaryToken(for: query) else {
+            return TimelinePostPage(posts: [], users: [], hasMore: false)
+        }
+
+        let snapshot = try await Firestore.firestore()
+            .collection("posts")
+            .whereField("searchTokens", arrayContains: token)
+            .whereField("isDeleted", isEqualTo: false)
+            .order(by: "createdAt", descending: true)
+            .limit(to: limit)
+            .getDocuments()
+
+        let loadedPosts = snapshot.documents.compactMap(mapPost).filter { $0.moderationStatus == .active }
+        let sourcePosts = try await loadPosts(postIDs: loadedPosts.compactMap(\.sourcePostID))
+            .filter { !$0.isDeleted && $0.moderationStatus == .active }
+        let posts = uniquePosts(loadedPosts + sourcePosts)
+        let users = try await loadUsers(userIDs: Array(Set(posts.map(\.userId))))
+        return TimelinePostPage(posts: posts, users: users, hasMore: snapshot.documents.count >= limit)
+        #else
+        return TimelinePostPage(posts: [], users: [], hasMore: false)
+        #endif
+    }
+
+    func loadComments(postID: String) async throws -> [Comment] {
+        #if canImport(FirebaseFirestore)
+        let snapshot = try await Firestore.firestore()
+            .collection("comments")
+            .whereField("postID", isEqualTo: postID)
+            .whereField("isDeleted", isEqualTo: false)
+            .order(by: "createdAt")
+            .limit(to: 200)
+            .getDocuments()
+
+        return snapshot.documents.compactMap(mapComment).filter { $0.moderationStatus == .active }
+        #else
+        return []
+        #endif
+    }
+
+    func loadFollowState(userID: String) async throws -> RemoteFollowState {
+        #if canImport(FirebaseFirestore)
+        let db = Firestore.firestore()
+        async let followersSnapshot = db.collection("follows")
+            .whereField("followeeID", isEqualTo: userID)
+            .limit(to: 200)
+            .getDocuments()
+        async let followingSnapshot = db.collection("follows")
+            .whereField("followerID", isEqualTo: userID)
+            .limit(to: 200)
+            .getDocuments()
+
+        let followersResult = try await followersSnapshot
+        let followingResult = try await followingSnapshot
+        let followerRecords = followersResult.documents.compactMap(mapFollow)
+        let followingRecords = followingResult.documents.compactMap(mapFollow)
+        let followerIDs = Set(followerRecords.map(\.followerID))
+        let followingIDs = Set(followingRecords.map(\.followeeID))
+        let users = try await loadUsers(userIDs: Array(followerIDs.union(followingIDs).union([userID])))
+        return RemoteFollowState(users: users, followerIDs: followerIDs, followingIDs: followingIDs)
+        #else
+        return RemoteFollowState(users: [], followerIDs: [], followingIDs: [])
+        #endif
+    }
+
+    func loadNotifications(recipientID: String) async throws -> [AppNotification] {
+        #if canImport(FirebaseFirestore)
+        let snapshot = try await Firestore.firestore()
+            .collection("notifications")
+            .whereField("recipientID", isEqualTo: recipientID)
+            .order(by: "createdAt", descending: true)
+            .limit(to: 100)
+            .getDocuments()
+
+        return snapshot.documents.compactMap(mapNotification)
+        #else
+        return []
+        #endif
+    }
+
+    func loadBookmarkedPosts(userID: String) async throws -> RemoteBookmarkState {
+        #if canImport(FirebaseFirestore)
+        let snapshot = try await Firestore.firestore()
+            .collection("bookmarks")
+            .whereField("userID", isEqualTo: userID)
+            .order(by: "createdAt", descending: true)
+            .limit(to: 100)
+            .getDocuments()
+
+        let postIDs = snapshot.documents.compactMap { $0.data()["postID"] as? String }
+        let loadedPosts = try await loadPosts(postIDs: postIDs)
+            .filter { !$0.isDeleted && $0.moderationStatus == .active }
+        let sourcePosts = try await loadPosts(postIDs: loadedPosts.compactMap(\.sourcePostID))
+            .filter { !$0.isDeleted && $0.moderationStatus == .active }
+        let posts = uniquePosts(loadedPosts + sourcePosts)
+        let users = try await loadUsers(userIDs: Array(Set(posts.map(\.userId))))
+        return RemoteBookmarkState(postIDs: Set(postIDs), posts: posts, users: users)
+        #else
+        return RemoteBookmarkState(postIDs: [], posts: [], users: [])
+        #endif
+    }
+
+    func markNotificationsRead(notificationIDs: [String]) async throws {
+        #if canImport(FirebaseFirestore)
+        let db = Firestore.firestore()
+        let batch = db.batch()
+        for notificationID in notificationIDs {
+            batch.updateData([
+                "isRead": true,
+                "readAt": FieldValue.serverTimestamp()
+            ], forDocument: db.collection("notifications").document(notificationID))
+        }
+        try await batch.commit()
+        #endif
+    }
+
+    func searchUsers(query: String) async throws -> [AppUser] {
+        #if canImport(FirebaseFirestore)
+        let needle = query.lowercased()
+        guard !needle.isEmpty else { return [] }
+
+        let db = Firestore.firestore()
+        async let handleSnapshot = db.collection("users")
+            .whereField("isDeleted", isEqualTo: false)
+            .order(by: "handleLowercase")
+            .start(at: [needle])
+            .end(at: ["\(needle)\u{f8ff}"])
+            .limit(to: 20)
+            .getDocuments()
+        async let nameSnapshot = db.collection("users")
+            .whereField("isDeleted", isEqualTo: false)
+            .order(by: "displayNameLowercase")
+            .start(at: [needle])
+            .end(at: ["\(needle)\u{f8ff}"])
+            .limit(to: 20)
+            .getDocuments()
+
+        let handleResult = try await handleSnapshot
+        let nameResult = try await nameSnapshot
+        let documents = handleResult.documents + nameResult.documents
+        return uniqueUsers(documents.compactMap(mapUser).filter { !$0.isSuspended })
+        #else
+        return []
+        #endif
+    }
+
     func upsertUser(_ user: AppUser, email: String?) async throws {
         #if canImport(FirebaseFirestore)
         var data: [String: Any] = [
             "displayName": user.displayName,
             "handle": user.handle,
+            "displayNameLowercase": user.displayNameLowercase,
+            "handleLowercase": user.handleLowercase,
             "bio": user.bio,
             "humanLevel": user.humanLevel,
             "humanVerifiedPostRate": user.humanVerifiedPostRate,
@@ -126,10 +387,27 @@ struct FirebaseDataStore {
         let ref = Firestore.firestore().collection("users").document(user.id)
         let snapshot = try await ref.getDocument()
         if snapshot.exists {
+            let existingData = snapshot.data() ?? [:]
+            if existingData["isAdmin"] == nil {
+                data["isAdmin"] = false
+            }
+            if existingData["isSuspended"] == nil {
+                data["isSuspended"] = false
+            }
+            if existingData["followerCount"] == nil {
+                data["followerCount"] = user.followerCount
+            }
+            if existingData["followingCount"] == nil {
+                data["followingCount"] = user.followingCount
+            }
             try await ref.setData(data, merge: true)
         } else {
             data["createdAt"] = Timestamp(date: user.createdAt)
             data["notificationsEnabled"] = true
+            data["isAdmin"] = false
+            data["isSuspended"] = false
+            data["followerCount"] = 0
+            data["followingCount"] = 0
             try await ref.setData(data, merge: true)
         }
         #endif
@@ -151,6 +429,9 @@ struct FirebaseDataStore {
             .document(postID)
             .updateData([
                 "body": body,
+                "topics": TopicExtractor.topics(in: body),
+                "searchTokens": PostSearchTokenizer.tokens(in: body, topics: TopicExtractor.topics(in: body)),
+                "editCount": FieldValue.increment(Int64(1)),
                 "updatedAt": FieldValue.serverTimestamp()
             ])
         #endif
@@ -192,6 +473,21 @@ struct FirebaseDataStore {
         #endif
     }
 
+    func setBookmark(postID: String, userID: String, isBookmarked: Bool) async throws {
+        #if canImport(FirebaseFirestore)
+        let ref = Firestore.firestore().collection("bookmarks").document("\(userID)_\(postID)")
+        if isBookmarked {
+            try await ref.setData([
+                "postID": postID,
+                "userID": userID,
+                "createdAt": FieldValue.serverTimestamp()
+            ], merge: true)
+        } else {
+            try await ref.delete()
+        }
+        #endif
+    }
+
     func setBlock(blockerID: String, blockedUserID: String, isBlocked: Bool) async throws {
         #if canImport(FirebaseFirestore)
         let ref = Firestore.firestore().collection("blocks").document("\(blockerID)_\(blockedUserID)")
@@ -222,6 +518,23 @@ struct FirebaseDataStore {
         #endif
     }
 
+    func setFollow(followerID: String, followeeID: String, isFollowing: Bool) async throws {
+        #if canImport(FirebaseFirestore)
+        guard followerID != followeeID else { return }
+
+        let ref = Firestore.firestore().collection("follows").document("\(followerID)_\(followeeID)")
+        if isFollowing {
+            try await ref.setData([
+                "followerID": followerID,
+                "followeeID": followeeID,
+                "createdAt": FieldValue.serverTimestamp()
+            ], merge: true)
+        } else {
+            try await ref.delete()
+        }
+        #endif
+    }
+
     func addReport(_ report: ReportRecord, reporterID: String) async throws {
         #if canImport(FirebaseFirestore)
         try await Firestore.firestore()
@@ -229,6 +542,9 @@ struct FirebaseDataStore {
             .document(report.id)
             .setData([
                 "reporterID": reporterID,
+                "targetType": report.targetType.rawValue,
+                "targetID": report.targetID ?? "",
+                "targetOwnerID": report.targetOwnerID ?? "",
                 "targetDescription": report.targetDescription,
                 "reason": report.reason,
                 "status": report.status,
@@ -263,6 +579,74 @@ struct FirebaseDataStore {
             .document(userID)
             .setData([
                 "notificationsEnabled": isEnabled,
+                "updatedAt": FieldValue.serverTimestamp()
+            ], merge: true)
+        #endif
+    }
+
+    func loadAdminReports() async throws -> [ReportRecord] {
+        #if canImport(FirebaseFirestore)
+        let snapshot = try await Firestore.firestore()
+            .collection("reports")
+            .order(by: "createdAt", descending: true)
+            .limit(to: 100)
+            .getDocuments()
+
+        return snapshot.documents.compactMap(mapReport)
+        #else
+        return []
+        #endif
+    }
+
+    func resolveReport(reportID: String, status: String, adminNote: String, adminID: String) async throws {
+        #if canImport(FirebaseFirestore)
+        try await Firestore.firestore()
+            .collection("reports")
+            .document(reportID)
+            .setData([
+                "status": status,
+                "adminNote": adminNote,
+                "resolvedAt": FieldValue.serverTimestamp(),
+                "resolvedBy": adminID
+            ], merge: true)
+        #endif
+    }
+
+    func hideContent(targetType: ReportTargetType, targetID: String, reason: String, adminID: String) async throws {
+        #if canImport(FirebaseFirestore)
+        let collection: String
+        switch targetType {
+        case .post:
+            collection = "posts"
+        case .comment:
+            collection = "comments"
+        case .user, .other:
+            return
+        }
+
+        try await Firestore.firestore()
+            .collection(collection)
+            .document(targetID)
+            .setData([
+                "moderationStatus": ModerationStatus.hidden.rawValue,
+                "hiddenReason": reason,
+                "hiddenAt": FieldValue.serverTimestamp(),
+                "hiddenBy": adminID,
+                "updatedAt": FieldValue.serverTimestamp()
+            ], merge: true)
+        #endif
+    }
+
+    func setUserSuspended(userID: String, isSuspended: Bool, reason: String, adminID: String) async throws {
+        #if canImport(FirebaseFirestore)
+        try await Firestore.firestore()
+            .collection("users")
+            .document(userID)
+            .setData([
+                "isSuspended": isSuspended,
+                "suspensionReason": reason,
+                "suspendedAt": FieldValue.serverTimestamp(),
+                "suspendedBy": adminID,
                 "updatedAt": FieldValue.serverTimestamp()
             ], merge: true)
         #endif
@@ -311,6 +695,13 @@ struct FirebaseDataStore {
             try await document.reference.delete()
         }
 
+        let bookmarks = try await db.collection("bookmarks")
+            .whereField("userID", isEqualTo: userID)
+            .getDocuments()
+        for document in bookmarks.documents {
+            try await document.reference.delete()
+        }
+
         let blocks = try await db.collection("blocks")
             .whereField("blockerID", isEqualTo: userID)
             .getDocuments()
@@ -322,6 +713,20 @@ struct FirebaseDataStore {
             .whereField("muterID", isEqualTo: userID)
             .getDocuments()
         for document in mutes.documents {
+            try await document.reference.delete()
+        }
+
+        let following = try await db.collection("follows")
+            .whereField("followerID", isEqualTo: userID)
+            .getDocuments()
+        for document in following.documents {
+            try await document.reference.delete()
+        }
+
+        let followers = try await db.collection("follows")
+            .whereField("followeeID", isEqualTo: userID)
+            .getDocuments()
+        for document in followers.documents {
             try await document.reference.delete()
         }
 
@@ -338,6 +743,71 @@ struct FirebaseDataStore {
 
 #if canImport(FirebaseFirestore)
 private extension FirebaseDataStore {
+    static var timelinePageSize: Int { 26 }
+
+    func timelinePostsQuery(db: Firestore, before cursor: Date?, limit: Int = Self.timelinePageSize) -> Query {
+        var query: Query = db.collection("posts")
+            .whereField("isDeleted", isEqualTo: false)
+            .order(by: "createdAt", descending: true)
+            .limit(to: limit)
+
+        if let cursor {
+            query = query.whereField("createdAt", isLessThan: Timestamp(date: cursor))
+        }
+
+        return query
+    }
+
+    func loadUsers(userIDs: [String]) async throws -> [AppUser] {
+        let uniqueIDs = Array(Set(userIDs)).filter { !$0.isEmpty }
+        guard !uniqueIDs.isEmpty else { return [] }
+
+        let db = Firestore.firestore()
+        var loadedUsers: [AppUser] = []
+        for chunk in uniqueIDs.chunked(into: 10) {
+            let snapshot = try await db.collection("users")
+                .whereField(FieldPath.documentID(), in: chunk)
+                .getDocuments()
+            loadedUsers += snapshot.documents.compactMap(mapUser)
+        }
+        return uniqueUsers(loadedUsers)
+    }
+
+    func loadPosts(postIDs: [String]) async throws -> [Post] {
+        let uniqueIDs = Array(Set(postIDs)).filter { !$0.isEmpty }
+        guard !uniqueIDs.isEmpty else { return [] }
+
+        let db = Firestore.firestore()
+        var loadedPosts: [Post] = []
+        for chunk in uniqueIDs.chunked(into: 10) {
+            let snapshot = try await db.collection("posts")
+                .whereField(FieldPath.documentID(), in: chunk)
+                .getDocuments()
+            loadedPosts += snapshot.documents.compactMap(mapPost)
+        }
+        return loadedPosts.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    func uniqueUsers(_ users: [AppUser]) -> [AppUser] {
+        var seen = Set<String>()
+        return users.filter { user in
+            guard !seen.contains(user.id), !user.isDeleted else { return false }
+            seen.insert(user.id)
+            return true
+        }
+    }
+
+    func uniquePosts(_ posts: [Post]) -> [Post] {
+        var seen = Set<String>()
+        return posts
+            .filter { post in
+                guard !seen.contains(post.id), !post.isDeleted else { return false }
+                seen.insert(post.id)
+                return true
+            }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
     func mapUser(_ document: QueryDocumentSnapshot) -> AppUser? {
         mapUser(id: document.documentID, data: document.data())
     }
@@ -354,7 +824,11 @@ private extension FirebaseDataStore {
             humanVerifiedPostRate: doubleValue(data["humanVerifiedPostRate"], fallback: 0),
             createdAt: dateValue(data["createdAt"], fallback: Date()),
             updatedAt: dateValue(data["updatedAt"], fallback: Date()),
-            isDeleted: boolValue(data["isDeleted"], fallback: false)
+            isDeleted: boolValue(data["isDeleted"], fallback: false),
+            isAdmin: boolValue(data["isAdmin"], fallback: false),
+            isSuspended: boolValue(data["isSuspended"], fallback: false),
+            followerCount: intValue(data["followerCount"], fallback: 0),
+            followingCount: intValue(data["followingCount"], fallback: 0)
         )
     }
 
@@ -369,6 +843,12 @@ private extension FirebaseDataStore {
             id: document.documentID,
             userId: userID,
             body: body,
+            topics: data["topics"] as? [String] ?? TopicExtractor.topics(in: body),
+            searchTokens: data["searchTokens"] as? [String] ?? PostSearchTokenizer.tokens(in: body, topics: data["topics"] as? [String] ?? TopicExtractor.topics(in: body)),
+            mediaItems: postMediaItems(from: data["mediaItems"]),
+            shareType: PostShareType(rawValue: stringValue(data["shareType"], fallback: PostShareType.original.rawValue)) ?? .original,
+            sourcePostID: nonEmptyString(data["sourcePostID"]),
+            sourceUserID: nonEmptyString(data["sourceUserID"]),
             humanScore: intValue(data["humanScore"], fallback: 0),
             humanBadge: HumanBadge(rawValue: stringValue(data["humanBadge"], fallback: HumanBadge.checking.rawValue)) ?? .checking,
             inputDurationMs: intValue(data["inputDurationMs"], fallback: 0),
@@ -379,9 +859,14 @@ private extension FirebaseDataStore {
             appCheckVerified: boolValue(data["appCheckVerified"], fallback: false),
             likeCount: intValue(data["likeCount"], fallback: 0),
             commentCount: intValue(data["commentCount"], fallback: 0),
+            repostCount: intValue(data["repostCount"], fallback: 0),
+            quoteCount: intValue(data["quoteCount"], fallback: 0),
             createdAt: dateValue(data["createdAt"], fallback: Date()),
             updatedAt: dateValue(data["updatedAt"], fallback: Date()),
-            isDeleted: boolValue(data["isDeleted"], fallback: false)
+            isDeleted: boolValue(data["isDeleted"], fallback: false),
+            moderationStatus: ModerationStatus(rawValue: stringValue(data["moderationStatus"], fallback: ModerationStatus.active.rawValue)) ?? .active,
+            hiddenReason: data["hiddenReason"] as? String,
+            hiddenAt: optionalDateValue(data["hiddenAt"])
         )
     }
 
@@ -401,8 +886,79 @@ private extension FirebaseDataStore {
             humanScore: intValue(data["humanScore"], fallback: 0),
             createdAt: dateValue(data["createdAt"], fallback: Date()),
             updatedAt: dateValue(data["updatedAt"], fallback: Date()),
-            isDeleted: boolValue(data["isDeleted"], fallback: false)
+            isDeleted: boolValue(data["isDeleted"], fallback: false),
+            moderationStatus: ModerationStatus(rawValue: stringValue(data["moderationStatus"], fallback: ModerationStatus.active.rawValue)) ?? .active,
+            hiddenReason: data["hiddenReason"] as? String,
+            hiddenAt: optionalDateValue(data["hiddenAt"])
         )
+    }
+
+    func mapFollow(_ document: QueryDocumentSnapshot) -> FollowRecord? {
+        let data = document.data()
+        guard let followerID = data["followerID"] as? String,
+              let followeeID = data["followeeID"] as? String,
+              followerID != followeeID else {
+            return nil
+        }
+
+        return FollowRecord(followerID: followerID, followeeID: followeeID)
+    }
+
+    func followState(
+        from records: [FollowRecord],
+        currentUserID: String
+    ) -> (
+        followingUserIDs: Set<String>,
+        followerCountsByUserID: [String: Int],
+        followingCountsByUserID: [String: Int],
+        followersByUserID: [String: Set<String>],
+        followingByUserID: [String: Set<String>]
+    ) {
+        var followersByUserID: [String: Set<String>] = [:]
+        var followingByUserID: [String: Set<String>] = [:]
+
+        for record in records {
+            followingByUserID[record.followerID, default: []].insert(record.followeeID)
+            followersByUserID[record.followeeID, default: []].insert(record.followerID)
+        }
+
+        return (
+            followingUserIDs: followingByUserID[currentUserID, default: []],
+            followerCountsByUserID: followersByUserID.mapValues { $0.count },
+            followingCountsByUserID: followingByUserID.mapValues { $0.count },
+            followersByUserID: followersByUserID,
+            followingByUserID: followingByUserID
+        )
+    }
+
+    func postMediaItems(from value: Any?) -> [PostMedia] {
+        guard let rawItems = value as? [[String: Any]] else {
+            return []
+        }
+
+        return rawItems.compactMap { item in
+            guard let id = item["id"] as? String,
+                  let typeValue = item["type"] as? String,
+                  let type = PostMediaType(rawValue: typeValue),
+                  let storagePath = item["storagePath"] as? String,
+                  let downloadURL = item["downloadURL"] as? String else {
+                return nil
+            }
+
+            return PostMedia(
+                id: id,
+                type: type,
+                storagePath: storagePath,
+                downloadURL: downloadURL,
+                thumbnailURL: item["thumbnailURL"] as? String,
+                width: intValue(item["width"], fallback: 0),
+                height: intValue(item["height"], fallback: 0),
+                durationMs: optionalIntValue(item["durationMs"]),
+                sizeBytes: int64Value(item["sizeBytes"], fallback: 0),
+                sortOrder: intValue(item["sortOrder"], fallback: 0)
+            )
+        }
+        .sorted { $0.sortOrder < $1.sortOrder }
     }
 
     func mapReport(_ document: QueryDocumentSnapshot) -> ReportRecord? {
@@ -417,7 +973,37 @@ private extension FirebaseDataStore {
             targetDescription: targetDescription,
             reason: reason,
             createdAt: dateValue(data["createdAt"], fallback: Date()),
-            status: stringValue(data["status"], fallback: "確認待ち")
+            status: stringValue(data["status"], fallback: "確認待ち"),
+            reporterID: data["reporterID"] as? String,
+            targetType: ReportTargetType(rawValue: stringValue(data["targetType"], fallback: ReportTargetType.other.rawValue)) ?? .other,
+            targetID: nonEmptyString(data["targetID"]),
+            targetOwnerID: nonEmptyString(data["targetOwnerID"]),
+            adminNote: nonEmptyString(data["adminNote"]),
+            resolvedAt: optionalDateValue(data["resolvedAt"]),
+            resolvedBy: nonEmptyString(data["resolvedBy"])
+        )
+    }
+
+    func mapNotification(_ document: QueryDocumentSnapshot) -> AppNotification? {
+        let data = document.data()
+        guard let typeValue = data["type"] as? String,
+              let type = AppNotificationType(rawValue: typeValue),
+              let recipientID = data["recipientID"] as? String,
+              let actorID = data["actorID"] as? String,
+              let text = data["text"] as? String else {
+            return nil
+        }
+
+        return AppNotification(
+            id: document.documentID,
+            type: type,
+            recipientID: recipientID,
+            actorID: actorID,
+            postID: nonEmptyString(data["postID"]),
+            text: text,
+            createdAt: dateValue(data["createdAt"], fallback: Date()),
+            isRead: boolValue(data["isRead"], fallback: false),
+            readAt: optionalDateValue(data["readAt"])
         )
     }
 
@@ -429,6 +1015,19 @@ private extension FirebaseDataStore {
     func intValue(_ value: Any?, fallback: Int) -> Int {
         if let value = value as? Int { return value }
         if let value = value as? NSNumber { return value.intValue }
+        return fallback
+    }
+
+    func optionalIntValue(_ value: Any?) -> Int? {
+        if let value = value as? Int { return value }
+        if let value = value as? NSNumber { return value.intValue }
+        return nil
+    }
+
+    func int64Value(_ value: Any?, fallback: Int64) -> Int64 {
+        if let value = value as? Int64 { return value }
+        if let value = value as? Int { return Int64(value) }
+        if let value = value as? NSNumber { return value.int64Value }
         return fallback
     }
 
@@ -453,6 +1052,21 @@ private extension FirebaseDataStore {
         }
         return fallback
     }
+
+    func optionalDateValue(_ value: Any?) -> Date? {
+        if let value = value as? Timestamp {
+            return value.dateValue()
+        }
+        if let value = value as? Date {
+            return value
+        }
+        return nil
+    }
+
+    func nonEmptyString(_ value: Any?) -> String? {
+        guard let value = value as? String, !value.isEmpty else { return nil }
+        return value
+    }
 }
 
 private extension Post {
@@ -460,6 +1074,12 @@ private extension Post {
         [
             "userID": userId,
             "body": body,
+            "topics": topics,
+            "searchTokens": searchTokens,
+            "mediaItems": mediaItems.map(\.firestoreData),
+            "shareType": shareType.rawValue,
+            "sourcePostID": sourcePostID ?? "",
+            "sourceUserID": sourceUserID ?? "",
             "humanScore": humanScore,
             "humanBadge": humanBadge.rawValue,
             "inputDurationMs": inputDurationMs,
@@ -470,10 +1090,37 @@ private extension Post {
             "appCheckVerified": appCheckVerified,
             "likeCount": likeCount,
             "commentCount": commentCount,
+            "repostCount": repostCount,
+            "quoteCount": quoteCount,
             "createdAt": Timestamp(date: createdAt),
             "updatedAt": Timestamp(date: updatedAt),
-            "isDeleted": isDeleted
+            "isDeleted": isDeleted,
+            "moderationStatus": moderationStatus.rawValue
         ]
+    }
+}
+
+private extension PostMedia {
+    var firestoreData: [String: Any] {
+        var data: [String: Any] = [
+            "id": id,
+            "type": type.rawValue,
+            "storagePath": storagePath,
+            "downloadURL": downloadURL,
+            "width": width,
+            "height": height,
+            "sizeBytes": sizeBytes,
+            "sortOrder": sortOrder
+        ]
+
+        if let thumbnailURL {
+            data["thumbnailURL"] = thumbnailURL
+        }
+        if let durationMs {
+            data["durationMs"] = durationMs
+        }
+
+        return data
     }
 }
 
@@ -486,7 +1133,8 @@ private extension Comment {
             "humanScore": humanScore,
             "createdAt": Timestamp(date: createdAt),
             "updatedAt": Timestamp(date: updatedAt),
-            "isDeleted": isDeleted
+            "isDeleted": isDeleted,
+            "moderationStatus": moderationStatus.rawValue
         ]
     }
 }
@@ -499,5 +1147,14 @@ private extension String {
             .joined()
             .prefix(128)
             .description ?? UUID().uuidString
+    }
+}
+
+private extension Array {
+    func chunked(into size: Int) -> [[Element]] {
+        guard size > 0 else { return [self] }
+        return stride(from: 0, to: count, by: size).map {
+            Array(self[$0..<Swift.min($0 + size, count)])
+        }
     }
 }

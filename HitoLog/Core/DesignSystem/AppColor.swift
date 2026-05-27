@@ -124,8 +124,11 @@ struct PaperMetricTile: View {
 
                 Text(title)
                     .font(.caption2.weight(.medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
             }
             .foregroundStyle(AppColor.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Text(value)
                 .font(.subheadline.weight(.semibold))

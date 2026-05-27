@@ -63,7 +63,12 @@ final class ComposePostViewModel: ObservableObject {
         metrics = TypingMetrics()
     }
 
-    func makePost(using user: AppUser, recentPostCount: Int) -> Post {
+    func makePost(
+        id: String = UUID().uuidString,
+        using user: AppUser,
+        recentPostCount: Int,
+        mediaItems: [PostMedia] = []
+    ) -> Post {
         let input = HumanScoreInput(
             inputDurationMs: metrics.inputDurationMs,
             characterCount: text.count,
@@ -78,9 +83,10 @@ final class ComposePostViewModel: ObservableObject {
         let now = Date()
 
         return Post(
-            id: UUID().uuidString,
+            id: id,
             userId: user.id,
             body: text.trimmingCharacters(in: .whitespacesAndNewlines),
+            mediaItems: mediaItems,
             humanScore: score,
             humanBadge: humanScoreService.badge(for: score),
             inputDurationMs: metrics.inputDurationMs,

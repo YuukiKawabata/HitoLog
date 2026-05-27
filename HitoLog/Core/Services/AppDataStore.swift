@@ -8,9 +8,22 @@ final class AppDataStore: ObservableObject {
     @Published private(set) var posts: [Post]
     @Published private(set) var comments: [Comment]
     @Published private(set) var likedPostIDs: Set<String>
+    @Published private(set) var bookmarkedPostIDs: Set<String>
     @Published private(set) var blockedUserIDs: Set<String>
     @Published private(set) var mutedUserIDs: Set<String>
+    @Published private(set) var followingUserIDs: Set<String>
+    @Published private(set) var followerCountsByUserID: [String: Int]
+    @Published private(set) var followingCountsByUserID: [String: Int]
+    @Published private(set) var followersByUserID: [String: Set<String>]
+    @Published private(set) var followingByUserID: [String: Set<String>]
     @Published private(set) var reportHistory: [ReportRecord]
+    @Published private(set) var notifications: [AppNotification] = []
+    @Published private(set) var adminReports: [ReportRecord] = []
+    @Published private(set) var searchResults: [AppUser] = []
+    @Published private(set) var topicSearchResults: [Post] = []
+    @Published private(set) var postSearchResults: [Post] = []
+    @Published private(set) var hasMoreTimelinePosts = true
+    @Published private(set) var isLoadingTimelinePage = false
     @Published private(set) var isRemoteSyncEnabled = false
     @Published private(set) var isDemoDataVisible = false
     @Published private(set) var lastSyncErrorMessage: String?
@@ -21,6 +34,12 @@ final class AppDataStore: ObservableObject {
     private let initialPosts: [Post]
     private let initialComments: [Comment]
     private let initialLikedPostIDs: Set<String>
+    private let initialBookmarkedPostIDs: Set<String>
+    private let initialFollowingUserIDs: Set<String>
+    private let initialFollowerCountsByUserID: [String: Int]
+    private let initialFollowingCountsByUserID: [String: Int]
+    private let initialFollowersByUserID: [String: Set<String>]
+    private let initialFollowingByUserID: [String: Set<String>]
     private var remoteUserID: String?
     private var currentUserBeforeDemoData: AppUser?
 
@@ -38,10 +57,20 @@ final class AppDataStore: ObservableObject {
 
     var timelinePosts: [Post] {
         posts.filter { post in
-            !post.isDeleted && !blockedUserIDs.contains(post.userId) && !mutedUserIDs.contains(post.userId)
+            isVisiblePost(post)
+            && post.userId != currentUser.id
+            && !blockedUserIDs.contains(post.userId)
+            && !mutedUserIDs.contains(post.userId)
+            && (post.shareType == .original || sourcePost(for: post) != nil)
         }
         .sorted {
             $0.createdAt > $1.createdAt
+        }
+    }
+
+    var followingTimelinePosts: [Post] {
+        timelinePosts.filter { post in
+            followingUserIDs.contains(post.userId)
         }
     }
 
@@ -49,6 +78,72 @@ final class AppDataStore: ObservableObject {
         guard !timelinePosts.isEmpty else { return 0 }
         let verifiedCount = timelinePosts.filter { $0.humanBadge == .verified }.count
         return Double(verifiedCount) / Double(timelinePosts.count)
+    }
+
+    var unreadNotificationCount: Int {
+        notifications.filter { !$0.isRead }.count
+    }
+
+    var followSuggestions: [AppUser] {
+        users
+            .filter { user in
+                user.id != currentUser.id
+                && !user.isDeleted
+                && !user.isSuspended
+                && !followingUserIDs.contains(user.id)
+                && !blockedUserIDs.contains(user.id)
+                && !mutedUserIDs.contains(user.id)
+            }
+            .sorted {
+                let firstPostDate = mostRecentPostDate(for: $0.id)
+                let secondPostDate = mostRecentPostDate(for: $1.id)
+                if firstPostDate != secondPostDate {
+                    return firstPostDate > secondPostDate
+                }
+                return $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
+            .prefix(8)
+            .map { $0 }
+    }
+
+    var bookmarkedPosts: [Post] {
+        posts
+            .filter {
+                bookmarkedPostIDs.contains($0.id)
+                && isVisiblePost($0)
+                && !blockedUserIDs.contains($0.userId)
+                && !mutedUserIDs.contains($0.userId)
+                && ($0.shareType == .original || sourcePost(for: $0) != nil)
+            }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    var repostedSourcePostIDs: Set<String> {
+        Set(posts.compactMap { post in
+            post.userId == currentUser.id && post.shareType == .repost && isVisiblePost(post)
+                ? post.sourcePostID
+                : nil
+        })
+    }
+
+    var trendingTopics: [TopicTrend] {
+        var counts: [String: Int] = [:]
+        for post in timelinePosts + posts.filter({ $0.userId == currentUser.id && isVisiblePost($0) }) {
+            for topic in post.topics {
+                counts[topic, default: 0] += 1
+            }
+        }
+
+        return counts
+            .map { TopicTrend(topic: $0.key, postCount: $0.value) }
+            .sorted {
+                if $0.postCount != $1.postCount {
+                    return $0.postCount > $1.postCount
+                }
+                return $0.topic < $1.topic
+            }
+            .prefix(12)
+            .map { $0 }
     }
 
     init(remoteStore: FirebaseDataStore = FirebaseDataStore()) {
@@ -59,13 +154,25 @@ final class AppDataStore: ObservableObject {
         self.initialPosts = seed.posts
         self.initialComments = seed.comments
         self.initialLikedPostIDs = seed.likedPostIDs
+        self.initialBookmarkedPostIDs = seed.likedPostIDs
+        self.initialFollowingUserIDs = seed.followingUserIDs
+        self.initialFollowerCountsByUserID = seed.followerCountsByUserID
+        self.initialFollowingCountsByUserID = seed.followingCountsByUserID
+        self.initialFollowersByUserID = seed.followersByUserID
+        self.initialFollowingByUserID = seed.followingByUserID
         self.currentUser = seed.currentUser
         self.users = seed.users
         self.posts = seed.posts
         self.comments = seed.comments
         self.likedPostIDs = seed.likedPostIDs
+        self.bookmarkedPostIDs = seed.likedPostIDs
         self.blockedUserIDs = seed.blockedUserIDs
         self.mutedUserIDs = seed.mutedUserIDs
+        self.followingUserIDs = seed.followingUserIDs
+        self.followerCountsByUserID = seed.followerCountsByUserID
+        self.followingCountsByUserID = seed.followingCountsByUserID
+        self.followersByUserID = seed.followersByUserID
+        self.followingByUserID = seed.followingByUserID
         self.reportHistory = seed.reportHistory
     }
 
@@ -105,10 +212,35 @@ final class AppDataStore: ObservableObject {
     }
 
     func post(for id: String) -> Post? {
-        posts.first { $0.id == id && !$0.isDeleted }
+        posts.first {
+            $0.id == id
+            && isVisiblePost($0)
+            && !blockedUserIDs.contains($0.userId)
+            && !mutedUserIDs.contains($0.userId)
+        }
+    }
+
+    func sourcePost(for post: Post) -> Post? {
+        guard let sourcePostID = post.sourcePostID else { return nil }
+        return posts.first {
+            $0.id == sourcePostID
+            && isVisiblePost($0)
+            && !blockedUserIDs.contains($0.userId)
+            && !mutedUserIDs.contains($0.userId)
+        }
+    }
+
+    func shareTargetPost(for post: Post) -> Post {
+        guard let sourcePost = sourcePost(for: post) else { return post }
+        return sourcePost
+    }
+
+    func isReposted(_ postID: String) -> Bool {
+        repostedSourcePostIDs.contains(postID)
     }
 
     func insert(_ post: Post) {
+        guard canCurrentUserCreateContent else { return }
         posts.insert(post, at: 0)
         runRemoteWrite {
             try await self.remoteStore.savePost(post)
@@ -118,7 +250,8 @@ final class AppDataStore: ObservableObject {
     func updatePost(postID: String, body: String) {
         let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedBody.isEmpty,
-              let index = posts.firstIndex(where: { $0.id == postID && $0.userId == currentUser.id && !$0.isDeleted }) else {
+              canCurrentUserCreateContent,
+              let index = posts.firstIndex(where: { $0.id == postID && $0.userId == currentUser.id && isVisiblePost($0) }) else {
             return
         }
 
@@ -131,17 +264,126 @@ final class AppDataStore: ObservableObject {
     }
 
     func deletePost(postID: String) {
-        guard let index = posts.firstIndex(where: { $0.id == postID && $0.userId == currentUser.id && !$0.isDeleted }) else {
+        guard let index = posts.firstIndex(where: { $0.id == postID && $0.userId == currentUser.id && isVisiblePost($0) }) else {
             return
         }
 
+        let deletedPost = posts[index]
         posts[index].isDeleted = true
         posts[index].updatedAt = Date()
         likedPostIDs.remove(postID)
+        if let sourcePostID = deletedPost.sourcePostID {
+            adjustShareCount(sourcePostID: sourcePostID, shareType: deletedPost.shareType, amount: -1)
+        }
 
         guard !postID.hasPrefix("demo-") else { return }
         runRemoteWrite {
             try await self.remoteStore.deletePost(postID: postID)
+        }
+    }
+
+    func toggleRepost(for postID: String) {
+        guard canCurrentUserCreateContent,
+              let requestedPost = post(for: postID) else {
+            return
+        }
+
+        let sourcePost = shareTargetPost(for: requestedPost)
+        if let existingRepost = posts.first(where: {
+            $0.userId == currentUser.id
+                && $0.shareType == .repost
+                && $0.sourcePostID == sourcePost.id
+                && isVisiblePost($0)
+        }) {
+            deletePost(postID: existingRepost.id)
+            return
+        }
+
+        let now = Date()
+        let repost = Post(
+            id: "repost_\(currentUser.id)_\(sourcePost.id)",
+            userId: currentUser.id,
+            body: "",
+            topics: sourcePost.topics,
+            searchTokens: sourcePost.searchTokens,
+            shareType: .repost,
+            sourcePostID: sourcePost.id,
+            sourceUserID: sourcePost.userId,
+            humanScore: 100,
+            humanBadge: .verified,
+            inputDurationMs: 0,
+            characterCount: 0,
+            editCount: 0,
+            deleteCount: 0,
+            suspiciousBulkInputCount: 0,
+            appCheckVerified: true,
+            likeCount: 0,
+            commentCount: 0,
+            createdAt: now,
+            updatedAt: now,
+            isDeleted: false
+        )
+
+        posts.insert(repost, at: 0)
+        adjustShareCount(sourcePostID: sourcePost.id, shareType: .repost, amount: 1)
+
+        guard !sourcePost.id.hasPrefix("demo-") else { return }
+        runRemoteWrite {
+            try await self.remoteStore.savePost(repost)
+        }
+    }
+
+    func quotePost(sourcePostID: String, body: String, metrics: TypingMetrics) {
+        let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedBody.isEmpty,
+              trimmedBody.count <= AppConstants.maxPostLength,
+              canCurrentUserCreateContent,
+              let requestedPost = post(for: sourcePostID) else {
+            return
+        }
+
+        let sourcePost = shareTargetPost(for: requestedPost)
+        let input = HumanScoreInput(
+            inputDurationMs: metrics.inputDurationMs,
+            characterCount: trimmedBody.count,
+            editCount: metrics.editCount,
+            deleteCount: metrics.deleteCount,
+            suspiciousBulkInputCount: metrics.suspiciousBulkInputCount,
+            appAttestVerified: true,
+            accountAgeDays: currentUser.accountAgeDays,
+            recentPostCount: recentPostCount
+        )
+        let humanScoreService = HumanScoreService()
+        let score = humanScoreService.calculate(input: input)
+        let now = Date()
+        let quote = Post(
+            id: UUID().uuidString,
+            userId: currentUser.id,
+            body: trimmedBody,
+            shareType: .quote,
+            sourcePostID: sourcePost.id,
+            sourceUserID: sourcePost.userId,
+            humanScore: score,
+            humanBadge: humanScoreService.badge(for: score),
+            inputDurationMs: metrics.inputDurationMs,
+            characterCount: trimmedBody.count,
+            editCount: metrics.editCount,
+            deleteCount: metrics.deleteCount,
+            suspiciousBulkInputCount: metrics.suspiciousBulkInputCount,
+            appCheckVerified: true,
+            likeCount: 0,
+            commentCount: 0,
+            createdAt: now,
+            updatedAt: now,
+            isDeleted: false
+        )
+
+        posts.insert(quote, at: 0)
+        adjustShareCount(sourcePostID: sourcePost.id, shareType: .quote, amount: 1)
+
+        guard !sourcePost.id.hasPrefix("demo-") else { return }
+        runRemoteWrite {
+            try await self.remoteStore.savePost(quote)
         }
     }
 
@@ -171,7 +413,8 @@ final class AppDataStore: ObservableObject {
     }
 
     func toggleLike(for postID: String) {
-        guard let index = posts.firstIndex(where: { $0.id == postID && !$0.isDeleted }) else { return }
+        guard canCurrentUserCreateContent,
+              let index = posts.firstIndex(where: { $0.id == postID && isVisiblePost($0) }) else { return }
 
         let isLiked: Bool
         if likedPostIDs.contains(postID) {
@@ -191,15 +434,41 @@ final class AppDataStore: ObservableObject {
         }
     }
 
+    func isBookmarked(_ postID: String) -> Bool {
+        bookmarkedPostIDs.contains(postID)
+    }
+
+    func toggleBookmark(for postID: String) {
+        guard canCurrentUserCreateContent,
+              posts.contains(where: { $0.id == postID && isVisiblePost($0) }) else {
+            return
+        }
+
+        let isBookmarked: Bool
+        if bookmarkedPostIDs.contains(postID) {
+            bookmarkedPostIDs.remove(postID)
+            isBookmarked = false
+        } else {
+            bookmarkedPostIDs.insert(postID)
+            isBookmarked = true
+        }
+
+        guard !postID.hasPrefix("demo-") else { return }
+        let userID = currentUser.id
+        runRemoteWrite {
+            try await self.remoteStore.setBookmark(postID: postID, userID: userID, isBookmarked: isBookmarked)
+        }
+    }
+
     func comments(for postID: String) -> [Comment] {
         comments
-            .filter { $0.postId == postID && !$0.isDeleted }
+            .filter { $0.postId == postID && isVisibleComment($0) }
             .sorted { $0.createdAt < $1.createdAt }
     }
 
     func addComment(body: String, to postID: String) {
         let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedBody.isEmpty, post(for: postID) != nil else { return }
+        guard !trimmedBody.isEmpty, canCurrentUserCreateContent, post(for: postID) != nil else { return }
 
         let now = Date()
         let comment = Comment(
@@ -225,7 +494,54 @@ final class AppDataStore: ObservableObject {
     }
 
     func postCount(for userID: String) -> Int {
-        posts.filter { $0.userId == userID && !$0.isDeleted }.count
+        posts.filter { $0.userId == userID && isVisiblePost($0) }.count
+    }
+
+    func isFollowing(_ userID: String) -> Bool {
+        followingUserIDs.contains(userID)
+    }
+
+    func followerCount(for userID: String) -> Int {
+        followerCountsByUserID[userID] ?? user(for: userID)?.followerCount ?? 0
+    }
+
+    func followingCount(for userID: String) -> Int {
+        followingCountsByUserID[userID] ?? user(for: userID)?.followingCount ?? 0
+    }
+
+    func followers(for userID: String) -> [AppUser] {
+        sortedUsers(for: followersByUserID[userID, default: []])
+    }
+
+    func following(for userID: String) -> [AppUser] {
+        sortedUsers(for: followingByUserID[userID, default: []])
+    }
+
+    func toggleFollow(userID: String) {
+        guard userID != currentUser.id,
+              let targetUser = user(for: userID),
+              canCurrentUserCreateContent,
+              !targetUser.isSuspended,
+              !blockedUserIDs.contains(userID) else {
+            return
+        }
+
+        let isFollowing = followingUserIDs.contains(userID)
+        if isFollowing {
+            removeFollowLocally(followerID: currentUser.id, followeeID: userID)
+        } else {
+            addFollowLocally(followerID: currentUser.id, followeeID: userID)
+        }
+
+        guard !shouldSkipRemoteFollowWrite(for: userID) else { return }
+        let currentUserID = currentUser.id
+        runRemoteWrite {
+            try await self.remoteStore.setFollow(
+                followerID: currentUserID,
+                followeeID: userID,
+                isFollowing: !isFollowing
+            )
+        }
     }
 
     func blockedUsers() -> [AppUser] {
@@ -240,11 +556,18 @@ final class AppDataStore: ObservableObject {
         guard userID != currentUser.id else { return }
         blockedUserIDs.insert(userID)
         mutedUserIDs.remove(userID)
+        let wasFollowing = followingUserIDs.contains(userID)
+        if wasFollowing {
+            removeFollowLocally(followerID: currentUser.id, followeeID: userID)
+        }
 
         let currentUserID = currentUser.id
         runRemoteWrite {
             try await self.remoteStore.setBlock(blockerID: currentUserID, blockedUserID: userID, isBlocked: true)
             try await self.remoteStore.setMute(muterID: currentUserID, mutedUserID: userID, isMuted: false)
+            if wasFollowing {
+                try await self.remoteStore.setFollow(followerID: currentUserID, followeeID: userID, isFollowing: false)
+            }
         }
     }
 
@@ -277,12 +600,26 @@ final class AppDataStore: ObservableObject {
     }
 
     func addReport(targetDescription: String, reason: String) {
+        addReport(targetType: .other, targetID: nil, targetOwnerID: nil, targetDescription: targetDescription, reason: reason)
+    }
+
+    func addReport(
+        targetType: ReportTargetType,
+        targetID: String?,
+        targetOwnerID: String?,
+        targetDescription: String,
+        reason: String
+    ) {
         let report = ReportRecord(
             id: UUID().uuidString,
             targetDescription: targetDescription,
             reason: reason,
             createdAt: Date(),
-            status: "確認待ち"
+            status: "確認待ち",
+            reporterID: currentUser.id,
+            targetType: targetType,
+            targetID: targetID,
+            targetOwnerID: targetOwnerID
         )
         reportHistory.insert(report, at: 0)
 
@@ -292,15 +629,317 @@ final class AppDataStore: ObservableObject {
         }
     }
 
+    func loadComments(for postID: String) async {
+        guard isRemoteSyncEnabled, !postID.hasPrefix("demo-") else { return }
+
+        do {
+            let remoteComments = try await remoteStore.loadComments(postID: postID)
+            comments = uniqueComments(comments.filter { $0.postId != postID } + remoteComments)
+            lastSyncErrorMessage = nil
+        } catch {
+            recordRemoteError(error)
+        }
+    }
+
+    func loadMoreTimelinePosts() async {
+        guard isRemoteSyncEnabled, hasMoreTimelinePosts, !isLoadingTimelinePage else { return }
+        guard let remoteUserID else { return }
+
+        isLoadingTimelinePage = true
+        defer { isLoadingTimelinePage = false }
+
+        do {
+            let page = try await remoteStore.loadTimelinePosts(
+                currentUserID: remoteUserID,
+                before: timelinePaginationCursorDate()
+            )
+            posts = uniquePosts(posts + page.posts)
+            users = mergeCurrentUser(into: uniqueUsers(users + page.users))
+            hasMoreTimelinePosts = page.hasMore
+            lastSyncErrorMessage = nil
+        } catch {
+            recordRemoteError(error)
+        }
+    }
+
+    func loadFollowLists(for userID: String) async {
+        guard isRemoteSyncEnabled else { return }
+
+        do {
+            let state = try await remoteStore.loadFollowState(userID: userID)
+            users = mergeCurrentUser(into: uniqueUsers(users + state.users))
+            followersByUserID[userID] = state.followerIDs
+            followingByUserID[userID] = state.followingIDs
+            if userID == currentUser.id {
+                followingUserIDs = state.followingIDs
+            }
+            rebuildFollowCounts()
+            applyUserCountsFromFollowState(userID: userID)
+            lastSyncErrorMessage = nil
+        } catch {
+            recordRemoteError(error)
+        }
+    }
+
+    func loadNotifications() async {
+        guard isRemoteSyncEnabled, let remoteUserID else { return }
+
+        do {
+            notifications = try await remoteStore.loadNotifications(recipientID: remoteUserID)
+            lastSyncErrorMessage = nil
+        } catch {
+            recordRemoteError(error)
+        }
+    }
+
+    func loadBookmarkedPosts() async {
+        guard isRemoteSyncEnabled, let remoteUserID else { return }
+
+        do {
+            let state = try await remoteStore.loadBookmarkedPosts(userID: remoteUserID)
+            bookmarkedPostIDs = state.postIDs
+            posts = uniquePosts(posts + state.posts)
+            users = mergeCurrentUser(into: uniqueUsers(users + state.users))
+            lastSyncErrorMessage = nil
+        } catch {
+            recordRemoteError(error)
+        }
+    }
+
+    func markNotificationsRead() async {
+        let unreadIDs = notifications.filter { !$0.isRead }.map(\.id)
+        guard !unreadIDs.isEmpty else { return }
+
+        let now = Date()
+        for index in notifications.indices where unreadIDs.contains(notifications[index].id) {
+            notifications[index].isRead = true
+            notifications[index].readAt = now
+        }
+
+        guard isRemoteSyncEnabled else { return }
+        do {
+            try await remoteStore.markNotificationsRead(notificationIDs: unreadIDs)
+            lastSyncErrorMessage = nil
+        } catch {
+            recordRemoteError(error)
+        }
+    }
+
+    func searchUsers(query: String) async {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            searchResults = []
+            return
+        }
+
+        if isRemoteSyncEnabled {
+            do {
+                searchResults = try await remoteStore.searchUsers(query: trimmed)
+                    .filter {
+                        $0.id != currentUser.id
+                        && !$0.isSuspended
+                        && !$0.isDeleted
+                        && !blockedUserIDs.contains($0.id)
+                        && !mutedUserIDs.contains($0.id)
+                    }
+                users = mergeCurrentUser(into: uniqueUsers(users + searchResults))
+                lastSyncErrorMessage = nil
+                return
+            } catch {
+                recordRemoteError(error)
+            }
+        }
+
+        let needle = trimmed.lowercased()
+        searchResults = users.filter { user in
+            user.id != currentUser.id
+            && !user.isDeleted
+            && !user.isSuspended
+            && !blockedUserIDs.contains(user.id)
+            && !mutedUserIDs.contains(user.id)
+            && (user.displayNameLowercase.contains(needle) || user.handleLowercase.contains(needle))
+        }
+    }
+
+    func searchTopicPosts(query: String) async {
+        guard let topic = TopicExtractor.normalizedTopicQuery(from: query) else {
+            topicSearchResults = []
+            return
+        }
+
+        if isRemoteSyncEnabled {
+            do {
+                let page = try await remoteStore.loadTopicPosts(topic: topic)
+                topicSearchResults = page.posts.filter { post in
+                    post.userId != currentUser.id
+                    && post.topics.contains(topic)
+                    && !blockedUserIDs.contains(post.userId)
+                    && !mutedUserIDs.contains(post.userId)
+                }
+                posts = uniquePosts(posts + page.posts)
+                users = mergeCurrentUser(into: uniqueUsers(users + page.users))
+                lastSyncErrorMessage = nil
+                return
+            } catch {
+                recordRemoteError(error)
+            }
+        }
+
+        topicSearchResults = posts
+            .filter {
+                isVisiblePost($0)
+                && $0.topics.contains(topic)
+                && $0.userId != currentUser.id
+                && !blockedUserIDs.contains($0.userId)
+                && !mutedUserIDs.contains($0.userId)
+            }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    func searchPosts(query: String) async {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            postSearchResults = []
+            return
+        }
+
+        if isRemoteSyncEnabled {
+            do {
+                let page = try await remoteStore.searchPosts(query: trimmed)
+                postSearchResults = page.posts.filter { post in
+                    post.userId != currentUser.id
+                    && !blockedUserIDs.contains(post.userId)
+                    && !mutedUserIDs.contains(post.userId)
+                    && PostSearchTokenizer.matches(post, query: trimmed)
+                }
+                posts = uniquePosts(posts + page.posts)
+                users = mergeCurrentUser(into: uniqueUsers(users + page.users))
+                lastSyncErrorMessage = nil
+                return
+            } catch {
+                recordRemoteError(error)
+            }
+        }
+
+        postSearchResults = posts
+            .filter {
+                isVisiblePost($0)
+                && $0.userId != currentUser.id
+                && !blockedUserIDs.contains($0.userId)
+                && !mutedUserIDs.contains($0.userId)
+                && PostSearchTokenizer.matches($0, query: trimmed)
+            }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    func loadAdminReports() async {
+        guard currentUser.isAdmin, isRemoteSyncEnabled else { return }
+
+        do {
+            adminReports = try await remoteStore.loadAdminReports()
+            lastSyncErrorMessage = nil
+        } catch {
+            recordRemoteError(error)
+        }
+    }
+
+    func resolveReport(_ report: ReportRecord, status: String, adminNote: String = "") async {
+        guard currentUser.isAdmin else { return }
+
+        updateAdminReportLocally(report.id, status: status, adminNote: adminNote)
+        guard isRemoteSyncEnabled else { return }
+
+        do {
+            try await remoteStore.resolveReport(
+                reportID: report.id,
+                status: status,
+                adminNote: adminNote,
+                adminID: currentUser.id
+            )
+            lastSyncErrorMessage = nil
+        } catch {
+            recordRemoteError(error)
+        }
+    }
+
+    func hideReportedContent(_ report: ReportRecord, reason: String = "通報対応") async {
+        guard currentUser.isAdmin, let targetID = report.targetID else { return }
+
+        switch report.targetType {
+        case .post:
+            if let index = posts.firstIndex(where: { $0.id == targetID }) {
+                posts[index].moderationStatus = .hidden
+                posts[index].hiddenReason = reason
+                posts[index].hiddenAt = Date()
+            }
+        case .comment:
+            if let index = comments.firstIndex(where: { $0.id == targetID }) {
+                comments[index].moderationStatus = .hidden
+                comments[index].hiddenReason = reason
+                comments[index].hiddenAt = Date()
+            }
+        case .user, .other:
+            return
+        }
+
+        await resolveReport(report, status: "対応済み", adminNote: reason)
+        guard isRemoteSyncEnabled else { return }
+
+        do {
+            try await remoteStore.hideContent(
+                targetType: report.targetType,
+                targetID: targetID,
+                reason: reason,
+                adminID: currentUser.id
+            )
+            lastSyncErrorMessage = nil
+        } catch {
+            recordRemoteError(error)
+        }
+    }
+
+    func suspendReportedUser(_ report: ReportRecord, reason: String = "通報対応") async {
+        guard currentUser.isAdmin else { return }
+        let userID = report.targetType == .user ? report.targetID : report.targetOwnerID
+        guard let userID, userID != currentUser.id else { return }
+
+        if let index = users.firstIndex(where: { $0.id == userID }) {
+            users[index].isSuspended = true
+        }
+
+        await resolveReport(report, status: "対応済み", adminNote: reason)
+        guard isRemoteSyncEnabled else { return }
+
+        do {
+            try await remoteStore.setUserSuspended(userID: userID, isSuspended: true, reason: reason, adminID: currentUser.id)
+            lastSyncErrorMessage = nil
+        } catch {
+            recordRemoteError(error)
+        }
+    }
+
     func resetLocalAccount() {
         currentUser = initialCurrentUser
         users = initialUsers
         posts = initialPosts
         comments = initialComments
         likedPostIDs = initialLikedPostIDs
+        bookmarkedPostIDs = initialBookmarkedPostIDs
         blockedUserIDs = []
         mutedUserIDs = []
+        followingUserIDs = initialFollowingUserIDs
+        followerCountsByUserID = initialFollowerCountsByUserID
+        followingCountsByUserID = initialFollowingCountsByUserID
+        followersByUserID = initialFollowersByUserID
+        followingByUserID = initialFollowingByUserID
         reportHistory = []
+        notifications = []
+        adminReports = []
+        searchResults = []
+        topicSearchResults = []
+        postSearchResults = []
+        hasMoreTimelinePosts = true
+        isLoadingTimelinePage = false
         isDemoDataVisible = false
         currentUserBeforeDemoData = nil
         deactivateRemoteUser()
@@ -335,8 +974,21 @@ final class AppDataStore: ObservableObject {
         }
 
         likedPostIDs.removeAll()
+        bookmarkedPostIDs.removeAll()
         blockedUserIDs.removeAll()
         mutedUserIDs.removeAll()
+        followingUserIDs.removeAll()
+        followerCountsByUserID.removeAll()
+        followingCountsByUserID.removeAll()
+        followersByUserID.removeAll()
+        followingByUserID.removeAll()
+        notifications.removeAll()
+        adminReports.removeAll()
+        searchResults.removeAll()
+        topicSearchResults.removeAll()
+        postSearchResults.removeAll()
+        hasMoreTimelinePosts = false
+        isLoadingTimelinePage = false
     }
 
     func showScreenshotDemoData() {
@@ -364,9 +1016,22 @@ final class AppDataStore: ObservableObject {
             posts = initialPosts
             comments = initialComments
             likedPostIDs = initialLikedPostIDs
+            bookmarkedPostIDs = initialBookmarkedPostIDs
             blockedUserIDs = []
             mutedUserIDs = []
+            followingUserIDs = initialFollowingUserIDs
+            followerCountsByUserID = initialFollowerCountsByUserID
+            followingCountsByUserID = initialFollowingCountsByUserID
+            followersByUserID = initialFollowersByUserID
+            followingByUserID = initialFollowingByUserID
             reportHistory = []
+            notifications = []
+            adminReports = []
+            searchResults = []
+            topicSearchResults = []
+            postSearchResults = []
+            hasMoreTimelinePosts = true
+            isLoadingTimelinePage = false
         }
     }
 
@@ -397,9 +1062,22 @@ final class AppDataStore: ObservableObject {
         posts = snapshot.posts
         comments = snapshot.comments
         likedPostIDs = snapshot.likedPostIDs
+        bookmarkedPostIDs = snapshot.bookmarkedPostIDs
         blockedUserIDs = snapshot.blockedUserIDs
         mutedUserIDs = snapshot.mutedUserIDs
+        followingUserIDs = snapshot.followingUserIDs
+        followerCountsByUserID = snapshot.followerCountsByUserID
+        followingCountsByUserID = snapshot.followingCountsByUserID
+        followersByUserID = snapshot.followersByUserID
+        followingByUserID = snapshot.followingByUserID
         reportHistory = snapshot.reports
+        notifications = snapshot.notifications
+        hasMoreTimelinePosts = snapshot.hasMorePosts
+        if currentUser.isAdmin {
+            adminReports = snapshot.adminReports
+        } else {
+            adminReports = []
+        }
         if isDemoDataVisible {
             applyScreenshotDemoData()
         }
@@ -426,8 +1104,11 @@ final class AppDataStore: ObservableObject {
         })
         likedPostIDs = Set(likedPostIDs.filter { !$0.hasPrefix("demo-") })
         likedPostIDs.formUnion(seed.likedPostIDs.map { "demo-\($0)" })
+        bookmarkedPostIDs = Set(bookmarkedPostIDs.filter { !$0.hasPrefix("demo-") })
+        bookmarkedPostIDs.formUnion(seed.likedPostIDs.map { "demo-\($0)" })
         blockedUserIDs.subtract(demoUsers.map(\.id))
         mutedUserIDs.subtract(demoUsers.map(\.id))
+        mergeDemoFollows(from: seed, activeCurrentUserID: activeCurrentUserID, seedCurrentUserID: seedCurrentUserID)
     }
 
     private func restoreCurrentUserAfterDemoData() {
@@ -443,8 +1124,153 @@ final class AppDataStore: ObservableObject {
         posts = posts.filter { !$0.id.hasPrefix("demo-") }
         comments = comments.filter { !$0.id.hasPrefix("demo-") }
         likedPostIDs = Set(likedPostIDs.filter { !$0.hasPrefix("demo-") })
+        bookmarkedPostIDs = Set(bookmarkedPostIDs.filter { !$0.hasPrefix("demo-") })
         blockedUserIDs.subtract(demoUserIDs)
         mutedUserIDs.subtract(demoUserIDs)
+        removeFollows(involving: demoUserIDs)
+    }
+
+    private func sortedUsers(for userIDs: Set<String>) -> [AppUser] {
+        users
+            .filter { userIDs.contains($0.id) && !$0.isDeleted }
+            .sorted {
+                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
+    }
+
+    private func addFollowLocally(followerID: String, followeeID: String) {
+        guard followerID != followeeID else { return }
+        followingByUserID[followerID, default: []].insert(followeeID)
+        followersByUserID[followeeID, default: []].insert(followerID)
+        if followerID == currentUser.id {
+            followingUserIDs.insert(followeeID)
+        }
+        rebuildFollowCounts()
+        applyUserCountsFromFollowState(userID: followerID)
+        applyUserCountsFromFollowState(userID: followeeID)
+    }
+
+    private func removeFollowLocally(followerID: String, followeeID: String) {
+        followingByUserID[followerID]?.remove(followeeID)
+        followersByUserID[followeeID]?.remove(followerID)
+        if followingByUserID[followerID]?.isEmpty == true {
+            followingByUserID[followerID] = nil
+        }
+        if followersByUserID[followeeID]?.isEmpty == true {
+            followersByUserID[followeeID] = nil
+        }
+        if followerID == currentUser.id {
+            followingUserIDs.remove(followeeID)
+        }
+        rebuildFollowCounts()
+        applyUserCountsFromFollowState(userID: followerID)
+        applyUserCountsFromFollowState(userID: followeeID)
+    }
+
+    private func removeFollows(involving userIDs: Set<String>) {
+        guard !userIDs.isEmpty else { return }
+
+        var nextFollowingByUserID: [String: Set<String>] = [:]
+        var nextFollowersByUserID: [String: Set<String>] = [:]
+
+        for (followerID, followeeIDs) in followingByUserID where !userIDs.contains(followerID) {
+            let filteredFollowees = followeeIDs.subtracting(userIDs)
+            guard !filteredFollowees.isEmpty else { continue }
+
+            nextFollowingByUserID[followerID] = filteredFollowees
+            for followeeID in filteredFollowees {
+                nextFollowersByUserID[followeeID, default: []].insert(followerID)
+            }
+        }
+
+        followingByUserID = nextFollowingByUserID
+        followersByUserID = nextFollowersByUserID
+        followingUserIDs = followingByUserID[currentUser.id, default: []]
+        rebuildFollowCounts()
+    }
+
+    private func rebuildFollowCounts() {
+        followingCountsByUserID = followingByUserID.mapValues { $0.count }
+        followerCountsByUserID = followersByUserID.mapValues { $0.count }
+    }
+
+    private func adjustShareCount(sourcePostID: String, shareType: PostShareType, amount: Int) {
+        guard let index = posts.firstIndex(where: { $0.id == sourcePostID }) else { return }
+
+        switch shareType {
+        case .repost:
+            posts[index].repostCount = max(posts[index].repostCount + amount, 0)
+        case .quote:
+            posts[index].quoteCount = max(posts[index].quoteCount + amount, 0)
+        case .original:
+            break
+        }
+    }
+
+    private func mergeDemoFollows(from seed: MockDataStore, activeCurrentUserID: String, seedCurrentUserID: String) {
+        let knownUserIDs = Set(users.map(\.id))
+        for (followerID, followeeIDs) in seed.followingByUserID {
+            let mappedFollowerID = followerID == seedCurrentUserID ? activeCurrentUserID : followerID
+            guard knownUserIDs.contains(mappedFollowerID) else { continue }
+
+            for followeeID in followeeIDs {
+                let mappedFolloweeID = followeeID == seedCurrentUserID ? activeCurrentUserID : followeeID
+                guard knownUserIDs.contains(mappedFolloweeID) else { continue }
+                addFollowLocally(followerID: mappedFollowerID, followeeID: mappedFolloweeID)
+            }
+        }
+    }
+
+    private func shouldSkipRemoteFollowWrite(for userID: String) -> Bool {
+        isDemoDataVisible && MockDataStore().users.contains { $0.id == userID }
+    }
+
+    private var canCurrentUserCreateContent: Bool {
+        !currentUser.isDeleted && !currentUser.isSuspended
+    }
+
+    private func isVisiblePost(_ post: Post) -> Bool {
+        guard !post.isDeleted else { return false }
+        if currentUser.isAdmin { return true }
+        return post.moderationStatus == .active
+    }
+
+    private func isVisibleComment(_ comment: Comment) -> Bool {
+        guard !comment.isDeleted else { return false }
+        if currentUser.isAdmin { return true }
+        return comment.moderationStatus == .active
+    }
+
+    private func mostRecentPostDate(for userID: String) -> Date {
+        posts
+            .filter { $0.userId == userID && isVisiblePost($0) }
+            .map(\.createdAt)
+            .max() ?? Date.distantPast
+    }
+
+    private func timelinePaginationCursorDate() -> Date? {
+        let referencedPostIDs = Set(posts.compactMap(\.sourcePostID))
+        let timelinePagePosts = posts.filter { !referencedPostIDs.contains($0.id) }
+        return timelinePagePosts.map(\.createdAt).min()
+    }
+
+    private func applyUserCountsFromFollowState(userID: String) {
+        guard let index = users.firstIndex(where: { $0.id == userID }) else { return }
+        users[index].followerCount = followerCountsByUserID[userID, default: users[index].followerCount]
+        users[index].followingCount = followingCountsByUserID[userID, default: users[index].followingCount]
+        if currentUser.id == userID {
+            currentUser = users[index]
+        }
+    }
+
+    private func updateAdminReportLocally(_ reportID: String, status: String, adminNote: String) {
+        let now = Date()
+        for index in adminReports.indices where adminReports[index].id == reportID {
+            adminReports[index].status = status
+            adminReports[index].adminNote = adminNote.isEmpty ? nil : adminNote
+            adminReports[index].resolvedAt = now
+            adminReports[index].resolvedBy = currentUser.id
+        }
     }
 
     private func uniqueUsers(_ users: [AppUser]) -> [AppUser] {
@@ -460,7 +1286,7 @@ final class AppDataStore: ObservableObject {
         var seen = Set<String>()
         return posts
             .filter { post in
-                guard !seen.contains(post.id), !post.isDeleted else { return false }
+                guard !seen.contains(post.id), isVisiblePost(post) else { return false }
                 seen.insert(post.id)
                 return true
             }
@@ -470,7 +1296,7 @@ final class AppDataStore: ObservableObject {
     private func uniqueComments(_ comments: [Comment]) -> [Comment] {
         var seen = Set<String>()
         return comments.filter { comment in
-            guard !seen.contains(comment.id), !comment.isDeleted else { return false }
+            guard !seen.contains(comment.id), isVisibleComment(comment) else { return false }
             seen.insert(comment.id)
             return true
         }
@@ -570,7 +1396,11 @@ private extension AppUser {
             humanVerifiedPostRate: humanVerifiedPostRate,
             createdAt: createdAt,
             updatedAt: updatedAt,
-            isDeleted: isDeleted
+            isDeleted: isDeleted,
+            isAdmin: isAdmin,
+            isSuspended: isSuspended,
+            followerCount: followerCount,
+            followingCount: followingCount
         )
     }
 }
@@ -581,19 +1411,30 @@ private extension Post {
             id: id,
             userId: userId,
             body: body,
+            topics: TopicExtractor.topics(in: body),
+            searchTokens: PostSearchTokenizer.tokens(in: body, topics: TopicExtractor.topics(in: body)),
+            mediaItems: mediaItems,
+            shareType: shareType,
+            sourcePostID: sourcePostID,
+            sourceUserID: sourceUserID,
             humanScore: humanScore,
             humanBadge: humanBadge,
             inputDurationMs: inputDurationMs,
             characterCount: body.count,
-            editCount: editCount,
+            editCount: editCount + 1,
             deleteCount: deleteCount,
             suspiciousBulkInputCount: suspiciousBulkInputCount,
             appCheckVerified: appCheckVerified,
             likeCount: likeCount,
             commentCount: commentCount,
+            repostCount: repostCount,
+            quoteCount: quoteCount,
             createdAt: createdAt,
             updatedAt: Date(),
-            isDeleted: isDeleted
+            isDeleted: isDeleted,
+            moderationStatus: moderationStatus,
+            hiddenReason: hiddenReason,
+            hiddenAt: hiddenAt
         )
     }
 
@@ -602,6 +1443,12 @@ private extension Post {
             id: "demo-\(id)",
             userId: userId == seedCurrentUserID ? currentUserID : userId,
             body: body,
+            topics: topics,
+            searchTokens: searchTokens,
+            mediaItems: mediaItems,
+            shareType: shareType,
+            sourcePostID: sourcePostID.map { "demo-\($0)" },
+            sourceUserID: sourceUserID == seedCurrentUserID ? currentUserID : sourceUserID,
             humanScore: humanScore,
             humanBadge: humanBadge,
             inputDurationMs: inputDurationMs,
@@ -612,9 +1459,14 @@ private extension Post {
             appCheckVerified: appCheckVerified,
             likeCount: likeCount,
             commentCount: commentCount,
+            repostCount: repostCount,
+            quoteCount: quoteCount,
             createdAt: createdAt,
             updatedAt: updatedAt,
-            isDeleted: isDeleted
+            isDeleted: isDeleted,
+            moderationStatus: moderationStatus,
+            hiddenReason: hiddenReason,
+            hiddenAt: hiddenAt
         )
     }
 }
@@ -629,7 +1481,10 @@ private extension Comment {
             humanScore: humanScore,
             createdAt: createdAt,
             updatedAt: updatedAt,
-            isDeleted: isDeleted
+            isDeleted: isDeleted,
+            moderationStatus: moderationStatus,
+            hiddenReason: hiddenReason,
+            hiddenAt: hiddenAt
         )
     }
 }

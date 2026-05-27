@@ -10,6 +10,11 @@ final class MockDataStore: ObservableObject {
     @Published private(set) var likedPostIDs: Set<String>
     @Published private(set) var blockedUserIDs: Set<String>
     @Published private(set) var mutedUserIDs: Set<String>
+    @Published private(set) var followingUserIDs: Set<String>
+    @Published private(set) var followerCountsByUserID: [String: Int]
+    @Published private(set) var followingCountsByUserID: [String: Int]
+    @Published private(set) var followersByUserID: [String: Set<String>]
+    @Published private(set) var followingByUserID: [String: Set<String>]
     @Published private(set) var reportHistory: [ReportRecord]
 
     private let initialCurrentUser: AppUser
@@ -17,6 +22,11 @@ final class MockDataStore: ObservableObject {
     private let initialPosts: [Post]
     private let initialComments: [Comment]
     private let initialLikedPostIDs: Set<String>
+    private let initialFollowingUserIDs: Set<String>
+    private let initialFollowerCountsByUserID: [String: Int]
+    private let initialFollowingCountsByUserID: [String: Int]
+    private let initialFollowersByUserID: [String: Set<String>]
+    private let initialFollowingByUserID: [String: Set<String>]
 
     var recentPostCount: Int {
         let oneHourAgo = Date().addingTimeInterval(-3600)
@@ -31,7 +41,17 @@ final class MockDataStore: ObservableObject {
 
     var timelinePosts: [Post] {
         posts.filter { post in
-            !blockedUserIDs.contains(post.userId) && !mutedUserIDs.contains(post.userId)
+            !post.isDeleted
+            && post.moderationStatus == .active
+            && post.userId != currentUser.id
+            && !blockedUserIDs.contains(post.userId)
+            && !mutedUserIDs.contains(post.userId)
+        }
+    }
+
+    var followingTimelinePosts: [Post] {
+        timelinePosts.filter { post in
+            followingUserIDs.contains(post.userId)
         }
     }
 
@@ -319,6 +339,17 @@ final class MockDataStore: ObservableObject {
         self.initialPosts = posts
         self.initialComments = comments
         self.initialLikedPostIDs = ["post-1", "post-5"]
+        let initialFollowingByUserID: [String: Set<String>] = [
+            currentUser.id: [secondUser.id, thirdUser.id],
+            secondUser.id: [currentUser.id],
+            fourthUser.id: [currentUser.id]
+        ]
+        let initialFollowersByUserID = Self.followersByUserID(from: initialFollowingByUserID)
+        self.initialFollowingUserIDs = initialFollowingByUserID[currentUser.id, default: []]
+        self.initialFollowerCountsByUserID = initialFollowersByUserID.mapValues { $0.count }
+        self.initialFollowingCountsByUserID = initialFollowingByUserID.mapValues { $0.count }
+        self.initialFollowersByUserID = initialFollowersByUserID
+        self.initialFollowingByUserID = initialFollowingByUserID
 
         self.currentUser = currentUser
         self.users = users
@@ -327,6 +358,11 @@ final class MockDataStore: ObservableObject {
         self.likedPostIDs = ["post-1", "post-5"]
         self.blockedUserIDs = []
         self.mutedUserIDs = []
+        self.followingUserIDs = initialFollowingUserIDs
+        self.followerCountsByUserID = initialFollowerCountsByUserID
+        self.followingCountsByUserID = initialFollowingCountsByUserID
+        self.followersByUserID = initialFollowersByUserID
+        self.followingByUserID = initialFollowingByUserID
         self.reportHistory = [
             ReportRecord(
                 id: "report-1",
@@ -343,10 +379,11 @@ final class MockDataStore: ObservableObject {
     }
 
     func post(for id: String) -> Post? {
-        posts.first { $0.id == id }
+        posts.first { $0.id == id && !$0.isDeleted && $0.moderationStatus == .active }
     }
 
     func insert(_ post: Post) {
+        guard !currentUser.isSuspended else { return }
         posts.insert(post, at: 0)
     }
 
@@ -362,7 +399,8 @@ final class MockDataStore: ObservableObject {
     }
 
     func toggleLike(for postID: String) {
-        guard let index = posts.firstIndex(where: { $0.id == postID }) else { return }
+        guard !currentUser.isSuspended,
+              let index = posts.firstIndex(where: { $0.id == postID && $0.moderationStatus == .active }) else { return }
 
         if likedPostIDs.contains(postID) {
             likedPostIDs.remove(postID)
@@ -375,13 +413,13 @@ final class MockDataStore: ObservableObject {
 
     func comments(for postID: String) -> [Comment] {
         comments
-            .filter { $0.postId == postID && !$0.isDeleted }
+            .filter { $0.postId == postID && !$0.isDeleted && $0.moderationStatus == .active }
             .sorted { $0.createdAt < $1.createdAt }
     }
 
     func addComment(body: String, to postID: String) {
         let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedBody.isEmpty else { return }
+        guard !currentUser.isSuspended, !trimmedBody.isEmpty, post(for: postID) != nil else { return }
 
         let now = Date()
         comments.append(
@@ -403,7 +441,41 @@ final class MockDataStore: ObservableObject {
     }
 
     func postCount(for userID: String) -> Int {
-        posts.filter { $0.userId == userID }.count
+        posts.filter { $0.userId == userID && !$0.isDeleted && $0.moderationStatus == .active }.count
+    }
+
+    func isFollowing(_ userID: String) -> Bool {
+        followingUserIDs.contains(userID)
+    }
+
+    func followerCount(for userID: String) -> Int {
+        followerCountsByUserID[userID, default: 0]
+    }
+
+    func followingCount(for userID: String) -> Int {
+        followingCountsByUserID[userID, default: 0]
+    }
+
+    func followers(for userID: String) -> [AppUser] {
+        sortedUsers(for: followersByUserID[userID, default: []])
+    }
+
+    func following(for userID: String) -> [AppUser] {
+        sortedUsers(for: followingByUserID[userID, default: []])
+    }
+
+    func toggleFollow(userID: String) {
+        guard userID != currentUser.id,
+              user(for: userID) != nil,
+              !blockedUserIDs.contains(userID) else {
+            return
+        }
+
+        if followingUserIDs.contains(userID) {
+            removeFollowLocally(followerID: currentUser.id, followeeID: userID)
+        } else {
+            addFollowLocally(followerID: currentUser.id, followeeID: userID)
+        }
     }
 
     func blockedUsers() -> [AppUser] {
@@ -418,6 +490,7 @@ final class MockDataStore: ObservableObject {
         guard userID != currentUser.id else { return }
         blockedUserIDs.insert(userID)
         mutedUserIDs.remove(userID)
+        removeFollowLocally(followerID: currentUser.id, followeeID: userID)
     }
 
     func unblock(_ userID: String) {
@@ -454,11 +527,64 @@ final class MockDataStore: ObservableObject {
         likedPostIDs = initialLikedPostIDs
         blockedUserIDs = []
         mutedUserIDs = []
+        followingUserIDs = initialFollowingUserIDs
+        followerCountsByUserID = initialFollowerCountsByUserID
+        followingCountsByUserID = initialFollowingCountsByUserID
+        followersByUserID = initialFollowersByUserID
+        followingByUserID = initialFollowingByUserID
         reportHistory = []
     }
 
     func refresh() async {
         try? await Task.sleep(nanoseconds: 250_000_000)
+    }
+
+    private func sortedUsers(for userIDs: Set<String>) -> [AppUser] {
+        users
+            .filter { userIDs.contains($0.id) && !$0.isDeleted }
+            .sorted {
+                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
+    }
+
+    private func addFollowLocally(followerID: String, followeeID: String) {
+        guard followerID != followeeID else { return }
+        followingByUserID[followerID, default: []].insert(followeeID)
+        followersByUserID[followeeID, default: []].insert(followerID)
+        if followerID == currentUser.id {
+            followingUserIDs.insert(followeeID)
+        }
+        rebuildFollowCounts()
+    }
+
+    private func removeFollowLocally(followerID: String, followeeID: String) {
+        followingByUserID[followerID]?.remove(followeeID)
+        followersByUserID[followeeID]?.remove(followerID)
+        if followingByUserID[followerID]?.isEmpty == true {
+            followingByUserID[followerID] = nil
+        }
+        if followersByUserID[followeeID]?.isEmpty == true {
+            followersByUserID[followeeID] = nil
+        }
+        if followerID == currentUser.id {
+            followingUserIDs.remove(followeeID)
+        }
+        rebuildFollowCounts()
+    }
+
+    private func rebuildFollowCounts() {
+        followingCountsByUserID = followingByUserID.mapValues { $0.count }
+        followerCountsByUserID = followersByUserID.mapValues { $0.count }
+    }
+
+    private static func followersByUserID(from followingByUserID: [String: Set<String>]) -> [String: Set<String>] {
+        var followersByUserID: [String: Set<String>] = [:]
+        for (followerID, followeeIDs) in followingByUserID {
+            for followeeID in followeeIDs {
+                followersByUserID[followeeID, default: []].insert(followerID)
+            }
+        }
+        return followersByUserID
     }
 }
 
@@ -468,4 +594,31 @@ struct ReportRecord: Identifiable, Codable, Equatable {
     let reason: String
     let createdAt: Date
     var status: String
+    var reporterID: String? = nil
+    var targetType: ReportTargetType = .user
+    var targetID: String? = nil
+    var targetOwnerID: String? = nil
+    var adminNote: String? = nil
+    var resolvedAt: Date? = nil
+    var resolvedBy: String? = nil
+}
+
+enum ReportTargetType: String, Codable, Equatable, CaseIterable {
+    case post
+    case comment
+    case user
+    case other
+
+    var displayText: String {
+        switch self {
+        case .post:
+            return "投稿"
+        case .comment:
+            return "コメント"
+        case .user:
+            return "ユーザー"
+        case .other:
+            return "その他"
+        }
+    }
 }

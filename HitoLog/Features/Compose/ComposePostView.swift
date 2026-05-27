@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 
 struct ComposePostView: View {
@@ -8,8 +9,14 @@ struct ComposePostView: View {
     @State private var didRestoreDraft = false
     @State private var didRestoreExistingDraft = false
     @State private var isShowingDeleteDraftConfirmation = false
+    @State private var selectedPhotoItems: [PhotosPickerItem] = []
+    @State private var selectedMediaItems: [ComposeMediaItem] = []
+    @State private var isLoadingMedia = false
+    @State private var isSubmitting = false
+    @State private var mediaErrorMessage: String?
     let onSubmitted: () -> Void
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    private let mediaUploadService = MediaUploadService()
 
     init(onSubmitted: @escaping () -> Void = {}) {
         self.onSubmitted = onSubmitted
@@ -40,6 +47,14 @@ struct ComposePostView: View {
                         Label("下書きを復元しました", systemImage: "tray.and.arrow.down.fill")
                             .font(.caption.weight(.medium))
                             .foregroundStyle(AppColor.accent)
+                    }
+
+                    if store.currentUser.isSuspended {
+                        Label("このアカウントは現在投稿できません。", systemImage: "person.crop.circle.badge.xmark")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(AppColor.warning)
+                            .padding(AppSpacing.md)
+                            .paperSurface()
                     }
 
                     VStack(alignment: .leading, spacing: AppSpacing.sm) {
@@ -87,6 +102,8 @@ struct ComposePostView: View {
                         }
                     }
 
+                    mediaAttachmentPanel
+
                     HumanCheckPanel(metrics: viewModel.metrics, statusText: viewModel.humanCheckText)
 
                     HStack(spacing: AppSpacing.sm) {
@@ -113,7 +130,7 @@ struct ComposePostView: View {
                         submit()
                     }
                     .fontWeight(.semibold)
-                    .disabled(!viewModel.canSubmit)
+                    .disabled(!canSubmit)
                 }
             }
             .confirmationDialog("下書きを削除しますか？", isPresented: $isShowingDeleteDraftConfirmation, titleVisibility: .visible) {
@@ -126,10 +143,10 @@ struct ComposePostView: View {
             }
             .safeAreaInset(edge: .bottom) {
                 Button(action: submit) {
-                    Label("この言葉を投稿する", systemImage: "paperplane.fill")
+                    submitButtonLabel
                 }
                 .buttonStyle(PrimaryButtonStyle())
-                .disabled(!viewModel.canSubmit)
+                .disabled(!canSubmit)
                 .padding(.horizontal, AppSpacing.md)
                 .padding(.top, AppSpacing.sm)
                 .padding(.bottom, AppSpacing.sm)
@@ -148,20 +165,169 @@ struct ComposePostView: View {
             .onChange(of: viewModel.metrics) { _, _ in
                 saveDraft()
             }
+            .onChange(of: selectedPhotoItems) { _, newItems in
+                appendSelectedMedia(from: newItems)
+            }
         }
     }
 
     private func submit() {
-        let post = viewModel.makePost(using: store.currentUser, recentPostCount: store.recentPostCount)
-        store.insert(post)
-        clearDraft()
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
-        onSubmitted()
-        dismiss()
+        Task {
+            await submitPost()
+        }
     }
 
     private var hasSavedDraft: Bool {
         didRestoreExistingDraft && viewModel.hasDraft
+    }
+
+    private var canSubmit: Bool {
+        !store.currentUser.isSuspended && viewModel.canSubmit && !isLoadingMedia && !isSubmitting
+    }
+
+    private var remainingMediaSlots: Int {
+        max(AppConstants.maxPostMediaItems - selectedMediaItems.count, 0)
+    }
+
+    @ViewBuilder
+    private var submitButtonLabel: some View {
+        if isSubmitting {
+            HStack(spacing: AppSpacing.sm) {
+                ProgressView()
+                    .tint(AppColor.background)
+                Text("投稿中")
+            }
+        } else {
+            Label("この言葉を投稿する", systemImage: "paperplane.fill")
+        }
+    }
+
+    private var mediaAttachmentPanel: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.md) {
+            HStack(alignment: .center, spacing: AppSpacing.sm) {
+                SectionKicker(text: "Media", systemImage: "photo.on.rectangle.angled")
+
+                Spacer(minLength: 0)
+
+                Text("\(selectedMediaItems.count)/\(AppConstants.maxPostMediaItems)")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(AppColor.textSecondary)
+
+                PhotosPicker(
+                    selection: $selectedPhotoItems,
+                    maxSelectionCount: max(remainingMediaSlots, 1),
+                    matching: .any(of: [.images, .videos])
+                ) {
+                    Label("追加", systemImage: "plus")
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                .disabled(remainingMediaSlots == 0 || isLoadingMedia || isSubmitting)
+            }
+
+            if selectedMediaItems.isEmpty {
+                Text("写真と動画を最大4件まで一緒に添付できます。本文は必須です。")
+                    .font(.caption)
+                    .foregroundStyle(AppColor.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: AppSpacing.sm) {
+                        ForEach(selectedMediaItems) { item in
+                            ComposeMediaPreviewTile(item: item) {
+                                selectedMediaItems.removeAll { $0.id == item.id }
+                            }
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+
+            if isLoadingMedia {
+                HStack(spacing: AppSpacing.sm) {
+                    ProgressView()
+                    Text("メディアを読み込んでいます")
+                        .font(.caption)
+                        .foregroundStyle(AppColor.textSecondary)
+                }
+            }
+
+            if let mediaErrorMessage {
+                Label(mediaErrorMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(AppColor.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(AppSpacing.md)
+        .paperSurface()
+    }
+
+    @MainActor
+    private func submitPost() async {
+        guard canSubmit else { return }
+
+        isSubmitting = true
+        mediaErrorMessage = nil
+        defer { isSubmitting = false }
+
+        do {
+            let postID = UUID().uuidString
+            let mediaItems: [PostMedia]
+            if selectedMediaItems.isEmpty {
+                mediaItems = []
+            } else if store.isRemoteSyncEnabled {
+                mediaItems = try await mediaUploadService.upload(
+                    selectedMediaItems,
+                    userID: store.currentUser.id,
+                    postID: postID
+                )
+            } else {
+                mediaItems = try mediaUploadService.localMediaItems(from: selectedMediaItems)
+            }
+
+            let post = viewModel.makePost(
+                id: postID,
+                using: store.currentUser,
+                recentPostCount: store.recentPostCount,
+                mediaItems: mediaItems
+            )
+            store.insert(post)
+            clearDraft()
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            onSubmitted()
+            dismiss()
+        } catch {
+            mediaErrorMessage = error.localizedDescription
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+        }
+    }
+
+    private func appendSelectedMedia(from items: [PhotosPickerItem]) {
+        guard !items.isEmpty else { return }
+
+        Task { @MainActor in
+            let allowedItems = Array(items.prefix(remainingMediaSlots))
+            selectedPhotoItems = []
+            guard !allowedItems.isEmpty else {
+                mediaErrorMessage = "写真と動画は最大\(AppConstants.maxPostMediaItems)件まで添付できます。"
+                return
+            }
+
+            isLoadingMedia = true
+            mediaErrorMessage = items.count > allowedItems.count
+                ? "写真と動画は最大\(AppConstants.maxPostMediaItems)件まで添付できます。"
+                : nil
+            defer { isLoadingMedia = false }
+
+            do {
+                for item in allowedItems {
+                    let mediaItem = try await ComposeMediaItem.load(from: item)
+                    selectedMediaItems.append(mediaItem)
+                }
+            } catch {
+                mediaErrorMessage = error.localizedDescription
+            }
+        }
     }
 
     private func restoreDraftIfNeeded() {
@@ -177,9 +343,65 @@ struct ComposePostView: View {
 
     private func clearDraft() {
         viewModel.clearDraft()
+        selectedMediaItems = []
+        selectedPhotoItems = []
+        mediaErrorMessage = nil
         draftPayload = ""
         didRestoreExistingDraft = false
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+}
+
+private struct ComposeMediaPreviewTile: View {
+    let item: ComposeMediaItem
+    let onRemove: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            ZStack(alignment: .bottomLeading) {
+                if let previewImage = item.previewImage {
+                    Image(uiImage: previewImage)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    AppColor.surface
+                    Image(systemName: item.type == .video ? "film" : "photo")
+                        .foregroundStyle(AppColor.textSecondary)
+                }
+
+                if item.type == .video {
+                    Label(durationText, systemImage: "play.fill")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, AppSpacing.xs)
+                        .padding(.vertical, 3)
+                        .background(.black.opacity(0.56), in: Capsule())
+                        .padding(AppSpacing.xs)
+                }
+            }
+            .frame(width: 108, height: 108)
+            .clipShape(RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                    .stroke(AppColor.border, lineWidth: 0.7)
+            }
+
+            Button(action: onRemove) {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(AppColor.background)
+                    .frame(width: 24, height: 24)
+                    .background(AppColor.textPrimary.opacity(0.82), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .padding(6)
+        }
+    }
+
+    private var durationText: String {
+        guard let durationMs = item.durationMs else { return "0:00" }
+        let seconds = max(durationMs / 1_000, 0)
+        return "\(seconds / 60):\(String(format: "%02d", seconds % 60))"
     }
 }
 

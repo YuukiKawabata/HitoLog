@@ -1,0 +1,32 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userID) {
+      return signedIn() && request.auth.uid == userID;
+    }
+
+    match /postMedia/{userID}/{postID}/{fileName} {
+      allow read: if signedIn();
+      allow create, update: if isOwner(userID)
+        && request.resource.size <= 100 * 1024 * 1024
+        && (
+          request.resource.contentType.matches('image/.*')
+          || request.resource.contentType.matches('video/.*')
+        );
+      allow delete: if isOwner(userID);
+    }
+
+    match /postMedia/{userID}/{postID}/thumbs/{fileName} {
+      allow read: if signedIn();
+      allow create, update: if isOwner(userID)
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if isOwner(userID);
+    }
+  }
+}

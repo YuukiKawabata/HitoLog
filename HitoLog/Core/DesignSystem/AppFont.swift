@@ -6,6 +6,8 @@ enum AppFont {
     static let sectionTitle = Font.system(size: 18, weight: .semibold, design: .serif)
     static let userName = Font.system(size: 15, weight: .semibold)
     static let body = Font.system(size: 16, weight: .regular, design: .serif)
+    static let postBody = Font.system(size: 15, weight: .regular)
+    static let postDetailBody = Font.system(size: 16, weight: .regular)
     static let subtext = Font.system(size: 13, weight: .regular)
     static let button = Font.system(size: 15, weight: .semibold)
     static let badge = Font.system(size: 12, weight: .medium)

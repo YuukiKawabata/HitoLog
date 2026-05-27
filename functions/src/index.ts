@@ -1,8 +1,8 @@
 import { initializeApp } from "firebase-admin/app";
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { DocumentReference, FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { setGlobalOptions } from "firebase-functions/v2";
-import { onDocumentCreated, onDocumentDeleted } from "firebase-functions/v2/firestore";
+import { onDocumentCreated, onDocumentDeleted, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { logger } from "firebase-functions";
 
 initializeApp();
@@ -10,11 +10,23 @@ setGlobalOptions({ region: "asia-northeast1" });
 
 const db = getFirestore();
 
-type NotificationType = "comment" | "like";
+type NotificationType = "comment" | "like" | "follow" | "repost" | "quote";
+type ModerationStatus = "active" | "reviewRequired" | "hidden";
+type PostShareType = "original" | "repost" | "quote";
+
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+const POST_LIMIT_PER_HOUR = 20;
+const COMMENT_LIMIT_PER_HOUR = 80;
+const FOLLOW_LIMIT_PER_HOUR = 120;
 
 interface PostRecord {
   userID: string;
   body?: string;
+  moderationStatus?: ModerationStatus;
+  shareType?: PostShareType;
+  sourcePostID?: string;
+  sourceUserID?: string;
+  isDeleted?: boolean;
 }
 
 interface CommentRecord {
@@ -28,9 +40,56 @@ interface LikeRecord {
   userID: string;
 }
 
+interface FollowRecord {
+  followerID: string;
+  followeeID: string;
+  counted?: boolean;
+}
+
+export const onPostCreated = onDocumentCreated("posts/{postID}", async (event) => {
+  const post = event.data?.data() as PostRecord | undefined;
+  if (!post) {
+    return;
+  }
+
+  const postRef = db.collection("posts").doc(event.params.postID);
+  if (!(await isUserActive(post.userID))) {
+    await hideDocument(postRef, "suspended_user");
+    return;
+  }
+
+  if (await exceedsRecentCount("posts", "userID", post.userID, POST_LIMIT_PER_HOUR)) {
+    await hideDocument(postRef, "rate_limit");
+    return;
+  }
+
+  await handlePostShareCreated(post, event.params.postID);
+});
+
+export const onPostUpdated = onDocumentUpdated("posts/{postID}", async (event) => {
+  const before = event.data?.before.data() as PostRecord | undefined;
+  const after = event.data?.after.data() as PostRecord | undefined;
+  if (!before || !after || before.isDeleted === true || after.isDeleted !== true) {
+    return;
+  }
+
+  await updateShareCount(after, -1);
+});
+
 export const onCommentCreated = onDocumentCreated("comments/{commentID}", async (event) => {
   const comment = event.data?.data() as CommentRecord | undefined;
   if (!comment) {
+    return;
+  }
+
+  const commentRef = db.collection("comments").doc(event.params.commentID);
+  if (!(await isUserActive(comment.userID))) {
+    await hideDocument(commentRef, "suspended_user");
+    return;
+  }
+
+  if (await exceedsRecentCount("comments", "userID", comment.userID, COMMENT_LIMIT_PER_HOUR)) {
+    await hideDocument(commentRef, "rate_limit");
     return;
   }
 
@@ -95,13 +154,58 @@ export const onLikeDeleted = onDocumentDeleted("likes/{likeID}", async (event) =
   });
 });
 
+export const onFollowCreated = onDocumentCreated("follows/{followID}", async (event) => {
+  const followRef = db.collection("follows").doc(event.params.followID);
+  const follow = event.data?.data() as FollowRecord | undefined;
+  if (!follow) {
+    return;
+  }
+
+  if (follow.followerID === follow.followeeID) {
+    await followRef.delete();
+    return;
+  }
+
+  if (!(await isUserActive(follow.followerID)) || !(await isUserActive(follow.followeeID))) {
+    await followRef.delete();
+    return;
+  }
+
+  if (await exceedsRecentCount("follows", "followerID", follow.followerID, FOLLOW_LIMIT_PER_HOUR)) {
+    await followRef.delete();
+    return;
+  }
+
+  await updateFollowCounts(follow.followerID, follow.followeeID, 1);
+  await followRef.set({ counted: true }, { merge: true });
+
+  await createAndSendNotification({
+    type: "follow",
+    recipientID: follow.followeeID,
+    actorID: follow.followerID
+  });
+});
+
+export const onFollowDeleted = onDocumentDeleted("follows/{followID}", async (event) => {
+  const follow = event.data?.data() as FollowRecord | undefined;
+  if (!follow || follow.followerID === follow.followeeID || follow.counted !== true) {
+    return;
+  }
+
+  await updateFollowCounts(follow.followerID, follow.followeeID, -1);
+});
+
 async function createAndSendNotification(input: {
   type: NotificationType;
   recipientID: string;
   actorID: string;
-  postID: string;
+  postID?: string;
   body?: string;
 }) {
+  if (!input.recipientID || !input.actorID) {
+    return;
+  }
+
   if (input.recipientID === input.actorID) {
     return;
   }
@@ -114,29 +218,31 @@ async function createAndSendNotification(input: {
   ]);
 
   const recipient = recipientSnapshot.data();
-  if (!recipient || recipient.notificationsEnabled === false || recipient.isDeleted === true) {
-    return;
-  }
-
-  if (blockSnapshot.exists || muteSnapshot.exists) {
-    return;
-  }
-
   const actor = actorSnapshot.data();
-  const actorName = typeof actor?.displayName === "string" ? actor.displayName : "HitoLog";
-  const notificationText = input.type === "comment"
-    ? `${actorName}さんがコメントしました`
-    : `${actorName}さんがいいねしました`;
+  if (!recipient || recipient.notificationsEnabled === false || recipient.isDeleted === true || recipient.isSuspended === true) {
+    return;
+  }
 
-  await db.collection("notifications").add({
+  if (!actor || actor.isDeleted === true || actor.isSuspended === true || blockSnapshot.exists || muteSnapshot.exists) {
+    return;
+  }
+
+  const actorName = typeof actor?.displayName === "string" ? actor.displayName : "HitoLog";
+  const notificationText = notificationTextFor(input.type, actorName);
+
+  const notificationData: { [key: string]: unknown } = {
     type: input.type,
     recipientID: input.recipientID,
     actorID: input.actorID,
-    postID: input.postID,
     text: notificationText,
     isRead: false,
     createdAt: FieldValue.serverTimestamp()
-  });
+  };
+  if (input.postID) {
+    notificationData.postID = input.postID;
+  }
+
+  await db.collection("notifications").add(notificationData);
 
   const tokenSnapshot = await db.collection("fcmTokens")
     .doc(input.recipientID)
@@ -152,17 +258,21 @@ async function createAndSendNotification(input: {
     return;
   }
 
+  const messageData: Record<string, string> = {
+    type: input.type,
+    actorID: input.actorID
+  };
+  if (input.postID) {
+    messageData.postID = input.postID;
+  }
+
   await getMessaging().sendEachForMulticast({
     tokens,
     notification: {
       title: "HitoLog",
       body: notificationText
     },
-    data: {
-      type: input.type,
-      postID: input.postID,
-      actorID: input.actorID
-    },
+    data: messageData,
     apns: {
       payload: {
         aps: {
@@ -171,4 +281,91 @@ async function createAndSendNotification(input: {
       }
     }
   });
+}
+
+async function handlePostShareCreated(post: PostRecord, postID: string) {
+  if (post.shareType !== "repost" && post.shareType !== "quote") {
+    return;
+  }
+
+  await updateShareCount(post, 1);
+  await createAndSendNotification({
+    type: post.shareType,
+    recipientID: post.sourceUserID ?? "",
+    actorID: post.userID,
+    postID: post.sourcePostID,
+    body: post.body
+  });
+
+  logger.info("Share post processed", { postID, shareType: post.shareType, sourcePostID: post.sourcePostID });
+}
+
+async function updateShareCount(post: PostRecord, amount: 1 | -1) {
+  if ((post.shareType !== "repost" && post.shareType !== "quote") || !post.sourcePostID) {
+    return;
+  }
+
+  const field = post.shareType === "repost" ? "repostCount" : "quoteCount";
+  await db.collection("posts").doc(post.sourcePostID).set({
+    [field]: FieldValue.increment(amount),
+    updatedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+}
+
+async function updateFollowCounts(followerID: string, followeeID: string, amount: 1 | -1) {
+  const batch = db.batch();
+  batch.set(db.collection("users").doc(followerID), {
+    followingCount: FieldValue.increment(amount),
+    updatedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+  batch.set(db.collection("users").doc(followeeID), {
+    followerCount: FieldValue.increment(amount),
+    updatedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+  await batch.commit();
+}
+
+async function isUserActive(userID: string): Promise<boolean> {
+  const snapshot = await db.collection("users").doc(userID).get();
+  const user = snapshot.data();
+  return !!user && user.isDeleted !== true && user.isSuspended !== true;
+}
+
+async function exceedsRecentCount(
+  collectionName: string,
+  userField: string,
+  userID: string,
+  limit: number
+): Promise<boolean> {
+  const since = Timestamp.fromMillis(Date.now() - RATE_LIMIT_WINDOW_MS);
+  const snapshot = await db.collection(collectionName)
+    .where(userField, "==", userID)
+    .where("createdAt", ">=", since)
+    .limit(limit + 1)
+    .get();
+  return snapshot.size > limit;
+}
+
+async function hideDocument(ref: DocumentReference, reason: string) {
+  await ref.set({
+    moderationStatus: "hidden",
+    hiddenReason: reason,
+    hiddenAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+}
+
+function notificationTextFor(type: NotificationType, actorName: string): string {
+  switch (type) {
+    case "comment":
+      return `${actorName}さんがコメントしました`;
+    case "like":
+      return `${actorName}さんがいいねしました`;
+    case "follow":
+      return `${actorName}さんにフォローされました`;
+    case "repost":
+      return `${actorName}さんがリポストしました`;
+    case "quote":
+      return `${actorName}さんが引用しました`;
+  }
 }
