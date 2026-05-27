@@ -27,7 +27,12 @@ struct TimelineView: View {
                 .padding(.bottom, AppSpacing.xs)
 
                 if posts.isEmpty {
-                    if selectedFilter == .following || selectedFilter == .recommended {
+                    if selectedFilter == .rooms {
+                        TimelineTopicRoomEmptyView(
+                            title: selectedFilter.emptyTitle,
+                            message: selectedFilter.emptyMessage
+                        )
+                    } else if selectedFilter == .following || selectedFilter == .recommended {
                         TimelineStarterPackEmptyView(
                             title: selectedFilter.emptyTitle,
                             message: selectedFilter.emptyMessage,
@@ -155,6 +160,8 @@ struct TimelineView: View {
             return store.followingTimelinePosts
         case .recommended:
             return store.recommendedTimelinePosts
+        case .rooms:
+            return store.followedTopicTimelinePosts
         }
     }
 }
@@ -163,6 +170,7 @@ private enum TimelineFilter: String, CaseIterable, Identifiable {
     case all
     case following
     case recommended
+    case rooms
 
     var id: String { rawValue }
 
@@ -174,6 +182,8 @@ private enum TimelineFilter: String, CaseIterable, Identifiable {
             return "フォロー中"
         case .recommended:
             return "おすすめ"
+        case .rooms:
+            return "ルーム"
         }
     }
 
@@ -185,6 +195,8 @@ private enum TimelineFilter: String, CaseIterable, Identifiable {
             return "フォロー中の投稿はまだありません"
         case .recommended:
             return "おすすめできる投稿はまだありません"
+        case .rooms:
+            return "フォロー中ルームの投稿はまだありません"
         }
     }
 
@@ -196,6 +208,8 @@ private enum TimelineFilter: String, CaseIterable, Identifiable {
             return "気になる人をフォローすると、ここに投稿が表示されます。"
         case .recommended:
             return "反応や本人入力率の高い投稿が見つかると、ここに表示されます。"
+        case .rooms:
+            return "気になる小部屋をフォローすると、ここに投稿が表示されます。"
         }
     }
 }
@@ -265,6 +279,78 @@ private struct TimelineStarterPackEmptyView: View {
         }
         .padding(.horizontal, AppSpacing.md)
         .padding(.top, 64)
+    }
+}
+
+private struct TimelineTopicRoomEmptyView: View {
+    @EnvironmentObject private var store: AppDataStore
+    let title: String
+    let message: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.md) {
+            EmptyTimelineView(title: title, message: message)
+
+            VStack(alignment: .leading, spacing: AppSpacing.md) {
+                SectionKicker(text: "Topic Rooms", systemImage: "number.square")
+
+                let rooms = Array(store.discoverTopicRooms.prefix(6))
+                if rooms.isEmpty {
+                    Text("候補ルームはまだありません。")
+                        .font(.subheadline)
+                        .foregroundStyle(AppColor.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    ForEach(rooms) { room in
+                        TopicRoomCompactRow(room: room)
+                    }
+                }
+            }
+            .padding(AppSpacing.md)
+            .paperSurface()
+        }
+        .padding(.horizontal, AppSpacing.md)
+        .padding(.top, 64)
+    }
+}
+
+private struct TopicRoomCompactRow: View {
+    @EnvironmentObject private var store: AppDataStore
+    let room: TopicRoom
+
+    var body: some View {
+        HStack(spacing: AppSpacing.md) {
+            NavigationLink(destination: TopicRoomView(topic: room.topic)) {
+                HStack(spacing: AppSpacing.sm) {
+                    Image(systemName: room.isOfficial ? "number.square.fill" : "number")
+                        .font(.headline)
+                        .foregroundStyle(AppColor.accent)
+                        .frame(width: 34, height: 34)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(room.displayTitle)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppColor.textPrimary)
+                        Text("\(room.postCount)件の投稿")
+                            .font(.caption)
+                            .foregroundStyle(AppColor.textSecondary)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+
+            Button {
+                store.toggleTopicFollow(topic: room.topic)
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            } label: {
+                Label(store.isFollowingTopic(room.topic) ? "フォロー中" : "フォロー", systemImage: store.isFollowingTopic(room.topic) ? "checkmark" : "plus")
+                    .font(.caption.weight(.semibold))
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(.vertical, AppSpacing.xs)
     }
 }
 

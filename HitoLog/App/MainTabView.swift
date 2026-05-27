@@ -142,6 +142,41 @@ private struct UserSearchView: View {
                         }
                     }
                 }
+            } else if scope == .rooms && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Section("フォロー中ルーム") {
+                    let followedRooms = store.discoverTopicRooms.filter { store.isFollowingTopic($0.topic) }
+                    if followedRooms.isEmpty {
+                        ContentUnavailableView("フォロー中のルームはまだありません", systemImage: "number.square")
+                            .listRowBackground(Color.clear)
+                    } else {
+                        ForEach(followedRooms) { room in
+                            TopicRoomSearchRow(room: room)
+                        }
+                    }
+                }
+
+                Section("おすすめルーム") {
+                    let rooms = store.discoverTopicRooms.filter { !store.isFollowingTopic($0.topic) }
+                    if rooms.isEmpty {
+                        ContentUnavailableView("候補ルームはまだありません", systemImage: "number.square")
+                            .listRowBackground(Color.clear)
+                    } else {
+                        ForEach(Array(rooms.prefix(12))) { room in
+                            TopicRoomSearchRow(room: room)
+                        }
+                    }
+                }
+            } else if scope == .rooms {
+                Section("ルーム検索") {
+                    if store.topicRoomSearchResults.isEmpty {
+                        ContentUnavailableView("ルームが見つかりません", systemImage: "number.square")
+                            .listRowBackground(Color.clear)
+                    } else {
+                        ForEach(store.topicRoomSearchResults) { room in
+                            TopicRoomSearchRow(room: room)
+                        }
+                    }
+                }
             } else if scope == .topics && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Section("話題") {
                     if store.trendingTopics.isEmpty {
@@ -283,6 +318,8 @@ private struct UserSearchView: View {
             await store.searchUsers(query: value)
         case .topics:
             await store.searchTopicPosts(query: value)
+        case .rooms:
+            await store.searchTopicRooms(query: value)
         case .posts:
             await store.searchPosts(query: value)
         }
@@ -292,6 +329,7 @@ private struct UserSearchView: View {
 private enum SearchScope: String, CaseIterable, Identifiable {
     case users
     case topics
+    case rooms
     case posts
 
     var id: String { rawValue }
@@ -302,6 +340,8 @@ private enum SearchScope: String, CaseIterable, Identifiable {
             return "ユーザー"
         case .topics:
             return "話題"
+        case .rooms:
+            return "ルーム"
         case .posts:
             return "投稿"
         }
@@ -313,6 +353,8 @@ private enum SearchScope: String, CaseIterable, Identifiable {
             return "person.2"
         case .topics:
             return "number"
+        case .rooms:
+            return "number.square"
         case .posts:
             return "text.magnifyingglass"
         }
@@ -324,6 +366,8 @@ private enum SearchScope: String, CaseIterable, Identifiable {
             return "名前またはユーザー名"
         case .topics:
             return "#健康 など"
+        case .rooms:
+            return "ルーム名または#topic"
         case .posts:
             return "投稿本文を検索"
         }
@@ -359,6 +403,186 @@ private struct TopicTrendRow: View {
             .padding(.vertical, AppSpacing.xs)
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct TopicRoomSearchRow: View {
+    @EnvironmentObject private var store: AppDataStore
+    let room: TopicRoom
+
+    var body: some View {
+        HStack(spacing: AppSpacing.md) {
+            NavigationLink(destination: TopicRoomView(topic: room.topic)) {
+                HStack(spacing: AppSpacing.md) {
+                    Image(systemName: room.isOfficial ? "number.square.fill" : "number.square")
+                        .font(.headline)
+                        .foregroundStyle(AppColor.accent)
+                        .frame(width: 36, height: 36)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(room.displayTitle)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppColor.textPrimary)
+                        Text("\(room.postCount)件の投稿 ・ \(room.followerCount)人がフォロー")
+                            .font(.caption)
+                            .foregroundStyle(AppColor.textSecondary)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+
+            Button {
+                store.toggleTopicFollow(topic: room.topic)
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            } label: {
+                Text(store.isFollowingTopic(room.topic) ? "フォロー中" : "フォロー")
+                    .font(.caption.weight(.semibold))
+                    .padding(.vertical, 7)
+                    .padding(.horizontal, AppSpacing.sm)
+                    .foregroundStyle(store.isFollowingTopic(room.topic) ? AppColor.textPrimary : AppColor.background)
+                    .background(
+                        store.isFollowingTopic(room.topic) ? AppColor.surface : AppColor.accent,
+                        in: RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                            .stroke(store.isFollowingTopic(room.topic) ? AppColor.border : AppColor.accent.opacity(0.3), lineWidth: 0.7)
+                    }
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, AppSpacing.xs)
+    }
+}
+
+struct TopicRoomView: View {
+    @EnvironmentObject private var store: AppDataStore
+    let topic: String
+    @State private var sort: TopicRoomPostSort = .latest
+
+    var body: some View {
+        let room = store.topicRoom(for: topic)
+        let posts = store.topicRoomPosts(for: topic, sort: sort)
+
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: AppSpacing.md) {
+                    HStack(alignment: .top, spacing: AppSpacing.md) {
+                        Image(systemName: room.isOfficial ? "number.square.fill" : "number.square")
+                            .font(.title2)
+                            .foregroundStyle(AppColor.accent)
+                            .frame(width: 44, height: 44)
+                            .background(AppColor.accentSoft, in: RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
+
+                        VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                            SectionKicker(text: "Topic Room", systemImage: "person.3")
+                            Text(room.displayTitle)
+                                .font(AppFont.title)
+                                .foregroundStyle(AppColor.textPrimary)
+                            Text(room.displayDescription)
+                                .font(.subheadline)
+                                .foregroundStyle(AppColor.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer(minLength: 0)
+                    }
+
+                    HStack(spacing: AppSpacing.sm) {
+                        Label("\(room.postCount)", systemImage: "text.bubble")
+                        Label("\(room.followerCount)", systemImage: "person.2")
+                        if let lastPostAt = room.lastPostAt {
+                            Label(DateFormatterUtil.relativeString(from: lastPostAt), systemImage: "clock")
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(AppColor.textSecondary)
+
+                    if store.isFollowingTopic(room.topic) {
+                        Button {
+                            store.toggleTopicFollow(topic: room.topic)
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        } label: {
+                            Label("フォロー中", systemImage: "checkmark")
+                        }
+                        .buttonStyle(SecondaryButtonStyle())
+                    } else {
+                        Button {
+                            store.toggleTopicFollow(topic: room.topic)
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        } label: {
+                            Label("このルームをフォロー", systemImage: "plus")
+                        }
+                        .buttonStyle(PrimaryButtonStyle())
+                    }
+                }
+                .padding(.vertical, AppSpacing.sm)
+            }
+            .listRowBackground(Color.clear)
+
+            Section {
+                Picker("並び順", selection: $sort) {
+                    ForEach(TopicRoomPostSort.allCases) { sort in
+                        Text(sort.title).tag(sort)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .listRowBackground(Color.clear)
+
+                if posts.isEmpty {
+                    ContentUnavailableView("このルームの投稿はまだありません", systemImage: "number.square")
+                        .listRowBackground(Color.clear)
+                } else {
+                    ForEach(posts) { post in
+                        if let author = store.user(for: post.userId) {
+                            PostRowView(
+                                post: post,
+                                author: author,
+                                isLiked: store.likedPostIDs.contains(post.id),
+                                isBookmarked: store.isBookmarked(post.id),
+                                onLike: {
+                                    store.toggleLike(for: post.id)
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                },
+                                onBookmark: {
+                                    store.toggleBookmark(for: post.id)
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                },
+                                commentDestination: AnyView(PostDetailView(postID: post.id)),
+                                authorDestination: AnyView(ProfileView(userID: author.id)),
+                                showsOwnerActions: false,
+                                onReport: {
+                                    store.addReport(
+                                        targetType: .post,
+                                        targetID: post.id,
+                                        targetOwnerID: post.userId,
+                                        targetDescription: "投稿: \(post.body.prefix(40))",
+                                        reason: "不適切な投稿"
+                                    )
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                }
+                            )
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
+                        }
+                    }
+                }
+            } header: {
+                Text(sort.title)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(PaperCanvas())
+        .navigationTitle(room.displayTitle)
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await store.loadTopicRoomPosts(topic: topic)
+        }
+        .refreshable {
+            await store.loadTopicRoomPosts(topic: topic)
+        }
     }
 }
 

@@ -215,6 +215,94 @@ struct TopicTrend: Identifiable, Equatable {
     var displayText: String { "#\(topic)" }
 }
 
+struct TopicRoom: Identifiable, Codable, Equatable {
+    let topic: String
+    var title: String
+    var description: String
+    var postCount: Int
+    var followerCount: Int
+    var lastPostAt: Date?
+    let createdAt: Date
+    var updatedAt: Date
+    var isOfficial: Bool
+    var moderationStatus: ModerationStatus
+
+    var id: String { topic }
+    var displayTitle: String { title.isEmpty ? "#\(topic)" : title }
+    var displayDescription: String {
+        description.isEmpty ? "#\(topic) の投稿が集まる小部屋です。" : description
+    }
+
+    static func officialRooms(now: Date = Date()) -> [TopicRoom] {
+        [
+            TopicRoom(
+                topic: "言葉",
+                title: "言葉を書く人",
+                description: "その場で考えて書いた言葉を読み合う部屋です。",
+                postCount: 0,
+                followerCount: 0,
+                lastPostAt: nil,
+                createdAt: now,
+                updatedAt: now,
+                isOfficial: true,
+                moderationStatus: .active
+            ),
+            TopicRoom(
+                topic: "日常ログ",
+                title: "日常ログ",
+                description: "今日の出来事や生活の記録を残す部屋です。",
+                postCount: 0,
+                followerCount: 0,
+                lastPostAt: nil,
+                createdAt: now,
+                updatedAt: now,
+                isOfficial: true,
+                moderationStatus: .active
+            ),
+            TopicRoom(
+                topic: "創作",
+                title: "創作",
+                description: "物語、作品、アイデアを育てる部屋です。",
+                postCount: 0,
+                followerCount: 0,
+                lastPostAt: nil,
+                createdAt: now,
+                updatedAt: now,
+                isOfficial: true,
+                moderationStatus: .active
+            ),
+            TopicRoom(
+                topic: "学び",
+                title: "学び",
+                description: "学習メモや気づきを共有する部屋です。",
+                postCount: 0,
+                followerCount: 0,
+                lastPostAt: nil,
+                createdAt: now,
+                updatedAt: now,
+                isOfficial: true,
+                moderationStatus: .active
+            )
+        ]
+    }
+}
+
+enum TopicRoomPostSort: String, CaseIterable, Identifiable {
+    case latest
+    case popular
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .latest:
+            return "最新"
+        case .popular:
+            return "人気"
+        }
+    }
+}
+
 struct MutedWord: Identifiable, Codable, Equatable {
     let id: String
     let userID: String

@@ -39,6 +39,19 @@ enum StarterPackCategory: String, CaseIterable, Identifiable {
             return "book"
         }
     }
+
+    var topic: String {
+        switch self {
+        case .writers:
+            return "言葉"
+        case .daily:
+            return "日常ログ"
+        case .creative:
+            return "創作"
+        case .learning:
+            return "学び"
+        }
+    }
 }
 
 @MainActor
@@ -52,6 +65,8 @@ final class AppDataStore: ObservableObject {
     @Published private(set) var blockedUserIDs: Set<String>
     @Published private(set) var mutedUserIDs: Set<String>
     @Published private(set) var mutedWords: [MutedWord]
+    @Published private(set) var topicRooms: [TopicRoom]
+    @Published private(set) var followedTopicIDs: Set<String>
     @Published private(set) var followingUserIDs: Set<String>
     @Published private(set) var followerCountsByUserID: [String: Int]
     @Published private(set) var followingCountsByUserID: [String: Int]
@@ -62,6 +77,7 @@ final class AppDataStore: ObservableObject {
     @Published private(set) var adminReports: [ReportRecord] = []
     @Published private(set) var searchResults: [AppUser] = []
     @Published private(set) var topicSearchResults: [Post] = []
+    @Published private(set) var topicRoomSearchResults: [TopicRoom] = []
     @Published private(set) var postSearchResults: [Post] = []
     @Published private(set) var hasMoreTimelinePosts = true
     @Published private(set) var isLoadingTimelinePage = false
@@ -77,6 +93,8 @@ final class AppDataStore: ObservableObject {
     private let initialLikedPostIDs: Set<String>
     private let initialBookmarkedPostIDs: Set<String>
     private let initialMutedWords: [MutedWord]
+    private let initialTopicRooms: [TopicRoom]
+    private let initialFollowedTopicIDs: Set<String>
     private let initialFollowingUserIDs: Set<String>
     private let initialFollowerCountsByUserID: [String: Int]
     private let initialFollowingCountsByUserID: [String: Int]
@@ -124,6 +142,30 @@ final class AppDataStore: ObservableObject {
             }
             .sorted {
                 recommendationScore(for: $0) > recommendationScore(for: $1)
+            }
+    }
+
+    var followedTopicTimelinePosts: [Post] {
+        guard !followedTopicIDs.isEmpty else { return [] }
+        return timelinePosts.filter { post in
+            !Set(post.topics).intersection(followedTopicIDs).isEmpty
+        }
+    }
+
+    var discoverTopicRooms: [TopicRoom] {
+        topicRooms
+            .filter { $0.moderationStatus == .active }
+            .sorted { first, second in
+                if first.isOfficial != second.isOfficial {
+                    return first.isOfficial
+                }
+                if isFollowingTopic(first.topic) != isFollowingTopic(second.topic) {
+                    return isFollowingTopic(first.topic)
+                }
+                if first.postCount != second.postCount {
+                    return first.postCount > second.postCount
+                }
+                return first.topic.localizedCaseInsensitiveCompare(second.topic) == .orderedAscending
             }
     }
 
@@ -202,6 +244,8 @@ final class AppDataStore: ObservableObject {
         self.initialLikedPostIDs = seed.likedPostIDs
         self.initialBookmarkedPostIDs = seed.likedPostIDs
         self.initialMutedWords = []
+        self.initialTopicRooms = Self.topicRooms(from: seed.posts)
+        self.initialFollowedTopicIDs = Set(StarterPackCategory.allCases.prefix(2).map(\.topic))
         self.initialFollowingUserIDs = seed.followingUserIDs
         self.initialFollowerCountsByUserID = seed.followerCountsByUserID
         self.initialFollowingCountsByUserID = seed.followingCountsByUserID
@@ -216,6 +260,8 @@ final class AppDataStore: ObservableObject {
         self.blockedUserIDs = seed.blockedUserIDs
         self.mutedUserIDs = seed.mutedUserIDs
         self.mutedWords = []
+        self.topicRooms = initialTopicRooms
+        self.followedTopicIDs = initialFollowedTopicIDs
         self.followingUserIDs = seed.followingUserIDs
         self.followerCountsByUserID = seed.followerCountsByUserID
         self.followingCountsByUserID = seed.followingCountsByUserID
@@ -317,6 +363,7 @@ final class AppDataStore: ObservableObject {
     func insert(_ post: Post) {
         guard canCurrentUserCreateContent else { return }
         posts.insert(post, at: 0)
+        refreshLocalTopicRoomsFromPosts()
         runRemoteWrite {
             try await self.remoteStore.savePost(post)
         }
@@ -331,6 +378,7 @@ final class AppDataStore: ObservableObject {
         }
 
         posts[index] = posts[index].replacingBody(trimmedBody)
+        refreshLocalTopicRoomsFromPosts()
 
         guard !postID.hasPrefix("demo-") else { return }
         runRemoteWrite {
@@ -346,6 +394,7 @@ final class AppDataStore: ObservableObject {
         let deletedPost = posts[index]
         posts[index].isDeleted = true
         posts[index].updatedAt = Date()
+        refreshLocalTopicRoomsFromPosts()
         likedPostIDs.remove(postID)
         if let sourcePostID = deletedPost.sourcePostID {
             adjustShareCount(sourcePostID: sourcePostID, shareType: deletedPost.shareType, amount: -1)
@@ -402,6 +451,7 @@ final class AppDataStore: ObservableObject {
 
         posts.insert(repost, at: 0)
         adjustShareCount(sourcePostID: sourcePost.id, shareType: .repost, amount: 1)
+        refreshLocalTopicRoomsFromPosts()
 
         guard !sourcePost.id.hasPrefix("demo-") else { return }
         runRemoteWrite {
@@ -457,6 +507,7 @@ final class AppDataStore: ObservableObject {
 
         posts.insert(quote, at: 0)
         adjustShareCount(sourcePostID: sourcePost.id, shareType: .quote, amount: 1)
+        refreshLocalTopicRoomsFromPosts()
 
         guard !sourcePost.id.hasPrefix("demo-") else { return }
         runRemoteWrite {
@@ -704,6 +755,99 @@ final class AppDataStore: ObservableObject {
 
         runRemoteWrite {
             try await self.remoteStore.setMutedWord(mutedWord, isMuted: false)
+        }
+    }
+
+    func isFollowingTopic(_ topic: String) -> Bool {
+        guard let normalizedTopic = TopicExtractor.normalizedTopicQuery(from: topic) else { return false }
+        return followedTopicIDs.contains(normalizedTopic)
+    }
+
+    func toggleTopicFollow(topic: String) {
+        guard canCurrentUserCreateContent,
+              let normalizedTopic = TopicExtractor.normalizedTopicQuery(from: topic) else {
+            return
+        }
+
+        let isFollowing = followedTopicIDs.contains(normalizedTopic)
+        if isFollowing {
+            followedTopicIDs.remove(normalizedTopic)
+            adjustTopicFollowerCount(topic: normalizedTopic, amount: -1)
+        } else {
+            followedTopicIDs.insert(normalizedTopic)
+            ensureTopicRoomExists(topic: normalizedTopic)
+            adjustTopicFollowerCount(topic: normalizedTopic, amount: 1)
+        }
+
+        let userID = currentUser.id
+        runRemoteWrite {
+            try await self.remoteStore.setTopicFollow(
+                userID: userID,
+                topic: normalizedTopic,
+                isFollowing: !isFollowing
+            )
+        }
+    }
+
+    func topicRoom(for topic: String) -> TopicRoom {
+        let normalizedTopic = TopicExtractor.normalizedTopicQuery(from: topic) ?? topic
+        return topicRooms.first { $0.topic == normalizedTopic } ?? Self.defaultTopicRoom(topic: normalizedTopic)
+    }
+
+    func topicRoomPosts(for topic: String, sort: TopicRoomPostSort) -> [Post] {
+        guard let normalizedTopic = TopicExtractor.normalizedTopicQuery(from: topic) else { return [] }
+        let visiblePosts = posts.filter {
+            isVisiblePost($0)
+            && $0.topics.contains(normalizedTopic)
+            && !blockedUserIDs.contains($0.userId)
+            && !mutedUserIDs.contains($0.userId)
+            && !containsMutedWord($0)
+            && ($0.shareType == .original || sourcePost(for: $0) != nil)
+        }
+
+        switch sort {
+        case .latest:
+            return visiblePosts.sorted { $0.createdAt > $1.createdAt }
+        case .popular:
+            return visiblePosts.sorted {
+                let firstScore = recommendationScore(for: $0)
+                let secondScore = recommendationScore(for: $1)
+                if firstScore != secondScore {
+                    return firstScore > secondScore
+                }
+                return $0.createdAt > $1.createdAt
+            }
+        }
+    }
+
+    func searchTopicRooms(query: String) async {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            topicRoomSearchResults = []
+            return
+        }
+
+        let normalized = MutedWordNormalizer.normalize(trimmed.replacingOccurrences(of: "#", with: ""))
+        topicRoomSearchResults = discoverTopicRooms.filter { room in
+            MutedWordNormalizer.normalize([room.topic, room.title, room.description].joined(separator: " "))
+                .contains(normalized)
+        }
+    }
+
+    func loadTopicRoomPosts(topic: String) async {
+        guard isRemoteSyncEnabled,
+              let normalizedTopic = TopicExtractor.normalizedTopicQuery(from: topic) else {
+            return
+        }
+
+        do {
+            let page = try await remoteStore.loadTopicPosts(topic: normalizedTopic)
+            posts = uniquePosts(posts + page.posts)
+            users = mergeCurrentUser(into: uniqueUsers(users + page.users))
+            refreshLocalTopicRoomsFromPosts()
+            lastSyncErrorMessage = nil
+        } catch {
+            recordRemoteError(error)
         }
     }
 
@@ -1116,6 +1260,8 @@ final class AppDataStore: ObservableObject {
         blockedUserIDs = []
         mutedUserIDs = []
         mutedWords = initialMutedWords
+        topicRooms = initialTopicRooms
+        followedTopicIDs = initialFollowedTopicIDs
         followingUserIDs = initialFollowingUserIDs
         followerCountsByUserID = initialFollowerCountsByUserID
         followingCountsByUserID = initialFollowingCountsByUserID
@@ -1126,6 +1272,7 @@ final class AppDataStore: ObservableObject {
         adminReports = []
         searchResults = []
         topicSearchResults = []
+        topicRoomSearchResults = []
         postSearchResults = []
         hasMoreTimelinePosts = true
         isLoadingTimelinePage = false
@@ -1167,6 +1314,8 @@ final class AppDataStore: ObservableObject {
         blockedUserIDs.removeAll()
         mutedUserIDs.removeAll()
         mutedWords.removeAll()
+        topicRooms = initialTopicRooms
+        followedTopicIDs.removeAll()
         followingUserIDs.removeAll()
         followerCountsByUserID.removeAll()
         followingCountsByUserID.removeAll()
@@ -1176,6 +1325,7 @@ final class AppDataStore: ObservableObject {
         adminReports.removeAll()
         searchResults.removeAll()
         topicSearchResults.removeAll()
+        topicRoomSearchResults.removeAll()
         postSearchResults.removeAll()
         hasMoreTimelinePosts = false
         isLoadingTimelinePage = false
@@ -1210,6 +1360,8 @@ final class AppDataStore: ObservableObject {
             blockedUserIDs = []
             mutedUserIDs = []
             mutedWords = initialMutedWords
+            topicRooms = initialTopicRooms
+            followedTopicIDs = initialFollowedTopicIDs
             followingUserIDs = initialFollowingUserIDs
             followerCountsByUserID = initialFollowerCountsByUserID
             followingCountsByUserID = initialFollowingCountsByUserID
@@ -1220,6 +1372,7 @@ final class AppDataStore: ObservableObject {
             adminReports = []
             searchResults = []
             topicSearchResults = []
+            topicRoomSearchResults = []
             postSearchResults = []
             hasMoreTimelinePosts = true
             isLoadingTimelinePage = false
@@ -1257,6 +1410,8 @@ final class AppDataStore: ObservableObject {
         blockedUserIDs = snapshot.blockedUserIDs
         mutedUserIDs = snapshot.mutedUserIDs
         mutedWords = snapshot.mutedWords
+        topicRooms = Self.mergedTopicRooms(remoteRooms: snapshot.topicRooms, posts: snapshot.posts, followedTopicIDs: snapshot.followedTopicIDs)
+        followedTopicIDs = snapshot.followedTopicIDs
         followingUserIDs = snapshot.followingUserIDs
         followerCountsByUserID = snapshot.followerCountsByUserID
         followingCountsByUserID = snapshot.followingCountsByUserID
@@ -1301,6 +1456,7 @@ final class AppDataStore: ObservableObject {
         blockedUserIDs.subtract(demoUsers.map(\.id))
         mutedUserIDs.subtract(demoUsers.map(\.id))
         mergeDemoFollows(from: seed, activeCurrentUserID: activeCurrentUserID, seedCurrentUserID: seedCurrentUserID)
+        refreshLocalTopicRoomsFromPosts()
     }
 
     private func restoreCurrentUserAfterDemoData() {
@@ -1320,6 +1476,106 @@ final class AppDataStore: ObservableObject {
         blockedUserIDs.subtract(demoUserIDs)
         mutedUserIDs.subtract(demoUserIDs)
         removeFollows(involving: demoUserIDs)
+        refreshLocalTopicRoomsFromPosts()
+    }
+
+    private func ensureTopicRoomExists(topic: String) {
+        guard !topicRooms.contains(where: { $0.topic == topic }) else { return }
+        topicRooms.append(Self.defaultTopicRoom(topic: topic, postCount: 0, followerCount: followedTopicIDs.contains(topic) ? 1 : 0))
+        topicRooms = Self.mergedTopicRooms(remoteRooms: topicRooms, posts: posts, followedTopicIDs: followedTopicIDs)
+    }
+
+    private func refreshLocalTopicRoomsFromPosts() {
+        topicRooms = Self.mergedTopicRooms(remoteRooms: topicRooms, posts: posts, followedTopicIDs: followedTopicIDs)
+        refilterSearchResults()
+    }
+
+    private func adjustTopicFollowerCount(topic: String, amount: Int) {
+        ensureTopicRoomExists(topic: topic)
+        guard let index = topicRooms.firstIndex(where: { $0.topic == topic }) else { return }
+        topicRooms[index].followerCount = max(topicRooms[index].followerCount + amount, 0)
+        topicRooms[index].updatedAt = Date()
+    }
+
+    private static func mergedTopicRooms(
+        remoteRooms: [TopicRoom],
+        posts: [Post],
+        followedTopicIDs: Set<String>
+    ) -> [TopicRoom] {
+        let localRooms = topicRooms(from: posts, followedTopicIDs: followedTopicIDs)
+        var roomsByTopic = Dictionary(uniqueKeysWithValues: localRooms.map { ($0.topic, $0) })
+
+        for room in remoteRooms where room.moderationStatus == .active {
+            if var existing = roomsByTopic[room.topic] {
+                existing.title = room.title.isEmpty ? existing.title : room.title
+                existing.description = room.description.isEmpty ? existing.description : room.description
+                existing.postCount = max(existing.postCount, room.postCount)
+                existing.followerCount = max(existing.followerCount, room.followerCount)
+                existing.lastPostAt = [existing.lastPostAt, room.lastPostAt].compactMap { $0 }.max()
+                existing.isOfficial = existing.isOfficial || room.isOfficial
+                existing.updatedAt = max(existing.updatedAt, room.updatedAt)
+                roomsByTopic[room.topic] = existing
+            } else {
+                roomsByTopic[room.topic] = room
+            }
+        }
+
+        return roomsByTopic.values.sorted { first, second in
+            if first.isOfficial != second.isOfficial {
+                return first.isOfficial
+            }
+            if first.postCount != second.postCount {
+                return first.postCount > second.postCount
+            }
+            return first.topic.localizedCaseInsensitiveCompare(second.topic) == .orderedAscending
+        }
+    }
+
+    private static func topicRooms(from posts: [Post], followedTopicIDs: Set<String> = []) -> [TopicRoom] {
+        var counts: [String: Int] = [:]
+        var lastPostDates: [String: Date] = [:]
+
+        for post in posts where !post.isDeleted && post.moderationStatus == .active {
+            for topic in post.topics {
+                counts[topic, default: 0] += 1
+                lastPostDates[topic] = max(lastPostDates[topic] ?? Date.distantPast, post.createdAt)
+            }
+        }
+
+        var roomsByTopic = Dictionary(uniqueKeysWithValues: TopicRoom.officialRooms().map { ($0.topic, $0) })
+        for (topic, count) in counts {
+            var room = roomsByTopic[topic] ?? defaultTopicRoom(topic: topic)
+            room.postCount = count
+            room.lastPostAt = lastPostDates[topic]
+            room.updatedAt = lastPostDates[topic] ?? room.updatedAt
+            roomsByTopic[topic] = room
+        }
+
+        for topic in followedTopicIDs where roomsByTopic[topic] == nil {
+            roomsByTopic[topic] = defaultTopicRoom(topic: topic, followerCount: 1)
+        }
+
+        return Array(roomsByTopic.values)
+    }
+
+    private static func defaultTopicRoom(
+        topic: String,
+        postCount: Int = 0,
+        followerCount: Int = 0
+    ) -> TopicRoom {
+        let now = Date()
+        return TopicRoom(
+            topic: topic,
+            title: "#\(topic)",
+            description: "",
+            postCount: postCount,
+            followerCount: followerCount,
+            lastPostAt: nil,
+            createdAt: now,
+            updatedAt: now,
+            isOfficial: false,
+            moderationStatus: .active
+        )
     }
 
     private func sortedUsers(for userIDs: Set<String>) -> [AppUser] {
@@ -1521,6 +1777,12 @@ final class AppDataStore: ObservableObject {
 
     private func refilterSearchResults() {
         topicSearchResults = topicSearchResults.filter { !containsMutedWord($0) }
+        topicRoomSearchResults = topicRoomSearchResults.filter { room in
+            !mutedWords.contains { mutedWord in
+                MutedWordNormalizer.normalize([room.topic, room.title, room.description].joined(separator: " "))
+                    .contains(mutedWord.normalizedWord)
+            }
+        }
         postSearchResults = postSearchResults.filter { !containsMutedWord($0) }
     }
 

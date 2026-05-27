@@ -6,6 +6,30 @@
   "storage": {
     "rules": "storage.rules"
   },
+  "hosting": {
+    "public": "docs",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/p/**",
+        "function": {
+          "functionId": "publicPage",
+          "region": "asia-northeast1"
+        }
+      },
+      {
+        "source": "/t/**",
+        "function": {
+          "functionId": "publicPage",
+          "region": "asia-northeast1"
+        }
+      }
+    ]
+  },
   "functions": [
     {
       "source": "functions",

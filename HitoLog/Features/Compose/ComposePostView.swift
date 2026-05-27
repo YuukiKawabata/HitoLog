@@ -105,6 +105,8 @@ struct ComposePostView: View {
 
                     mediaAttachmentPanel
 
+                    topicRoomPreviewPanel
+
                     commentPermissionPanel
 
                     HumanCheckPanel(metrics: viewModel.metrics, statusText: viewModel.humanCheckText)
@@ -263,6 +265,35 @@ struct ComposePostView: View {
         }
         .padding(AppSpacing.md)
         .paperSurface()
+    }
+
+    @ViewBuilder
+    private var topicRoomPreviewPanel: some View {
+        let topics = TopicExtractor.topics(in: viewModel.text)
+        if !topics.isEmpty {
+            VStack(alignment: .leading, spacing: AppSpacing.md) {
+                SectionKicker(text: "Topic Rooms", systemImage: "number.square")
+
+                Text("本文のハッシュタグから、投稿先の小部屋が自動で決まります。")
+                    .font(.caption)
+                    .foregroundStyle(AppColor.textSecondary)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: AppSpacing.xs) {
+                        ForEach(topics, id: \.self) { topic in
+                            Label("#\(topic)", systemImage: "number")
+                                .font(.caption.weight(.semibold))
+                                .padding(.vertical, 7)
+                                .padding(.horizontal, AppSpacing.sm)
+                                .background(AppColor.accentSoft, in: Capsule())
+                                .foregroundStyle(AppColor.accent)
+                        }
+                    }
+                }
+            }
+            .padding(AppSpacing.md)
+            .paperSurface()
+        }
     }
 
     private var commentPermissionPanel: some View {

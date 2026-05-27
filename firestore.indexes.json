@@ -100,6 +100,22 @@
       ]
     },
     {
+      "collectionGroup": "topicRooms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "moderationStatus", "order": "ASCENDING" },
+        { "fieldPath": "lastPostAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "topicFollows",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userID", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "reports",
       "queryScope": "COLLECTION",
       "fields": [

@@ -13,6 +13,8 @@ struct RemoteDataSnapshot {
     var blockedUserIDs: Set<String>
     var mutedUserIDs: Set<String>
     var mutedWords: [MutedWord]
+    var topicRooms: [TopicRoom]
+    var followedTopicIDs: Set<String>
     var followingUserIDs: Set<String>
     var followerCountsByUserID: [String: Int]
     var followingCountsByUserID: [String: Int]
@@ -77,6 +79,16 @@ struct FirebaseDataStore {
             .order(by: "createdAt", descending: true)
             .limit(to: 200)
             .getDocuments()
+        async let topicRoomsSnapshot = db.collection("topicRooms")
+            .whereField("moderationStatus", isEqualTo: ModerationStatus.active.rawValue)
+            .order(by: "lastPostAt", descending: true)
+            .limit(to: 100)
+            .getDocuments()
+        async let topicFollowsSnapshot = db.collection("topicFollows")
+            .whereField("userID", isEqualTo: currentUserID)
+            .order(by: "createdAt", descending: true)
+            .limit(to: 200)
+            .getDocuments()
         async let followingSnapshot = db.collection("follows")
             .whereField("followerID", isEqualTo: currentUserID)
             .getDocuments()
@@ -101,6 +113,8 @@ struct FirebaseDataStore {
         let blocksResult = try await blocksSnapshot
         let mutesResult = try await mutesSnapshot
         let mutedWordsResult = try await mutedWordsSnapshot
+        let topicRoomsResult = try await topicRoomsSnapshot
+        let topicFollowsResult = try await topicFollowsSnapshot
         let followingResult = try await followingSnapshot
         let followersResult = try await followersSnapshot
         let reportsResult = try await reportsSnapshot
@@ -119,6 +133,8 @@ struct FirebaseDataStore {
         let blockedUserIDs = Set(blocksResult.documents.compactMap { $0.data()["blockedUserID"] as? String })
         let mutedUserIDs = Set(mutesResult.documents.compactMap { $0.data()["mutedUserID"] as? String })
         let mutedWords = mutedWordsResult.documents.compactMap(mapMutedWord)
+        let topicRooms = topicRoomsResult.documents.compactMap(mapTopicRoom)
+        let followedTopicIDs = Set(topicFollowsResult.documents.compactMap { $0.data()["topic"] as? String })
         let followRecords = (followingResult.documents + followersResult.documents).compactMap(mapFollow).filter {
             activeUserIDs.contains($0.followerID) && activeUserIDs.contains($0.followeeID)
         }
@@ -138,6 +154,8 @@ struct FirebaseDataStore {
             blockedUserIDs: blockedUserIDs,
             mutedUserIDs: mutedUserIDs,
             mutedWords: mutedWords,
+            topicRooms: topicRooms,
+            followedTopicIDs: followedTopicIDs,
             followingUserIDs: followState.followingUserIDs,
             followerCountsByUserID: followState.followerCountsByUserID,
             followingCountsByUserID: followState.followingCountsByUserID,
@@ -158,6 +176,8 @@ struct FirebaseDataStore {
             blockedUserIDs: [],
             mutedUserIDs: [],
             mutedWords: [],
+            topicRooms: [],
+            followedTopicIDs: [],
             followingUserIDs: [],
             followerCountsByUserID: [:],
             followingCountsByUserID: [:],
@@ -570,6 +590,24 @@ struct FirebaseDataStore {
         #endif
     }
 
+    func setTopicFollow(userID: String, topic: String, isFollowing: Bool) async throws {
+        #if canImport(FirebaseFirestore)
+        let normalizedTopic = TopicExtractor.normalizedTopicQuery(from: topic) ?? topic
+        guard !normalizedTopic.isEmpty else { return }
+
+        let ref = Firestore.firestore().collection("topicFollows").document("\(userID)_\(normalizedTopic)")
+        if isFollowing {
+            try await ref.setData([
+                "userID": userID,
+                "topic": normalizedTopic,
+                "createdAt": FieldValue.serverTimestamp()
+            ], merge: true)
+        } else {
+            try await ref.delete()
+        }
+        #endif
+    }
+
     func setFollow(followerID: String, followeeID: String, isFollowing: Bool) async throws {
         #if canImport(FirebaseFirestore)
         guard followerID != followeeID else { return }
@@ -775,6 +813,13 @@ struct FirebaseDataStore {
             try await document.reference.delete()
         }
 
+        let topicFollows = try await db.collection("topicFollows")
+            .whereField("userID", isEqualTo: userID)
+            .getDocuments()
+        for document in topicFollows.documents {
+            try await document.reference.delete()
+        }
+
         let following = try await db.collection("follows")
             .whereField("followerID", isEqualTo: userID)
             .getDocuments()
@@ -969,6 +1014,25 @@ private extension FirebaseDataStore {
             word: word,
             normalizedWord: normalizedWord,
             createdAt: dateValue(data["createdAt"], fallback: Date())
+        )
+    }
+
+    func mapTopicRoom(_ document: QueryDocumentSnapshot) -> TopicRoom? {
+        let data = document.data()
+        let topic = stringValue(data["topic"], fallback: document.documentID)
+        guard !topic.isEmpty else { return nil }
+
+        return TopicRoom(
+            topic: topic,
+            title: stringValue(data["title"], fallback: "#\(topic)"),
+            description: stringValue(data["description"], fallback: ""),
+            postCount: intValue(data["postCount"], fallback: 0),
+            followerCount: intValue(data["followerCount"], fallback: 0),
+            lastPostAt: optionalDateValue(data["lastPostAt"]),
+            createdAt: dateValue(data["createdAt"], fallback: Date()),
+            updatedAt: dateValue(data["updatedAt"], fallback: Date()),
+            isOfficial: boolValue(data["isOfficial"], fallback: false),
+            moderationStatus: ModerationStatus(rawValue: stringValue(data["moderationStatus"], fallback: ModerationStatus.active.rawValue)) ?? .active
         )
     }
 

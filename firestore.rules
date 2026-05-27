@@ -53,6 +53,39 @@ service cloud.firestore {
         && data.commentPermission in ['everyone', 'following', 'closed'];
     }
 
+    function validTopicValue(topic) {
+      return topic is string
+        && topic.size() > 0
+        && topic.size() <= 32;
+    }
+
+    function validTopicRoom(data) {
+      return data.keys().hasOnly([
+          'topic',
+          'title',
+          'description',
+          'postCount',
+          'followerCount',
+          'lastPostAt',
+          'createdAt',
+          'updatedAt',
+          'isOfficial',
+          'moderationStatus'
+        ])
+        && validTopicValue(data.topic)
+        && data.title is string
+        && data.title.size() > 0
+        && data.title.size() <= 60
+        && data.description is string
+        && data.description.size() <= 240
+        && data.postCount is int
+        && data.postCount >= 0
+        && data.followerCount is int
+        && data.followerCount >= 0
+        && data.isOfficial is bool
+        && data.moderationStatus in ['active', 'reviewRequired', 'hidden'];
+    }
+
     function validPostShare(data) {
       return data.keys().hasAll(['shareType'])
         && data.shareType in ['original', 'repost', 'quote']
@@ -326,6 +359,27 @@ service cloud.firestore {
         && request.resource.data.normalizedWord is string
         && request.resource.data.normalizedWord.size() > 0
         && wordID.size() > request.resource.data.userID.size() + 1;
+      allow delete: if isOwner(resource.data.userID);
+      allow update: if false;
+    }
+
+    match /topicRooms/{topicID} {
+      allow read: if signedIn();
+      allow create: if isAdmin()
+        && topicID == request.resource.data.topic
+        && validTopicRoom(request.resource.data);
+      allow update: if isAdmin()
+        && topicID == resource.data.topic
+        && validTopicRoom(request.resource.data);
+      allow delete: if false;
+    }
+
+    match /topicFollows/{followID} {
+      allow read: if isOwner(resource.data.userID);
+      allow create: if isOwner(request.resource.data.userID)
+        && request.resource.data.keys().hasOnly(['userID', 'topic', 'createdAt'])
+        && validTopicValue(request.resource.data.topic)
+        && followID == request.resource.data.userID + '_' + request.resource.data.topic;
       allow delete: if isOwner(resource.data.userID);
       allow update: if false;
     }

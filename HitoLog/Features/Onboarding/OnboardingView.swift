@@ -1,8 +1,10 @@
 import SwiftUI
 
 struct OnboardingView: View {
+    @EnvironmentObject private var store: AppDataStore
     let onFinish: () -> Void
     @State private var selection = 0
+    @State private var selectedTopics = Set(StarterPackCategory.allCases.map(\.topic).prefix(2))
 
     init(onFinish: @escaping () -> Void = {}) {
         self.onFinish = onFinish
@@ -37,11 +39,14 @@ struct OnboardingView: View {
                     detail: "点数で人を評価するのではなく、読む人に小さな信頼感を渡します。"
                 )
                 .tag(2)
+
+                OnboardingTopicPage(selectedTopics: $selectedTopics)
+                    .tag(3)
             }
             .tabViewStyle(.page(indexDisplayMode: .always))
 
             Button(action: next) {
-                Label(selection == 2 ? "はじめる" : "次へ", systemImage: selection == 2 ? "arrow.right.circle.fill" : "arrow.right")
+                Label(selection == 3 ? "はじめる" : "次へ", systemImage: selection == 3 ? "arrow.right.circle.fill" : "arrow.right")
             }
             .buttonStyle(PrimaryButtonStyle())
             .padding(.horizontal, AppSpacing.lg)
@@ -53,11 +58,16 @@ struct OnboardingView: View {
     }
 
     private func next() {
-        if selection < 2 {
+        if selection < 3 {
             withAnimation(.snappy) {
                 selection += 1
             }
         } else {
+            for topic in selectedTopics {
+                if !store.isFollowingTopic(topic) {
+                    store.toggleTopicFollow(topic: topic)
+                }
+            }
             onFinish()
         }
     }
@@ -103,6 +113,73 @@ private struct OnboardingPage: View {
                     .font(.subheadline)
                     .foregroundStyle(AppColor.textSecondary)
                     .multilineTextAlignment(.center)
+
+                InkDivider()
+            }
+            .padding(.horizontal, AppSpacing.lg)
+
+            Spacer()
+        }
+        .padding(AppSpacing.lg)
+        .paperSurface()
+        .padding(AppSpacing.lg)
+    }
+}
+
+private struct OnboardingTopicPage: View {
+    @Binding var selectedTopics: Set<String>
+
+    var body: some View {
+        VStack(spacing: AppSpacing.lg) {
+            Spacer()
+
+            Image(systemName: "number.square.fill")
+                .font(.system(size: 42, weight: .regular))
+                .foregroundStyle(AppColor.accent)
+                .frame(width: 88, height: 88)
+                .background(AppColor.accentSoft, in: RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
+                        .stroke(AppColor.border, lineWidth: 0.7)
+                }
+
+            VStack(spacing: AppSpacing.md) {
+                SectionKicker(text: "Topic Rooms", systemImage: "person.3")
+
+                Text("興味の小部屋を選ぶ")
+                    .font(AppFont.title)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(AppColor.textPrimary)
+                Text("フォローした小部屋の投稿は、ホームのルームフィードに集まります。")
+                    .font(.body)
+                    .foregroundStyle(AppColor.textPrimary)
+                    .multilineTextAlignment(.center)
+
+                VStack(spacing: AppSpacing.sm) {
+                    ForEach(StarterPackCategory.allCases) { category in
+                        Button {
+                            if selectedTopics.contains(category.topic) {
+                                selectedTopics.remove(category.topic)
+                            } else {
+                                selectedTopics.insert(category.topic)
+                            }
+                        } label: {
+                            HStack(spacing: AppSpacing.sm) {
+                                Image(systemName: category.systemImage)
+                                    .frame(width: 24)
+                                Text(category.title)
+                                    .font(.subheadline.weight(.semibold))
+                                Spacer()
+                                Image(systemName: selectedTopics.contains(category.topic) ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(selectedTopics.contains(category.topic) ? AppColor.accent : AppColor.textSecondary)
+                            }
+                            .foregroundStyle(AppColor.textPrimary)
+                            .padding(AppSpacing.sm)
+                            .background(AppColor.surface, in: RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
 
                 InkDivider()
             }
