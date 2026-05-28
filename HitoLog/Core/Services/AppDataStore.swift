@@ -54,6 +54,17 @@ enum StarterPackCategory: String, CaseIterable, Identifiable {
     }
 }
 
+enum AppFeedbackError: LocalizedError {
+    case invalidMessage
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidMessage:
+            return "フィードバックは5文字以上、\(AppConstants.maxFeedbackLength)文字以内で入力してください。"
+        }
+    }
+}
+
 @MainActor
 final class AppDataStore: ObservableObject {
     @Published private(set) var currentUser: AppUser
@@ -73,6 +84,7 @@ final class AppDataStore: ObservableObject {
     @Published private(set) var followersByUserID: [String: Set<String>]
     @Published private(set) var followingByUserID: [String: Set<String>]
     @Published private(set) var reportHistory: [ReportRecord]
+    @Published private(set) var feedbackHistory: [AppFeedback] = []
     @Published private(set) var notifications: [AppNotification] = []
     @Published private(set) var adminReports: [ReportRecord] = []
     @Published private(set) var searchResults: [AppUser] = []
@@ -364,6 +376,19 @@ final class AppDataStore: ObservableObject {
         guard canCurrentUserCreateContent else { return }
         posts.insert(post, at: 0)
         refreshLocalTopicRoomsFromPosts()
+        AnalyticsService.shared.capture("post_created", properties: [
+            "post_id": post.id,
+            "topic_count": post.topics.count,
+            "media_count": post.mediaItems.count,
+            "share_type": post.shareType.rawValue,
+            "comment_permission": post.commentPermission.rawValue,
+            "human_score": post.humanScore,
+            "human_badge": post.humanBadge.rawValue,
+            "input_duration_ms": post.inputDurationMs,
+            "character_count": post.characterCount,
+            "remote_sync_enabled": isRemoteSyncEnabled
+        ])
+        AppReviewService.shared.recordPositiveMoment(.postCreated)
         runRemoteWrite {
             try await self.remoteStore.savePost(post)
         }
@@ -379,6 +404,10 @@ final class AppDataStore: ObservableObject {
 
         posts[index] = posts[index].replacingBody(trimmedBody)
         refreshLocalTopicRoomsFromPosts()
+        AnalyticsService.shared.capture("post_edited", properties: [
+            "post_id": postID,
+            "character_count": trimmedBody.count
+        ])
 
         guard !postID.hasPrefix("demo-") else { return }
         runRemoteWrite {
@@ -399,6 +428,10 @@ final class AppDataStore: ObservableObject {
         if let sourcePostID = deletedPost.sourcePostID {
             adjustShareCount(sourcePostID: sourcePostID, shareType: deletedPost.shareType, amount: -1)
         }
+        AnalyticsService.shared.capture("post_deleted", properties: [
+            "post_id": postID,
+            "share_type": deletedPost.shareType.rawValue
+        ])
 
         guard !postID.hasPrefix("demo-") else { return }
         runRemoteWrite {
@@ -452,6 +485,10 @@ final class AppDataStore: ObservableObject {
         posts.insert(repost, at: 0)
         adjustShareCount(sourcePostID: sourcePost.id, shareType: .repost, amount: 1)
         refreshLocalTopicRoomsFromPosts()
+        AnalyticsService.shared.capture("post_reposted", properties: [
+            "post_id": sourcePost.id,
+            "author_id": sourcePost.userId
+        ])
 
         guard !sourcePost.id.hasPrefix("demo-") else { return }
         runRemoteWrite {
@@ -508,6 +545,13 @@ final class AppDataStore: ObservableObject {
         posts.insert(quote, at: 0)
         adjustShareCount(sourcePostID: sourcePost.id, shareType: .quote, amount: 1)
         refreshLocalTopicRoomsFromPosts()
+        AnalyticsService.shared.capture("post_quoted", properties: [
+            "post_id": sourcePost.id,
+            "quote_id": quote.id,
+            "author_id": sourcePost.userId,
+            "character_count": trimmedBody.count,
+            "human_score": score
+        ])
 
         guard !sourcePost.id.hasPrefix("demo-") else { return }
         runRemoteWrite {
@@ -554,6 +598,13 @@ final class AppDataStore: ObservableObject {
             posts[index].likeCount += 1
             isLiked = true
         }
+        AnalyticsService.shared.capture(isLiked ? "post_liked" : "post_unliked", properties: [
+            "post_id": postID,
+            "author_id": posts[index].userId
+        ])
+        if isLiked {
+            AppReviewService.shared.recordPositiveMoment(.postLiked)
+        }
 
         guard !postID.hasPrefix("demo-") else { return }
         let userID = currentUser.id
@@ -579,6 +630,12 @@ final class AppDataStore: ObservableObject {
         } else {
             bookmarkedPostIDs.insert(postID)
             isBookmarked = true
+        }
+        AnalyticsService.shared.capture(isBookmarked ? "post_bookmarked" : "post_unbookmarked", properties: [
+            "post_id": postID
+        ])
+        if isBookmarked {
+            AppReviewService.shared.recordPositiveMoment(.postBookmarked)
         }
 
         guard !postID.hasPrefix("demo-") else { return }
@@ -622,6 +679,12 @@ final class AppDataStore: ObservableObject {
         if let index = posts.firstIndex(where: { $0.id == postID }) {
             posts[index].commentCount += 1
         }
+        AnalyticsService.shared.capture("comment_created", properties: [
+            "post_id": postID,
+            "comment_id": comment.id,
+            "character_count": trimmedBody.count
+        ])
+        AppReviewService.shared.recordPositiveMoment(.commentCreated)
 
         guard !postID.hasPrefix("demo-") else { return }
         runRemoteWrite {
@@ -638,6 +701,10 @@ final class AppDataStore: ObservableObject {
         comments[index].isDeleted = true
         comments[index].updatedAt = Date()
         adjustCommentCount(postID: postID, amount: -1)
+        AnalyticsService.shared.capture("comment_deleted", properties: [
+            "post_id": postID,
+            "comment_id": commentID
+        ])
 
         guard !commentID.hasPrefix("demo-") else { return }
         runRemoteWrite {
@@ -658,6 +725,10 @@ final class AppDataStore: ObservableObject {
         comments[index].hiddenAt = Date()
         comments[index].updatedAt = Date()
         adjustCommentCount(postID: postID, amount: -1)
+        AnalyticsService.shared.capture("comment_hidden", properties: [
+            "post_id": postID,
+            "comment_id": commentID
+        ])
 
         guard !commentID.hasPrefix("demo-") else { return }
         runRemoteWrite {
@@ -704,6 +775,12 @@ final class AppDataStore: ObservableObject {
         } else {
             addFollowLocally(followerID: currentUser.id, followeeID: userID)
         }
+        AnalyticsService.shared.capture(isFollowing ? "user_unfollowed" : "user_followed", properties: [
+            "target_user_id": userID
+        ])
+        if !isFollowing {
+            AppReviewService.shared.recordPositiveMoment(.userFollowed)
+        }
 
         guard !shouldSkipRemoteFollowWrite(for: userID) else { return }
         let currentUserID = currentUser.id
@@ -743,6 +820,9 @@ final class AppDataStore: ObservableObject {
         )
         mutedWords.insert(mutedWord, at: 0)
         refilterSearchResults()
+        AnalyticsService.shared.capture("muted_word_added", properties: [
+            "word_length": word.count
+        ])
 
         runRemoteWrite {
             try await self.remoteStore.setMutedWord(mutedWord, isMuted: true)
@@ -752,6 +832,7 @@ final class AppDataStore: ObservableObject {
     func removeMutedWord(_ mutedWord: MutedWord) {
         mutedWords.removeAll { $0.id == mutedWord.id }
         refilterSearchResults()
+        AnalyticsService.shared.capture("muted_word_removed")
 
         runRemoteWrite {
             try await self.remoteStore.setMutedWord(mutedWord, isMuted: false)
@@ -778,6 +859,9 @@ final class AppDataStore: ObservableObject {
             ensureTopicRoomExists(topic: normalizedTopic)
             adjustTopicFollowerCount(topic: normalizedTopic, amount: 1)
         }
+        AnalyticsService.shared.capture(isFollowing ? "topic_unfollowed" : "topic_followed", properties: [
+            "topic": normalizedTopic
+        ])
 
         let userID = currentUser.id
         runRemoteWrite {
@@ -886,6 +970,10 @@ final class AppDataStore: ObservableObject {
         if wasFollowing {
             removeFollowLocally(followerID: currentUser.id, followeeID: userID)
         }
+        AnalyticsService.shared.capture("user_blocked", properties: [
+            "target_user_id": userID,
+            "was_following": wasFollowing
+        ])
 
         let currentUserID = currentUser.id
         runRemoteWrite {
@@ -899,6 +987,9 @@ final class AppDataStore: ObservableObject {
 
     func unblock(_ userID: String) {
         blockedUserIDs.remove(userID)
+        AnalyticsService.shared.capture("user_unblocked", properties: [
+            "target_user_id": userID
+        ])
 
         let currentUserID = currentUser.id
         runRemoteWrite {
@@ -909,6 +1000,9 @@ final class AppDataStore: ObservableObject {
     func mute(_ userID: String) {
         guard userID != currentUser.id else { return }
         mutedUserIDs.insert(userID)
+        AnalyticsService.shared.capture("user_muted", properties: [
+            "target_user_id": userID
+        ])
 
         let currentUserID = currentUser.id
         runRemoteWrite {
@@ -918,6 +1012,9 @@ final class AppDataStore: ObservableObject {
 
     func unmute(_ userID: String) {
         mutedUserIDs.remove(userID)
+        AnalyticsService.shared.capture("user_unmuted", properties: [
+            "target_user_id": userID
+        ])
 
         let currentUserID = currentUser.id
         runRemoteWrite {
@@ -952,6 +1049,56 @@ final class AppDataStore: ObservableObject {
         let reporterID = currentUser.id
         runRemoteWrite {
             try await self.remoteStore.addReport(report, reporterID: reporterID)
+        }
+        AnalyticsService.shared.capture("report_submitted", properties: [
+            "target_type": targetType.rawValue,
+            "target_id": targetID ?? "",
+            "has_target_owner": targetOwnerID != nil
+        ])
+    }
+
+    func submitFeedback(category: AppFeedbackCategory, message: String, allowsContact: Bool, contactEmail: String?) async throws {
+        let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedMessage.count >= 5, trimmedMessage.count <= AppConstants.maxFeedbackLength else {
+            throw AppFeedbackError.invalidMessage
+        }
+
+        let feedbackUserID = isRemoteSyncEnabled ? (remoteUserID ?? currentUser.id) : currentUser.id
+        let normalizedContactEmail = allowsContact ? contactEmail?.trimmingCharacters(in: .whitespacesAndNewlines) : nil
+        let feedback = AppFeedback(
+            id: UUID().uuidString,
+            userID: feedbackUserID,
+            category: category,
+            message: trimmedMessage,
+            contactEmail: normalizedContactEmail,
+            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown",
+            buildNumber: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown",
+            platform: "ios",
+            createdAt: Date()
+        )
+        feedbackHistory.insert(feedback, at: 0)
+        AnalyticsService.shared.capture("feedback_submitted", properties: [
+            "category": category.rawValue,
+            "message_length": trimmedMessage.count,
+            "allows_contact": allowsContact,
+            "remote_sync_enabled": isRemoteSyncEnabled
+        ])
+
+        guard isRemoteSyncEnabled else { return }
+
+        do {
+            try await remoteStore.upsertUser(currentUser, email: normalizedContactEmail)
+        } catch {
+            recordRemoteError(error)
+        }
+
+        do {
+            try await remoteStore.addFeedback(feedback)
+            lastSyncErrorMessage = nil
+        } catch {
+            feedbackHistory.removeAll { $0.id == feedback.id }
+            recordRemoteError(error)
+            throw error
         }
     }
 
@@ -1268,6 +1415,7 @@ final class AppDataStore: ObservableObject {
         followersByUserID = initialFollowersByUserID
         followingByUserID = initialFollowingByUserID
         reportHistory = []
+        feedbackHistory = []
         notifications = []
         adminReports = []
         searchResults = []
@@ -1323,6 +1471,7 @@ final class AppDataStore: ObservableObject {
         followingByUserID.removeAll()
         notifications.removeAll()
         adminReports.removeAll()
+        feedbackHistory.removeAll()
         searchResults.removeAll()
         topicSearchResults.removeAll()
         topicRoomSearchResults.removeAll()
@@ -1368,6 +1517,7 @@ final class AppDataStore: ObservableObject {
             followersByUserID = initialFollowersByUserID
             followingByUserID = initialFollowingByUserID
             reportHistory = []
+            feedbackHistory = []
             notifications = []
             adminReports = []
             searchResults = []

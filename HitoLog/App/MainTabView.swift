@@ -2,18 +2,21 @@ import SwiftUI
 
 struct MainTabView: View {
     @EnvironmentObject private var store: AppDataStore
+    @EnvironmentObject private var analytics: AnalyticsService
+    @State private var selectedTab: MainTab = .home
     @State private var isShowingCompose = false
     @State private var isShowingPostToast = false
     @State private var celebrationToken = 0
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             NavigationStack {
                 TimelineView()
             }
             .tabItem {
                 Label("ホーム", systemImage: "house")
             }
+            .tag(MainTab.home)
 
             NavigationStack {
                 UserSearchView()
@@ -21,6 +24,7 @@ struct MainTabView: View {
             .tabItem {
                 Label("検索", systemImage: "magnifyingglass")
             }
+            .tag(MainTab.search)
 
             NavigationStack {
                 NotificationsView()
@@ -29,6 +33,7 @@ struct MainTabView: View {
                 Label("通知", systemImage: "bell")
             }
             .badge(store.unreadNotificationCount)
+            .tag(MainTab.notifications)
 
             NavigationStack {
                 ComposeEntryView {
@@ -38,6 +43,7 @@ struct MainTabView: View {
             .tabItem {
                 Label("投稿", systemImage: "square.and.pencil")
             }
+            .tag(MainTab.compose)
 
             NavigationStack {
                 ProfileView()
@@ -45,6 +51,7 @@ struct MainTabView: View {
             .tabItem {
                 Label("プロフィール", systemImage: "person.crop.circle")
             }
+            .tag(MainTab.profile)
         }
         .tint(AppColor.accent)
         .sheet(isPresented: $isShowingCompose) {
@@ -67,6 +74,12 @@ struct MainTabView: View {
             }
         }
         .animation(.snappy, value: isShowingPostToast)
+        .onAppear {
+            analytics.screen(selectedTab.analyticsName)
+        }
+        .onChange(of: selectedTab) { _, tab in
+            analytics.screen(tab.analyticsName)
+        }
     }
 
     private func showPostToast() {
@@ -80,6 +93,29 @@ struct MainTabView: View {
                     isShowingPostToast = false
                 }
             }
+        }
+    }
+}
+
+private enum MainTab: String {
+    case home
+    case search
+    case notifications
+    case compose
+    case profile
+
+    var analyticsName: String {
+        switch self {
+        case .home:
+            return "timeline"
+        case .search:
+            return "search"
+        case .notifications:
+            return "notifications"
+        case .compose:
+            return "compose_entry"
+        case .profile:
+            return "profile"
         }
     }
 }

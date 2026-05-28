@@ -3,6 +3,7 @@ import SwiftUI
 struct PostDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: AppDataStore
+    @EnvironmentObject private var analytics: AnalyticsService
     let postID: String
     @State private var commentText = ""
     @State private var didSendComment = false
@@ -279,6 +280,9 @@ struct PostDetailView: View {
         .navigationTitle("投稿")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: postID) {
+            analytics.screen("post_detail", properties: [
+                "post_id": postID
+            ])
             await store.loadComments(for: postID)
         }
         .sheet(item: $editingPost) { post in

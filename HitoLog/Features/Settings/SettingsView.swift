@@ -6,6 +6,7 @@ struct SettingsView: View {
     @EnvironmentObject private var store: AppDataStore
     @EnvironmentObject private var authSession: AuthSessionStore
     @EnvironmentObject private var pushService: PushNotificationService
+    @EnvironmentObject private var analytics: AnalyticsService
     @AppStorage("hasCompletedInitialExperience") private var hasCompletedInitialExperience = true
     @State private var isShowingLogoutConfirmation = false
     @State private var isShowingDeleteConfirmation = false
@@ -59,6 +60,45 @@ struct SettingsView: View {
                         .font(.footnote)
                         .foregroundStyle(AppColor.textSecondary)
                 }
+            }
+
+            Section("サポート") {
+                NavigationLink {
+                    FeedbackView()
+                } label: {
+                    Label("フィードバックを送る", systemImage: "bubble.left.and.bubble.right")
+                }
+
+                Button {
+                    analytics.capture("app_review_requested", properties: [
+                        "entry_point": "settings"
+                    ])
+                    AppReviewService.requestReview()
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                } label: {
+                    Label("アプリをレビュー", systemImage: "star.bubble")
+                }
+            }
+
+            Section("プライバシー") {
+                Toggle(isOn: Binding(
+                    get: { analytics.isEnabled },
+                    set: { analytics.setEnabled($0) }
+                )) {
+                    Label("利用状況の分析", systemImage: "chart.line.uptrend.xyaxis")
+                }
+
+                Text("画面表示や操作イベントをPostHogに送信し、改善に利用します。投稿本文やフィードバック本文は分析イベントに含めません。")
+                    .font(.footnote)
+                    .foregroundStyle(AppColor.textSecondary)
+
+                #if DEBUG
+                if !analytics.isConfigured {
+                    Text("PostHogProjectTokenが未設定のため、現在は分析イベントを送信しません。")
+                        .font(.footnote)
+                        .foregroundStyle(AppColor.textSecondary)
+                }
+                #endif
             }
 
             Section("安全") {
@@ -198,8 +238,151 @@ struct SettingsView: View {
             Text(accountDeleteErrorMessage ?? "")
         }
         .task {
+            analytics.screen("settings")
             await pushService.refreshAuthorizationStatus()
         }
+    }
+}
+
+private struct FeedbackView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var store: AppDataStore
+    @EnvironmentObject private var authSession: AuthSessionStore
+    @EnvironmentObject private var analytics: AnalyticsService
+    @State private var category: AppFeedbackCategory = .usability
+    @State private var message = ""
+    @State private var allowsContact = false
+    @State private var isSubmitting = false
+    @State private var didSubmit = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        Form {
+            Section("種類") {
+                Picker("種類", selection: $category) {
+                    ForEach(AppFeedbackCategory.allCases) { category in
+                        Label(category.title, systemImage: category.systemImage).tag(category)
+                    }
+                }
+            }
+
+            Section("内容") {
+                TextField("気づいたことを入力", text: $message, axis: .vertical)
+                    .lineLimit(6...12)
+
+                HStack {
+                    Text("\(message.count)/\(AppConstants.maxFeedbackLength)")
+                    Spacer()
+                    if !canSubmitMessage {
+                        Text("5文字以上で入力してください")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(canSubmitMessage || message.isEmpty ? AppColor.textSecondary : AppColor.warning)
+            }
+
+            Section("返信") {
+                Toggle(isOn: $allowsContact) {
+                    Label("メールで返信を受け取る", systemImage: "envelope")
+                }
+                .disabled(authSession.email == nil)
+
+                if allowsContact, let email = authSession.email {
+                    Text(email)
+                        .font(.footnote)
+                        .foregroundStyle(AppColor.textSecondary)
+                } else if authSession.email == nil {
+                    Text("返信を希望する場合は、メールアドレスを取得できるサインイン状態で送信してください。")
+                        .font(.footnote)
+                        .foregroundStyle(AppColor.textSecondary)
+                }
+            }
+
+            Section {
+                Button {
+                    Task {
+                        await submit()
+                    }
+                } label: {
+                    if isSubmitting {
+                        HStack(spacing: AppSpacing.sm) {
+                            ProgressView()
+                            Text("送信中")
+                        }
+                    } else {
+                        Label("送信", systemImage: "paperplane.fill")
+                    }
+                }
+                .disabled(!canSubmit)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(PaperCanvas())
+        .navigationTitle("フィードバック")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            analytics.screen("feedback")
+        }
+        .alert("送信しました", isPresented: $didSubmit) {
+            Button("OK") {
+                dismiss()
+            }
+        } message: {
+            Text("フィードバックを受け付けました。")
+        }
+        .alert("送信できません", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    errorMessage = nil
+                }
+            }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "通信状態を確認して、もう一度お試しください。")
+        }
+    }
+
+    private var trimmedMessage: String {
+        message.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canSubmitMessage: Bool {
+        trimmedMessage.count >= 5 && trimmedMessage.count <= AppConstants.maxFeedbackLength
+    }
+
+    private var canSubmit: Bool {
+        canSubmitMessage && !isSubmitting
+    }
+
+    private func submit() async {
+        guard canSubmit else { return }
+
+        isSubmitting = true
+        defer { isSubmitting = false }
+
+        do {
+            try await store.submitFeedback(
+                category: category,
+                message: message,
+                allowsContact: allowsContact,
+                contactEmail: authSession.email
+            )
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            didSubmit = true
+        } catch {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            errorMessage = feedbackErrorMessage(for: error)
+        }
+    }
+
+    private func feedbackErrorMessage(for error: Error) -> String {
+        let message = error.localizedDescription
+        if message.localizedCaseInsensitiveContains("permission") {
+            return "送信権限を確認できませんでした。アカウント状態を同期してから、もう一度お試しください。"
+        }
+        return message
     }
 }
 

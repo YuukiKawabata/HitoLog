@@ -643,6 +643,29 @@ struct FirebaseDataStore {
         #endif
     }
 
+    func addFeedback(_ feedback: AppFeedback) async throws {
+        #if canImport(FirebaseFirestore)
+        var data: [String: Any] = [
+            "userID": feedback.userID,
+            "category": feedback.category.rawValue,
+            "message": feedback.message,
+            "appVersion": feedback.appVersion,
+            "buildNumber": feedback.buildNumber,
+            "platform": feedback.platform,
+            "status": feedback.status,
+            "createdAt": Timestamp(date: feedback.createdAt)
+        ]
+        if let contactEmail = feedback.contactEmail, !contactEmail.isEmpty {
+            data["contactEmail"] = contactEmail
+        }
+
+        try await Firestore.firestore()
+            .collection("feedback")
+            .document(feedback.id)
+            .setData(data, merge: true)
+        #endif
+    }
+
     func saveFCMToken(userID: String, token: String, isEnabled: Bool) async throws {
         #if canImport(FirebaseFirestore)
         let tokenID = token.stableFirestoreID
@@ -810,6 +833,13 @@ struct FirebaseDataStore {
             .whereField("userID", isEqualTo: userID)
             .getDocuments()
         for document in mutedWords.documents {
+            try await document.reference.delete()
+        }
+
+        let feedback = try await db.collection("feedback")
+            .whereField("userID", isEqualTo: userID)
+            .getDocuments()
+        for document in feedback.documents {
             try await document.reference.delete()
         }
 

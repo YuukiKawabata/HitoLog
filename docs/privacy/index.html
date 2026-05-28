@@ -30,17 +30,19 @@
         <li>投稿、コメント、いいね、ブロック、ミュート、通報</li>
         <li>投稿時の入力時間、編集回数、削除回数などの入力指標</li>
         <li>通知を有効にした場合のFirebase Cloud Messagingトークン</li>
+        <li>設定画面から送信されたフィードバックと、返信を希望した場合の連絡先メールアドレス</li>
+        <li>利用状況の分析を有効にしている場合の画面表示や操作イベント。投稿本文やフィードバック本文は分析イベントに含めません。</li>
       </ul>
     </section>
 
     <section class="section">
       <h2>利用目的</h2>
-      <p>収集した情報は、タイムラインやプロフィールの表示、安全機能の提供、通報対応、コメントといいねの通知配信、サービス保護のために利用します。通知トークンはHitoLogの通知配信にのみ利用します。</p>
+      <p>収集した情報は、タイムラインやプロフィールの表示、安全機能の提供、通報対応、フィードバックに基づく改善、利用状況分析、コメントといいねの通知配信、サービス保護のために利用します。通知トークンはHitoLogの通知配信にのみ利用します。</p>
     </section>
 
     <section class="section">
       <h2>利用するサービス</h2>
-      <p>HitoLogはFirebase Auth、Cloud Firestore、App Check、Cloud Messaging、Cloud Functionsを利用します。収集したデータを販売することはありません。</p>
+      <p>HitoLogはFirebase Auth、Cloud Firestore、App Check、Cloud Messaging、Cloud Functions、PostHogを利用します。収集したデータを販売することはありません。</p>
     </section>
 
     <section class="section">
@@ -48,7 +50,7 @@
       <p>ユーザーはアプリ内の設定またはiOSの設定アプリから通知をオフにできます。また、アプリ内の設定画面からアカウント削除を実行できます。削除すると、通知配信を停止し、アカウント情報、投稿、コメント、通知トークンなどのユーザーデータを削除または非表示化します。安全確認や法令対応のため、通報記録など一部の情報を必要な期間保持する場合があります。</p>
     </section>
 
-    <p class="meta">Last updated: 2026-05-24</p>
+    <p class="meta">Last updated: 2026-05-28</p>
   </main>
 </body>
 </html>

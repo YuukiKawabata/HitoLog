@@ -86,6 +86,36 @@ service cloud.firestore {
         && data.moderationStatus in ['active', 'reviewRequired', 'hidden'];
     }
 
+    function validFeedback(data) {
+      return data.keys().hasOnly([
+          'userID',
+          'category',
+          'message',
+          'contactEmail',
+          'appVersion',
+          'buildNumber',
+          'platform',
+          'status',
+          'createdAt'
+        ])
+        && data.userID is string
+        && data.category in ['bug', 'usability', 'featureRequest', 'other']
+        && data.message is string
+        && data.message.size() >= 5
+        && data.message.size() <= 1000
+        && (!data.keys().hasAny(['contactEmail'])
+          || (data.contactEmail is string && data.contactEmail.size() <= 254))
+        && data.appVersion is string
+        && data.appVersion.size() > 0
+        && data.appVersion.size() <= 32
+        && data.buildNumber is string
+        && data.buildNumber.size() > 0
+        && data.buildNumber.size() <= 32
+        && data.platform == 'ios'
+        && data.status == 'new'
+        && data.createdAt is timestamp;
+    }
+
     function validPostShare(data) {
       return data.keys().hasAll(['shareType'])
         && data.shareType in ['original', 'repost', 'quote']
@@ -398,6 +428,15 @@ service cloud.firestore {
           'createdAt'
         ])
         && request.resource.data.status == '確認待ち';
+      allow update: if isAdmin()
+        && changedOnly(['status', 'adminNote', 'resolvedAt', 'resolvedBy']);
+      allow delete: if false;
+    }
+
+    match /feedback/{feedbackID} {
+      allow read: if isOwner(resource.data.userID) || isAdmin();
+      allow create: if isOwner(request.resource.data.userID)
+        && validFeedback(request.resource.data);
       allow update: if isAdmin()
         && changedOnly(['status', 'adminNote', 'resolvedAt', 'resolvedBy']);
       allow delete: if false;

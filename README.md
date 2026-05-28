@@ -30,13 +30,15 @@ The initial project follows the Obsidian spec:
 - Initial login and onboarding
 - Profile editing
 - Block, mute, report history, logout, and account deletion flows
+- In-app feedback submission and StoreKit review prompts from Settings and positive usage milestones
+- PostHog-backed usage analytics with an in-app opt-out toggle
 - Sign in with Apple through Firebase Auth
 - Firestore sync for profiles, posts, comments, likes, safety settings, reports, and push tokens
 - Firebase Cloud Messaging notifications for comments and likes
 
 ## Backend Policy
 
-The app uses Firebase Auth, Cloud Firestore, App Check with App Attest, Firebase Cloud Messaging, and Cloud Functions. Local seed and screenshot demo data are development-only aids and are not written to Firebase.
+The app uses Firebase Auth, Cloud Firestore, App Check with App Attest, Firebase Cloud Messaging, Cloud Functions, and PostHog. Local seed and screenshot demo data are development-only aids and are not written to Firebase. Set `POSTHOG_PROJECT_TOKEN` in the Xcode build settings to enable PostHog event delivery.
 
 ## Build
 

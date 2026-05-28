@@ -51,6 +51,10 @@
 		B00100000000000000000042 /* MediaUploadService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000040 /* MediaUploadService.swift */; };
 		B00100000000000000000043 /* PostMediaGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000041 /* PostMediaGridView.swift */; };
 		B00100000000000000000044 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = E00100000000000000000006 /* FirebaseStorage */; };
+		B00100000000000000000045 /* AppFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000042 /* AppFeedback.swift */; };
+		B00100000000000000000046 /* AnalyticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000043 /* AnalyticsService.swift */; };
+		B00100000000000000000047 /* AppReviewService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000044 /* AppReviewService.swift */; };
+		B00100000000000000000048 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = E00100000000000000000007 /* PostHog */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -95,6 +99,9 @@
 		F00100000000000000000039 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		F00100000000000000000040 /* MediaUploadService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaUploadService.swift; sourceTree = "<group>"; };
 		F00100000000000000000041 /* PostMediaGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostMediaGridView.swift; sourceTree = "<group>"; };
+		F00100000000000000000042 /* AppFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFeedback.swift; sourceTree = "<group>"; };
+		F00100000000000000000043 /* AnalyticsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsService.swift; sourceTree = "<group>"; };
+		F00100000000000000000044 /* AppReviewService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppReviewService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -108,6 +115,7 @@
 				B00100000000000000000040 /* FirebaseMessaging in Frameworks */,
 				B00100000000000000000041 /* FirebaseAppCheck in Frameworks */,
 				B00100000000000000000044 /* FirebaseStorage in Frameworks */,
+				B00100000000000000000048 /* PostHog in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -257,6 +265,7 @@
 				F00100000000000000000018 /* Post.swift */,
 				F00100000000000000000019 /* Comment.swift */,
 				F00100000000000000000020 /* HumanBadge.swift */,
+				F00100000000000000000042 /* AppFeedback.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -270,6 +279,8 @@
 				F00100000000000000000035 /* FirebaseBootstrap.swift */,
 				F00100000000000000000036 /* AuthSessionStore.swift */,
 				F00100000000000000000037 /* PushNotificationService.swift */,
+				F00100000000000000000043 /* AnalyticsService.swift */,
+				F00100000000000000000044 /* AppReviewService.swift */,
 				F00100000000000000000040 /* MediaUploadService.swift */,
 				F00100000000000000000022 /* MockDataStore.swift */,
 			);
@@ -321,6 +332,7 @@
 				E00100000000000000000004 /* FirebaseMessaging */,
 				E00100000000000000000005 /* FirebaseAppCheck */,
 				E00100000000000000000006 /* FirebaseStorage */,
+				E00100000000000000000007 /* PostHog */,
 			);
 			productName = HitoLog;
 			productReference = F00100000000000000000030 /* HitoLog.app */;
@@ -352,6 +364,7 @@
 			mainGroup = A00100000000000000000002;
 			packageReferences = (
 				P00100000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				P00100000000000000000002 /* XCRemoteSwiftPackageReference "posthog-ios" */,
 			);
 			productRefGroup = A00100000000000000000003 /* Products */;
 			projectDirPath = "";
@@ -428,6 +441,8 @@
 				B00100000000000000000034 /* FirebaseBootstrap.swift in Sources */,
 				B00100000000000000000035 /* AuthSessionStore.swift in Sources */,
 				B00100000000000000000036 /* PushNotificationService.swift in Sources */,
+				B00100000000000000000046 /* AnalyticsService.swift in Sources */,
+				B00100000000000000000047 /* AppReviewService.swift in Sources */,
 				B00100000000000000000042 /* MediaUploadService.swift in Sources */,
 				B00100000000000000000022 /* MockDataStore.swift in Sources */,
 				B00100000000000000000023 /* Constants.swift in Sources */,
@@ -438,54 +453,11 @@
 				B00100000000000000000028 /* AppButton.swift in Sources */,
 				B00100000000000000000030 /* BrandIconView.swift in Sources */,
 				B00100000000000000000043 /* PostMediaGridView.swift in Sources */,
+				B00100000000000000000045 /* AppFeedback.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
-			};
+		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-		P00100000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 12.0.0;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		E00100000000000000000001 /* FirebaseCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = P00100000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseCore;
-		};
-		E00100000000000000000002 /* FirebaseAuth */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = P00100000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseAuth;
-		};
-		E00100000000000000000003 /* FirebaseFirestore */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = P00100000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseFirestore;
-		};
-		E00100000000000000000004 /* FirebaseMessaging */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = P00100000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseMessaging;
-		};
-		E00100000000000000000005 /* FirebaseAppCheck */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = P00100000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseAppCheck;
-		};
-		E00100000000000000000006 /* FirebaseStorage */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = P00100000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseStorage;
-		};
-/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A00100000000000000000026 /* Debug */ = {
@@ -609,12 +581,12 @@
 		A00100000000000000000028 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				APP_ATTEST_ENVIRONMENT = development;
 				APS_ENVIRONMENT = development;
-				CODE_SIGN_IDENTITY = "Apple Development";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = HitoLog/HitoLog.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 976WT2WW6X;
@@ -626,6 +598,9 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				POSTHOG_HOST = "https://us.i.posthog.com";
+				POSTHOG_PROJECT_TOKEN = "";
+				"POSTHOG_PROJECT_TOKEN[arch=*]" = phc_oVcuGh3W2WeqxNR8Qhb83ASZf4nvuisJGpNpKncZUdpz;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yukikawabata.HitoLog;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -641,12 +616,12 @@
 		A00100000000000000000029 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				APP_ATTEST_ENVIRONMENT = production;
 				APS_ENVIRONMENT = production;
-				CODE_SIGN_IDENTITY = "Apple Development";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = HitoLog/HitoLog.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 976WT2WW6X;
@@ -658,6 +633,9 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				POSTHOG_HOST = "https://us.i.posthog.com";
+				POSTHOG_PROJECT_TOKEN = "";
+				"POSTHOG_PROJECT_TOKEN[arch=*]" = phc_oVcuGh3W2WeqxNR8Qhb83ASZf4nvuisJGpNpKncZUdpz;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yukikawabata.HitoLog;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -692,6 +670,63 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		P00100000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.0.0;
+			};
+		};
+		P00100000000000000000002 /* XCRemoteSwiftPackageReference "posthog-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/PostHog/posthog-ios.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.58.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E00100000000000000000001 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = P00100000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+		E00100000000000000000002 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = P00100000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		E00100000000000000000003 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = P00100000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+		E00100000000000000000004 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = P00100000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
+		};
+		E00100000000000000000005 /* FirebaseAppCheck */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = P00100000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAppCheck;
+		};
+		E00100000000000000000006 /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = P00100000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
+		};
+		E00100000000000000000007 /* PostHog */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = P00100000000000000000002 /* XCRemoteSwiftPackageReference "posthog-ios" */;
+			productName = PostHog;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = A00100000000000000000024 /* Project object */;
 }
