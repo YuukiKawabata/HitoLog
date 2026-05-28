@@ -101,6 +101,14 @@ struct SettingsView: View {
                 #endif
             }
 
+            Section("表示") {
+                NavigationLink {
+                    FeedControlSettingsView()
+                } label: {
+                    Label("フィード設定", systemImage: "slider.horizontal.3")
+                }
+            }
+
             Section("安全") {
                 if store.currentUser.isAdmin {
                     NavigationLink {
@@ -793,6 +801,47 @@ private struct ManagedUserRow: View {
                 .font(.caption.weight(.semibold))
         }
         .padding(.vertical, AppSpacing.xs)
+    }
+}
+
+private struct FeedControlSettingsView: View {
+    @EnvironmentObject private var store: AppDataStore
+
+    var body: some View {
+        Form {
+            Section("おすすめの調整") {
+                if store.feedControls.isEmpty {
+                    Text("フィード設定はありません。")
+                        .foregroundStyle(AppColor.textSecondary)
+                } else {
+                    ForEach(store.feedControls.sorted { $0.updatedAt > $1.updatedAt }) { control in
+                        HStack(spacing: AppSpacing.md) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("#\(control.targetID)")
+                                    .font(.subheadline.weight(.semibold))
+
+                                Label(control.preference.displayText, systemImage: control.preference.systemImage)
+                                    .font(.caption)
+                                    .foregroundStyle(AppColor.textSecondary)
+                            }
+
+                            Spacer()
+
+                            Button {
+                                store.clearFeedControl(topic: control.targetID)
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            } label: {
+                                Image(systemName: "xmark.circle")
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                        .padding(.vertical, AppSpacing.xs)
+                    }
+                }
+            }
+        }
+        .navigationTitle("フィード設定")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

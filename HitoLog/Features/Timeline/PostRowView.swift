@@ -16,6 +16,8 @@ struct PostRowView: View {
     var onDelete: () -> Void = {}
     var onReport: () -> Void = {}
     @State private var isShowingQuoteSheet = false
+    @State private var isShowingRecommendationReason = false
+    @State private var recommendationReason = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.md) {
@@ -77,6 +79,37 @@ struct PostRowView: View {
                             } label: {
                                 Label("ブロック", systemImage: "hand.raised")
                             }
+                        }
+
+                        if !post.topics.isEmpty {
+                            Menu {
+                                ForEach(post.topics, id: \.self) { topic in
+                                    Button("#\(topic)") {
+                                        store.setFeedControl(topic: topic, preference: .boost)
+                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                    }
+                                }
+                            } label: {
+                                Label("このルームを増やす", systemImage: "arrow.up.circle")
+                            }
+
+                            Menu {
+                                ForEach(post.topics, id: \.self) { topic in
+                                    Button("#\(topic)") {
+                                        store.setFeedControl(topic: topic, preference: .reduce)
+                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                    }
+                                }
+                            } label: {
+                                Label("この話題を減らす", systemImage: "arrow.down.circle")
+                            }
+                        }
+
+                        Button {
+                            recommendationReason = store.recommendationExplanation(for: post)
+                            isShowingRecommendationReason = true
+                        } label: {
+                            Label("おすすめ理由", systemImage: "questionmark.circle")
                         }
 
                         Button(role: .destructive, action: onReport) {
@@ -201,6 +234,11 @@ struct PostRowView: View {
                 QuotePostSheet(sourcePost: targetPost, sourceAuthor: targetAuthor)
                     .environmentObject(store)
             }
+        }
+        .alert("おすすめ理由", isPresented: $isShowingRecommendationReason) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(recommendationReason)
         }
     }
 

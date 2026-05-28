@@ -303,6 +303,49 @@ enum TopicRoomPostSort: String, CaseIterable, Identifiable {
     }
 }
 
+struct FeedControl: Identifiable, Codable, Equatable {
+    let id: String
+    let userID: String
+    let targetType: FeedControlTargetType
+    let targetID: String
+    var preference: FeedControlPreference
+    let createdAt: Date
+    var updatedAt: Date
+
+    static func makeID(userID: String, targetType: FeedControlTargetType, targetID: String) -> String {
+        "\(userID)_\(targetType.rawValue)_\(targetID)"
+    }
+}
+
+enum FeedControlTargetType: String, Codable, Equatable {
+    case topic
+}
+
+enum FeedControlPreference: String, Codable, CaseIterable, Identifiable, Equatable {
+    case boost
+    case reduce
+
+    var id: String { rawValue }
+
+    var displayText: String {
+        switch self {
+        case .boost:
+            return "増やす"
+        case .reduce:
+            return "減らす"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .boost:
+            return "arrow.up.circle"
+        case .reduce:
+            return "arrow.down.circle"
+        }
+    }
+}
+
 struct MutedWord: Identifiable, Codable, Equatable {
     let id: String
     let userID: String

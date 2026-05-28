@@ -15,6 +15,7 @@ struct RemoteDataSnapshot {
     var mutedWords: [MutedWord]
     var topicRooms: [TopicRoom]
     var followedTopicIDs: Set<String>
+    var feedControls: [FeedControl]
     var followingUserIDs: Set<String>
     var followerCountsByUserID: [String: Int]
     var followingCountsByUserID: [String: Int]
@@ -89,6 +90,11 @@ struct FirebaseDataStore {
             .order(by: "createdAt", descending: true)
             .limit(to: 200)
             .getDocuments()
+        async let feedControlsSnapshot = db.collection("feedControls")
+            .whereField("userID", isEqualTo: currentUserID)
+            .order(by: "updatedAt", descending: true)
+            .limit(to: 200)
+            .getDocuments()
         async let followingSnapshot = db.collection("follows")
             .whereField("followerID", isEqualTo: currentUserID)
             .getDocuments()
@@ -115,6 +121,7 @@ struct FirebaseDataStore {
         let mutedWordsResult = try await mutedWordsSnapshot
         let topicRoomsResult = try await topicRoomsSnapshot
         let topicFollowsResult = try await topicFollowsSnapshot
+        let feedControlsResult = try await feedControlsSnapshot
         let followingResult = try await followingSnapshot
         let followersResult = try await followersSnapshot
         let reportsResult = try await reportsSnapshot
@@ -135,6 +142,7 @@ struct FirebaseDataStore {
         let mutedWords = mutedWordsResult.documents.compactMap(mapMutedWord)
         let topicRooms = topicRoomsResult.documents.compactMap(mapTopicRoom)
         let followedTopicIDs = Set(topicFollowsResult.documents.compactMap { $0.data()["topic"] as? String })
+        let feedControls = feedControlsResult.documents.compactMap(mapFeedControl)
         let followRecords = (followingResult.documents + followersResult.documents).compactMap(mapFollow).filter {
             activeUserIDs.contains($0.followerID) && activeUserIDs.contains($0.followeeID)
         }
@@ -156,6 +164,7 @@ struct FirebaseDataStore {
             mutedWords: mutedWords,
             topicRooms: topicRooms,
             followedTopicIDs: followedTopicIDs,
+            feedControls: feedControls,
             followingUserIDs: followState.followingUserIDs,
             followerCountsByUserID: followState.followerCountsByUserID,
             followingCountsByUserID: followState.followingCountsByUserID,
@@ -178,6 +187,7 @@ struct FirebaseDataStore {
             mutedWords: [],
             topicRooms: [],
             followedTopicIDs: [],
+            feedControls: [],
             followingUserIDs: [],
             followerCountsByUserID: [:],
             followingCountsByUserID: [:],
@@ -608,6 +618,26 @@ struct FirebaseDataStore {
         #endif
     }
 
+    func setFeedControl(_ feedControl: FeedControl) async throws {
+        #if canImport(FirebaseFirestore)
+        let ref = Firestore.firestore().collection("feedControls").document(feedControl.id)
+        try await ref.setData([
+            "userID": feedControl.userID,
+            "targetType": feedControl.targetType.rawValue,
+            "targetID": feedControl.targetID,
+            "preference": feedControl.preference.rawValue,
+            "createdAt": Timestamp(date: feedControl.createdAt),
+            "updatedAt": Timestamp(date: feedControl.updatedAt)
+        ], merge: true)
+        #endif
+    }
+
+    func deleteFeedControl(_ feedControl: FeedControl) async throws {
+        #if canImport(FirebaseFirestore)
+        try await Firestore.firestore().collection("feedControls").document(feedControl.id).delete()
+        #endif
+    }
+
     func setFollow(followerID: String, followeeID: String, isFollowing: Bool) async throws {
         #if canImport(FirebaseFirestore)
         guard followerID != followeeID else { return }
@@ -850,6 +880,13 @@ struct FirebaseDataStore {
             try await document.reference.delete()
         }
 
+        let feedControls = try await db.collection("feedControls")
+            .whereField("userID", isEqualTo: userID)
+            .getDocuments()
+        for document in feedControls.documents {
+            try await document.reference.delete()
+        }
+
         let following = try await db.collection("follows")
             .whereField("followerID", isEqualTo: userID)
             .getDocuments()
@@ -1063,6 +1100,29 @@ private extension FirebaseDataStore {
             updatedAt: dateValue(data["updatedAt"], fallback: Date()),
             isOfficial: boolValue(data["isOfficial"], fallback: false),
             moderationStatus: ModerationStatus(rawValue: stringValue(data["moderationStatus"], fallback: ModerationStatus.active.rawValue)) ?? .active
+        )
+    }
+
+    func mapFeedControl(_ document: QueryDocumentSnapshot) -> FeedControl? {
+        let data = document.data()
+        guard let userID = data["userID"] as? String,
+              let targetTypeRaw = data["targetType"] as? String,
+              let targetType = FeedControlTargetType(rawValue: targetTypeRaw),
+              let targetID = data["targetID"] as? String,
+              let preferenceRaw = data["preference"] as? String,
+              let preference = FeedControlPreference(rawValue: preferenceRaw),
+              !targetID.isEmpty else {
+            return nil
+        }
+
+        return FeedControl(
+            id: document.documentID,
+            userID: userID,
+            targetType: targetType,
+            targetID: targetID,
+            preference: preference,
+            createdAt: dateValue(data["createdAt"], fallback: Date()),
+            updatedAt: dateValue(data["updatedAt"], fallback: Date())
         )
     }
 

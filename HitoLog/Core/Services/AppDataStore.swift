@@ -78,6 +78,7 @@ final class AppDataStore: ObservableObject {
     @Published private(set) var mutedWords: [MutedWord]
     @Published private(set) var topicRooms: [TopicRoom]
     @Published private(set) var followedTopicIDs: Set<String>
+    @Published private(set) var feedControls: [FeedControl]
     @Published private(set) var followingUserIDs: Set<String>
     @Published private(set) var followerCountsByUserID: [String: Int]
     @Published private(set) var followingCountsByUserID: [String: Int]
@@ -107,6 +108,7 @@ final class AppDataStore: ObservableObject {
     private let initialMutedWords: [MutedWord]
     private let initialTopicRooms: [TopicRoom]
     private let initialFollowedTopicIDs: Set<String>
+    private let initialFeedControls: [FeedControl]
     private let initialFollowingUserIDs: Set<String>
     private let initialFollowerCountsByUserID: [String: Int]
     private let initialFollowingCountsByUserID: [String: Int]
@@ -150,10 +152,16 @@ final class AppDataStore: ObservableObject {
     var recommendedTimelinePosts: [Post] {
         timelinePosts
             .filter { post in
-                !followingUserIDs.contains(post.userId) || recommendationScore(for: post) >= 28
+                let score = recommendationScore(for: post)
+                return score > 0 && (!followingUserIDs.contains(post.userId) || score >= 28)
             }
             .sorted {
-                recommendationScore(for: $0) > recommendationScore(for: $1)
+                let firstScore = recommendationScore(for: $0)
+                let secondScore = recommendationScore(for: $1)
+                if firstScore != secondScore {
+                    return firstScore > secondScore
+                }
+                return $0.createdAt > $1.createdAt
             }
     }
 
@@ -162,12 +170,25 @@ final class AppDataStore: ObservableObject {
         return timelinePosts.filter { post in
             !Set(post.topics).intersection(followedTopicIDs).isEmpty
         }
+        .sorted {
+            let firstScore = recommendationScore(for: $0)
+            let secondScore = recommendationScore(for: $1)
+            if firstScore != secondScore {
+                return firstScore > secondScore
+            }
+            return $0.createdAt > $1.createdAt
+        }
     }
 
     var discoverTopicRooms: [TopicRoom] {
         topicRooms
             .filter { $0.moderationStatus == .active }
             .sorted { first, second in
+                let firstPreferenceRank = feedControlSortRank(for: first.topic)
+                let secondPreferenceRank = feedControlSortRank(for: second.topic)
+                if firstPreferenceRank != secondPreferenceRank {
+                    return firstPreferenceRank > secondPreferenceRank
+                }
                 if first.isOfficial != second.isOfficial {
                     return first.isOfficial
                 }
@@ -258,6 +279,7 @@ final class AppDataStore: ObservableObject {
         self.initialMutedWords = []
         self.initialTopicRooms = Self.topicRooms(from: seed.posts)
         self.initialFollowedTopicIDs = Set(StarterPackCategory.allCases.prefix(2).map(\.topic))
+        self.initialFeedControls = []
         self.initialFollowingUserIDs = seed.followingUserIDs
         self.initialFollowerCountsByUserID = seed.followerCountsByUserID
         self.initialFollowingCountsByUserID = seed.followingCountsByUserID
@@ -274,6 +296,7 @@ final class AppDataStore: ObservableObject {
         self.mutedWords = []
         self.topicRooms = initialTopicRooms
         self.followedTopicIDs = initialFollowedTopicIDs
+        self.feedControls = initialFeedControls
         self.followingUserIDs = seed.followingUserIDs
         self.followerCountsByUserID = seed.followerCountsByUserID
         self.followingCountsByUserID = seed.followingCountsByUserID
@@ -837,6 +860,100 @@ final class AppDataStore: ObservableObject {
         runRemoteWrite {
             try await self.remoteStore.setMutedWord(mutedWord, isMuted: false)
         }
+    }
+
+    func feedControl(for topic: String) -> FeedControl? {
+        guard let normalizedTopic = TopicExtractor.normalizedTopicQuery(from: topic) else { return nil }
+        return feedControls.first {
+            $0.targetType == .topic && $0.targetID == normalizedTopic
+        }
+    }
+
+    func setFeedControl(topic: String, preference: FeedControlPreference) {
+        guard let normalizedTopic = TopicExtractor.normalizedTopicQuery(from: topic) else { return }
+
+        let now = Date()
+        let existing = feedControl(for: normalizedTopic)
+        let feedControl = FeedControl(
+            id: FeedControl.makeID(userID: currentUser.id, targetType: .topic, targetID: normalizedTopic),
+            userID: currentUser.id,
+            targetType: .topic,
+            targetID: normalizedTopic,
+            preference: preference,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now
+        )
+
+        if let index = feedControls.firstIndex(where: { $0.id == feedControl.id }) {
+            feedControls[index] = feedControl
+        } else {
+            feedControls.insert(feedControl, at: 0)
+        }
+        ensureTopicRoomExists(topic: normalizedTopic)
+        AnalyticsService.shared.capture("feed_control_set", properties: [
+            "topic": normalizedTopic,
+            "preference": preference.rawValue
+        ])
+
+        runRemoteWrite {
+            try await self.remoteStore.setFeedControl(feedControl)
+        }
+    }
+
+    func clearFeedControl(topic: String) {
+        guard let feedControl = feedControl(for: topic) else { return }
+
+        feedControls.removeAll { $0.id == feedControl.id }
+        AnalyticsService.shared.capture("feed_control_cleared", properties: [
+            "topic": feedControl.targetID,
+            "preference": feedControl.preference.rawValue
+        ])
+
+        runRemoteWrite {
+            try await self.remoteStore.deleteFeedControl(feedControl)
+        }
+    }
+
+    func recommendationExplanation(for post: Post) -> String {
+        var reasons: [String] = []
+        let postTopics = Set(post.topics)
+        let boostedTopics = matchingFeedControlTopics(in: post, preference: .boost)
+        let reducedTopics = matchingFeedControlTopics(in: post, preference: .reduce)
+        let followedMatches = postTopics.intersection(followedTopicIDs).sorted()
+        let preferredMatches = postTopics.intersection(preferredTopics()).sorted()
+        let engagement = post.likeCount + post.commentCount * 2 + post.repostCount * 3 + post.quoteCount * 4
+
+        if !boostedTopics.isEmpty {
+            reasons.append("増やす設定の \(boostedTopics.map { "#\($0)" }.joined(separator: "、")) が含まれています。")
+        }
+        if !reducedTopics.isEmpty {
+            reasons.append("減らす設定の \(reducedTopics.map { "#\($0)" }.joined(separator: "、")) が含まれているため順位を下げています。")
+        }
+        if !followedMatches.isEmpty {
+            reasons.append("フォロー中のルーム \(followedMatches.map { "#\($0)" }.joined(separator: "、")) に一致しています。")
+        } else if !preferredMatches.isEmpty {
+            reasons.append("あなたの投稿やフォロー中ユーザーと近い話題 \(preferredMatches.map { "#\($0)" }.joined(separator: "、")) に一致しています。")
+        }
+        if let author = user(for: post.userId), author.humanVerifiedPostRate >= 0.75 {
+            reasons.append("投稿者の本人入力率が高めです。")
+        }
+        if let author = user(for: post.userId), author.humanLevel >= 3 {
+            reasons.append("投稿者のHuman Levelを加味しています。")
+        }
+        if engagement > 0 {
+            reasons.append("いいね、コメント、リポストなどの反応があります。")
+        }
+        if post.humanBadge == .verified {
+            reasons.append("この投稿はHuman Checkで本人入力として扱われています。")
+        }
+        if Date().timeIntervalSince(post.createdAt) <= 24 * 3600 {
+            reasons.append("新しい投稿です。")
+        }
+
+        if reasons.isEmpty {
+            return "新しさ、本人入力率、反応数をもとに表示しています。"
+        }
+        return reasons.joined(separator: "\n")
     }
 
     func isFollowingTopic(_ topic: String) -> Bool {
@@ -1409,6 +1526,7 @@ final class AppDataStore: ObservableObject {
         mutedWords = initialMutedWords
         topicRooms = initialTopicRooms
         followedTopicIDs = initialFollowedTopicIDs
+        feedControls = initialFeedControls
         followingUserIDs = initialFollowingUserIDs
         followerCountsByUserID = initialFollowerCountsByUserID
         followingCountsByUserID = initialFollowingCountsByUserID
@@ -1464,6 +1582,7 @@ final class AppDataStore: ObservableObject {
         mutedWords.removeAll()
         topicRooms = initialTopicRooms
         followedTopicIDs.removeAll()
+        feedControls.removeAll()
         followingUserIDs.removeAll()
         followerCountsByUserID.removeAll()
         followingCountsByUserID.removeAll()
@@ -1511,6 +1630,7 @@ final class AppDataStore: ObservableObject {
             mutedWords = initialMutedWords
             topicRooms = initialTopicRooms
             followedTopicIDs = initialFollowedTopicIDs
+            feedControls = initialFeedControls
             followingUserIDs = initialFollowingUserIDs
             followerCountsByUserID = initialFollowerCountsByUserID
             followingCountsByUserID = initialFollowingCountsByUserID
@@ -1562,6 +1682,7 @@ final class AppDataStore: ObservableObject {
         mutedWords = snapshot.mutedWords
         topicRooms = Self.mergedTopicRooms(remoteRooms: snapshot.topicRooms, posts: snapshot.posts, followedTopicIDs: snapshot.followedTopicIDs)
         followedTopicIDs = snapshot.followedTopicIDs
+        feedControls = snapshot.feedControls
         followingUserIDs = snapshot.followingUserIDs
         followerCountsByUserID = snapshot.followerCountsByUserID
         followingCountsByUserID = snapshot.followingCountsByUserID
@@ -1869,6 +1990,40 @@ final class AppDataStore: ObservableObject {
         return Set(ownTopics + followedTopics)
     }
 
+    private func feedControlPreference(for topic: String) -> FeedControlPreference? {
+        feedControl(for: topic)?.preference
+    }
+
+    private func feedControlSortRank(for topic: String) -> Int {
+        switch feedControlPreference(for: topic) {
+        case .boost:
+            return 1
+        case .reduce:
+            return -1
+        case nil:
+            return 0
+        }
+    }
+
+    private func matchingFeedControlTopics(in post: Post, preference: FeedControlPreference) -> [String] {
+        post.topics
+            .filter { feedControlPreference(for: $0) == preference }
+            .sorted()
+    }
+
+    private func feedControlAdjustment(for post: Post) -> Double {
+        Set(post.topics).reduce(0) { score, topic in
+            switch feedControlPreference(for: topic) {
+            case .boost:
+                return score + 36
+            case .reduce:
+                return score - 64
+            case nil:
+                return score
+            }
+        }
+    }
+
     private func recommendationScore(for post: Post) -> Double {
         let author = user(for: post.userId)
         let engagement = post.likeCount + post.commentCount * 2 + post.repostCount * 3 + post.quoteCount * 4
@@ -1879,7 +2034,7 @@ final class AppDataStore: ObservableObject {
         let ageHours = max(Date().timeIntervalSince(post.createdAt) / 3600, 0)
         let recencyScore = max(0, 20 - min(ageHours, 72) / 72 * 20)
         let verifiedPostScore = post.humanBadge == .verified ? 8.0 : 0.0
-        return humanRateScore + humanLevelScore + engagementScore + topicScore + recencyScore + verifiedPostScore
+        return humanRateScore + humanLevelScore + engagementScore + topicScore + recencyScore + verifiedPostScore + feedControlAdjustment(for: post)
     }
 
     private func starterPackCandidates() -> [AppUser] {

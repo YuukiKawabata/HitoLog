@@ -86,6 +86,23 @@ service cloud.firestore {
         && data.moderationStatus in ['active', 'reviewRequired', 'hidden'];
     }
 
+    function validFeedControl(data) {
+      return data.keys().hasOnly([
+          'userID',
+          'targetType',
+          'targetID',
+          'preference',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.userID is string
+        && data.targetType == 'topic'
+        && validTopicValue(data.targetID)
+        && data.preference in ['boost', 'reduce']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
     function validFeedback(data) {
       return data.keys().hasOnly([
           'userID',
@@ -412,6 +429,20 @@ service cloud.firestore {
         && followID == request.resource.data.userID + '_' + request.resource.data.topic;
       allow delete: if isOwner(resource.data.userID);
       allow update: if false;
+    }
+
+    match /feedControls/{controlID} {
+      allow read: if isOwner(resource.data.userID);
+      allow create: if isOwner(request.resource.data.userID)
+        && validFeedControl(request.resource.data)
+        && controlID == request.resource.data.userID + '_' + request.resource.data.targetType + '_' + request.resource.data.targetID;
+      allow update: if isOwner(resource.data.userID)
+        && validFeedControl(request.resource.data)
+        && request.resource.data.userID == resource.data.userID
+        && request.resource.data.targetType == resource.data.targetType
+        && request.resource.data.targetID == resource.data.targetID
+        && controlID == request.resource.data.userID + '_' + request.resource.data.targetType + '_' + request.resource.data.targetID;
+      allow delete: if isOwner(resource.data.userID);
     }
 
     match /reports/{reportID} {

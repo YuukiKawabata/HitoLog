@@ -553,6 +553,38 @@ struct TopicRoomView: View {
                         }
                         .buttonStyle(PrimaryButtonStyle())
                     }
+
+                    let activePreference = store.feedControl(for: room.topic)?.preference
+                    HStack(spacing: AppSpacing.sm) {
+                        Button {
+                            store.setFeedControl(topic: room.topic, preference: .boost)
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        } label: {
+                            Label(activePreference == .boost ? "増やす中" : "増やす", systemImage: activePreference == .boost ? "arrow.up.circle.fill" : "arrow.up.circle")
+                        }
+                        .buttonStyle(SecondaryButtonStyle())
+
+                        Button {
+                            store.setFeedControl(topic: room.topic, preference: .reduce)
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        } label: {
+                            Label(activePreference == .reduce ? "減らす中" : "減らす", systemImage: activePreference == .reduce ? "arrow.down.circle.fill" : "arrow.down.circle")
+                        }
+                        .buttonStyle(SecondaryButtonStyle())
+
+                        if activePreference != nil {
+                            Button {
+                                store.clearFeedControl(topic: room.topic)
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            } label: {
+                                Image(systemName: "xmark.circle")
+                                    .frame(width: 34, height: 34)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(AppColor.textSecondary)
+                            .accessibilityLabel("標準に戻す")
+                        }
+                    }
                 }
                 .padding(.vertical, AppSpacing.sm)
             }
