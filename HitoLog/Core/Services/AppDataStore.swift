@@ -97,6 +97,9 @@ final class AppDataStore: ObservableObject {
     @Published private(set) var isRemoteSyncEnabled = false
     @Published private(set) var isDemoDataVisible = false
     @Published private(set) var lastSyncErrorMessage: String?
+    @Published private(set) var articles: [Article] = []
+    @Published private(set) var articleSearchResults: [Article] = []
+    @Published private(set) var unlockedArticleIDs: Set<String> = []
 
     private let remoteStore: FirebaseDataStore
     private let initialCurrentUser: AppUser
@@ -1021,6 +1024,35 @@ final class AppDataStore: ObservableObject {
         }
     }
 
+    func topicRoomArticles(for topic: String) -> [Article] {
+        guard let normalizedTopic = TopicExtractor.normalizedTopicQuery(from: topic) else { return [] }
+        return articles.filter {
+            !$0.isDeleted
+            && $0.status == .published
+            && $0.topics.contains(normalizedTopic)
+        }.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    func loadTopicRoomArticles(topic: String) async {
+        guard isRemoteSyncEnabled,
+              let normalizedTopic = TopicExtractor.normalizedTopicQuery(from: topic) else { return }
+        do {
+            let loaded = try await remoteStore.loadTopicArticles(topic: normalizedTopic)
+            await MainActor.run {
+                let existingIDs = Set(articles.map(\.id))
+                let newArticles = loaded.filter { !existingIDs.contains($0.id) }
+                articles.append(contentsOf: newArticles)
+                for updated in loaded {
+                    if let idx = articles.firstIndex(where: { $0.id == updated.id }) {
+                        articles[idx] = updated
+                    }
+                }
+            }
+        } catch {
+            // topic article loading is best-effort
+        }
+    }
+
     func searchTopicRooms(query: String) async {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -1077,6 +1109,151 @@ final class AppDataStore: ObservableObject {
                 && ($0.shareType == .original || sourcePost(for: $0) != nil)
             }
             .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    var isCreatorEligible: Bool {
+        currentUser.accountAgeDays >= 14
+            && currentUser.humanVerifiedPostRate >= 0.8
+    }
+
+    var creatorEligibilityDetail: [(label: String, met: Bool)] {
+        [
+            ("アカウント開設14日以上 (\(currentUser.accountAgeDays)日)", currentUser.accountAgeDays >= 14),
+            ("本人入力率80%以上 (\(Int(currentUser.humanVerifiedPostRate * 100))%)", currentUser.humanVerifiedPostRate >= 0.8),
+        ]
+    }
+
+    var timelineItems: [TimelineItem] {
+        let postItems = timelinePosts.map { TimelineItem.post($0) }
+        let articleItems = articles
+            .filter { a in
+                a.isPublished
+                && !a.isDeleted
+                && a.moderationStatus == .active
+                && a.userID != currentUser.id
+                && !blockedUserIDs.contains(a.userID)
+                && !mutedUserIDs.contains(a.userID)
+            }
+            .map { TimelineItem.article($0) }
+        return (postItems + articleItems).sorted { $0.createdAt > $1.createdAt }
+    }
+
+    func profileArticles(for userID: String) -> [Article] {
+        articles
+            .filter {
+                $0.userID == userID
+                && !$0.isDeleted
+                && $0.moderationStatus == .active
+                && ($0.isPublished || $0.userID == currentUser.id)
+            }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    func insertArticle(_ article: Article, paidBody: String) {
+        guard canCurrentUserCreateContent else { return }
+        articles.insert(article, at: 0)
+        AnalyticsService.shared.capture("article_created", properties: [
+            "article_id": article.id,
+            "status": article.status.rawValue,
+            "price": article.price.rawValue,
+            "human_badge": article.humanBadge.rawValue
+        ])
+        runRemoteWrite {
+            try await self.remoteStore.saveArticle(article)
+            if !paidBody.isEmpty {
+                try await self.remoteStore.saveArticleBody(articleID: article.id, body: paidBody)
+            }
+        }
+    }
+
+    func deleteArticle(articleID: String) {
+        guard let index = articles.firstIndex(where: { $0.id == articleID && $0.userID == currentUser.id }) else { return }
+        articles[index].isDeleted = true
+        articles[index].updatedAt = Date()
+        AnalyticsService.shared.capture("article_deleted", properties: ["article_id": articleID])
+        runRemoteWrite {
+            try await self.remoteStore.deleteArticle(articleID: articleID)
+        }
+    }
+
+    func searchArticles(query: String) async {
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            articleSearchResults = []
+            return
+        }
+        guard isRemoteSyncEnabled else {
+            articleSearchResults = articles.filter {
+                $0.isPublished && !$0.isDeleted
+                && (PostSearchTokenizer.matches(title: $0.title, preview: $0.freePreviewBody, query: query))
+            }
+            return
+        }
+        do {
+            articleSearchResults = try await remoteStore.searchArticles(query: query)
+        } catch {
+            recordRemoteError(error)
+        }
+    }
+
+    func loadUserArticles(userID: String) async {
+        guard isRemoteSyncEnabled else { return }
+        do {
+            let loaded = try await remoteStore.loadUserArticles(userID: userID)
+            let existingIDs = Set(articles.map(\.id))
+            let newArticles = loaded.filter { !existingIDs.contains($0.id) }
+            articles.append(contentsOf: newArticles)
+            for updated in loaded {
+                if let idx = articles.firstIndex(where: { $0.id == updated.id }) {
+                    articles[idx] = updated
+                }
+            }
+        } catch {
+            recordRemoteError(error)
+        }
+    }
+
+    func loadArticleBody(articleID: String) async throws -> String? {
+        guard isRemoteSyncEnabled else { return nil }
+        return try await remoteStore.loadArticleBody(articleID: articleID)
+    }
+
+    func isUnlocked(_ articleID: String) -> Bool {
+        unlockedArticleIDs.contains(articleID)
+    }
+
+    func loadUnlockedArticles() async {
+        guard isRemoteSyncEnabled else { return }
+        do {
+            let ids = try await remoteStore.loadArticleUnlockIDs(userID: currentUser.id)
+            unlockedArticleIDs = Set(ids)
+        } catch {
+            // best-effort
+        }
+    }
+
+    // Throws PurchaseError or FirestoreError. Returns false if user cancelled.
+    @discardableResult
+    func purchaseArticle(_ article: Article) async throws -> Bool {
+        guard isRemoteSyncEnabled else { return false }
+        guard let result = try await PurchaseService.shared.purchase(price: article.price) else {
+            return false
+        }
+        try await remoteStore.recordArticleUnlock(
+            userID: currentUser.id,
+            articleID: article.id,
+            price: article.price,
+            transactionID: result.transactionID
+        )
+        unlockedArticleIDs.insert(article.id)
+        if let idx = articles.firstIndex(where: { $0.id == article.id }) {
+            articles[idx].purchaseCount += 1
+        }
+        AnalyticsService.shared.capture("article_purchased", properties: [
+            "article_id": article.id,
+            "price": article.price.rawValue,
+            "transaction_id": result.transactionID
+        ])
+        return true
     }
 
     func block(_ userID: String) {
@@ -1474,6 +1651,12 @@ final class AppDataStore: ObservableObject {
                 comments[index].hiddenAt = Date()
                 adjustCommentCount(postID: postID, amount: -1)
             }
+        case .article:
+            if let index = articles.firstIndex(where: { $0.id == targetID }) {
+                articles[index].moderationStatus = .hidden
+                articles[index].hiddenReason = reason
+                articles[index].hiddenAt = Date()
+            }
         case .user, .other:
             return
         }
@@ -1700,6 +1883,7 @@ final class AppDataStore: ObservableObject {
             applyScreenshotDemoData()
         }
         lastSyncErrorMessage = nil
+        Task { await loadUnlockedArticles() }
     }
 
     private func applyScreenshotDemoData() {

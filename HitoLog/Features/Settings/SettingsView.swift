@@ -1052,14 +1052,11 @@ private struct AdminReportRow: View {
 private extension ReportTargetType {
     var systemImage: String {
         switch self {
-        case .post:
-            return "text.bubble"
-        case .comment:
-            return "bubble.right"
-        case .user:
-            return "person.crop.circle"
-        case .other:
-            return "exclamationmark.bubble"
+        case .post:    return "text.bubble"
+        case .comment: return "bubble.right"
+        case .user:    return "person.crop.circle"
+        case .article: return "doc.text"
+        case .other:   return "exclamationmark.bubble"
         }
     }
 }

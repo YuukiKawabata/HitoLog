@@ -8,7 +8,7 @@ struct TimelineView: View {
     @State private var selectedStarterPack: StarterPackCategory = .writers
 
     var body: some View {
-        let posts = postsForSelectedFilter
+        let items = itemsForSelectedFilter
 
         ScrollView {
             LazyVStack(spacing: AppSpacing.sm) {
@@ -26,7 +26,7 @@ struct TimelineView: View {
                 .padding(.horizontal, AppSpacing.md)
                 .padding(.bottom, AppSpacing.xs)
 
-                if posts.isEmpty {
+                if items.isEmpty {
                     if selectedFilter == .rooms {
                         TimelineTopicRoomEmptyView(
                             title: selectedFilter.emptyTitle,
@@ -47,41 +47,58 @@ struct TimelineView: View {
                         .padding(.top, 96)
                     }
                 } else {
-                    ForEach(posts) { post in
-                        if let author = store.user(for: post.userId) {
-                            PostRowView(
-                                post: post,
-                                author: author,
-                                isLiked: store.likedPostIDs.contains(post.id),
-                                isBookmarked: store.isBookmarked(post.id),
-                                onLike: {
-                                    store.toggleLike(for: post.id)
-                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                },
-                                onBookmark: {
-                                    store.toggleBookmark(for: post.id)
-                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                },
-                                commentDestination: AnyView(PostDetailView(postID: post.id)),
-                                authorDestination: AnyView(ProfileView(userID: author.id)),
-                                showsOwnerActions: post.userId == store.currentUser.id,
-                                onEdit: {
-                                    editingPost = post
-                                },
-                                onDelete: {
-                                    deletingPost = post
-                                },
-                                onReport: {
-                                    store.addReport(
-                                        targetType: .post,
-                                        targetID: post.id,
-                                        targetOwnerID: post.userId,
-                                        targetDescription: "投稿: \(post.body.prefix(40))",
-                                        reason: "不適切な投稿"
-                                    )
-                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                }
-                            )
+                    ForEach(items) { item in
+                        switch item {
+                        case .post(let post):
+                            if let author = store.user(for: post.userId) {
+                                PostRowView(
+                                    post: post,
+                                    author: author,
+                                    isLiked: store.likedPostIDs.contains(post.id),
+                                    isBookmarked: store.isBookmarked(post.id),
+                                    onLike: {
+                                        store.toggleLike(for: post.id)
+                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                    },
+                                    onBookmark: {
+                                        store.toggleBookmark(for: post.id)
+                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                    },
+                                    commentDestination: AnyView(PostDetailView(postID: post.id)),
+                                    authorDestination: AnyView(ProfileView(userID: author.id)),
+                                    showsOwnerActions: post.userId == store.currentUser.id,
+                                    onEdit: { editingPost = post },
+                                    onDelete: { deletingPost = post },
+                                    onReport: {
+                                        store.addReport(
+                                            targetType: .post,
+                                            targetID: post.id,
+                                            targetOwnerID: post.userId,
+                                            targetDescription: "投稿: \(post.body.prefix(40))",
+                                            reason: "不適切な投稿"
+                                        )
+                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                    }
+                                )
+                            }
+                        case .article(let article):
+                            if let author = store.user(for: article.userID) {
+                                ArticleCardView(
+                                    article: article,
+                                    author: author,
+                                    showsOwnerActions: article.userID == store.currentUser.id,
+                                    onReport: {
+                                        store.addReport(
+                                            targetType: .article,
+                                            targetID: article.id,
+                                            targetOwnerID: article.userID,
+                                            targetDescription: "記事: \(article.title.prefix(40))",
+                                            reason: "不適切な記事"
+                                        )
+                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                    }
+                                )
+                            }
                         }
                     }
 
@@ -152,16 +169,18 @@ struct TimelineView: View {
         }
     }
 
-    private var postsForSelectedFilter: [Post] {
+    private var itemsForSelectedFilter: [TimelineItem] {
         switch selectedFilter {
         case .all:
-            return store.timelinePosts
+            return store.timelineItems
         case .following:
-            return store.followingTimelinePosts
+            let followingIDs = store.followingUserIDs
+            return store.timelineItems.filter { followingIDs.contains($0.userID) }
         case .recommended:
-            return store.recommendedTimelinePosts
+            return store.recommendedTimelinePosts.map { .post($0) }
         case .rooms:
-            return store.followedTopicTimelinePosts
+            let followedTopics = store.followedTopicIDs
+            return store.timelineItems.filter { !Set($0.topics).intersection(followedTopics).isEmpty }
         }
     }
 }

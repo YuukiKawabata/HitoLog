@@ -759,10 +759,9 @@ struct FirebaseDataStore {
         #if canImport(FirebaseFirestore)
         let collection: String
         switch targetType {
-        case .post:
-            collection = "posts"
-        case .comment:
-            collection = "comments"
+        case .post:    collection = "posts"
+        case .comment: collection = "comments"
+        case .article: collection = "articles"
         case .user, .other:
             return
         }
@@ -1300,6 +1299,183 @@ private extension FirebaseDataStore {
         guard let value = value as? String, !value.isEmpty else { return nil }
         return value
     }
+
+}
+
+// MARK: - Article
+
+extension FirebaseDataStore {
+    func saveArticle(_ article: Article) async throws {
+        #if canImport(FirebaseFirestore)
+        try await Firestore.firestore()
+            .collection("articles")
+            .document(article.id)
+            .setData(article.firestoreData, merge: true)
+        #endif
+    }
+
+    func saveArticleBody(articleID: String, body: String) async throws {
+        #if canImport(FirebaseFirestore)
+        try await Firestore.firestore()
+            .collection("articleBodies")
+            .document(articleID)
+            .setData(["body": body], merge: true)
+        #endif
+    }
+
+    func loadArticleBody(articleID: String) async throws -> String? {
+        #if canImport(FirebaseFirestore)
+        let doc = try await Firestore.firestore()
+            .collection("articleBodies")
+            .document(articleID)
+            .getDocument()
+        return doc.data()?["body"] as? String
+        #else
+        return nil
+        #endif
+    }
+
+    func loadUserArticles(userID: String, limit: Int = 30) async throws -> [Article] {
+        #if canImport(FirebaseFirestore)
+        let snap = try await Firestore.firestore()
+            .collection("articles")
+            .whereField("userID", isEqualTo: userID)
+            .whereField("isDeleted", isEqualTo: false)
+            .order(by: "createdAt", descending: true)
+            .limit(to: limit)
+            .getDocuments()
+        return snap.documents.compactMap(mapArticle)
+        #else
+        return []
+        #endif
+    }
+
+    func loadTimelineArticles(limit: Int = 30) async throws -> [Article] {
+        #if canImport(FirebaseFirestore)
+        let snap = try await Firestore.firestore()
+            .collection("articles")
+            .whereField("isDeleted", isEqualTo: false)
+            .whereField("status", isEqualTo: ArticleStatus.published.rawValue)
+            .order(by: "createdAt", descending: true)
+            .limit(to: limit)
+            .getDocuments()
+        return snap.documents.compactMap(mapArticle)
+        #else
+        return []
+        #endif
+    }
+
+    func loadTopicArticles(topic: String, limit: Int = 30) async throws -> [Article] {
+        #if canImport(FirebaseFirestore)
+        let snap = try await Firestore.firestore()
+            .collection("articles")
+            .whereField("topics", arrayContains: topic)
+            .whereField("isDeleted", isEqualTo: false)
+            .whereField("status", isEqualTo: ArticleStatus.published.rawValue)
+            .order(by: "createdAt", descending: true)
+            .limit(to: limit)
+            .getDocuments()
+        return snap.documents.compactMap(mapArticle)
+        #else
+        return []
+        #endif
+    }
+
+    func deleteArticle(articleID: String) async throws {
+        #if canImport(FirebaseFirestore)
+        try await Firestore.firestore()
+            .collection("articles")
+            .document(articleID)
+            .updateData([
+                "isDeleted": true,
+                "updatedAt": FieldValue.serverTimestamp()
+            ])
+        #endif
+    }
+
+    func searchArticles(query: String, limit: Int = 20) async throws -> [Article] {
+        #if canImport(FirebaseFirestore)
+        guard let token = PostSearchTokenizer.primaryToken(for: query) else { return [] }
+        let snap = try await Firestore.firestore()
+            .collection("articles")
+            .whereField("searchTokens", arrayContains: token)
+            .whereField("isDeleted", isEqualTo: false)
+            .whereField("status", isEqualTo: ArticleStatus.published.rawValue)
+            .order(by: "createdAt", descending: true)
+            .limit(to: limit)
+            .getDocuments()
+        return snap.documents.compactMap(mapArticle)
+        #else
+        return []
+        #endif
+    }
+
+    func recordArticleUnlock(userID: String, articleID: String, price: ArticlePrice, transactionID: String) async throws {
+        #if canImport(FirebaseFirestore)
+        let db = Firestore.firestore()
+        let docID = "\(userID)_\(articleID)"
+        let unlockData: [String: Any] = [
+            "userID": userID,
+            "articleID": articleID,
+            "price": price.rawValue,
+            "transactionID": transactionID,
+            "createdAt": FieldValue.serverTimestamp()
+        ]
+        try await db.collection("articleUnlocks").document(docID).setData(unlockData, merge: false)
+        try await db.collection("articles").document(articleID).updateData([
+            "purchaseCount": FieldValue.increment(Int64(1))
+        ])
+        #endif
+    }
+
+    func loadArticleUnlockIDs(userID: String) async throws -> [String] {
+        #if canImport(FirebaseFirestore)
+        let snap = try await Firestore.firestore()
+            .collection("articleUnlocks")
+            .whereField("userID", isEqualTo: userID)
+            .getDocuments()
+        return snap.documents.compactMap { $0.data()["articleID"] as? String }
+        #else
+        return []
+        #endif
+    }
+
+    func mapArticle(_ document: QueryDocumentSnapshot) -> Article? {
+        #if canImport(FirebaseFirestore)
+        let data = document.data()
+        guard let userID = data["userID"] as? String,
+              let title = data["title"] as? String else { return nil }
+        let freePreviewBody = data["freePreviewBody"] as? String ?? ""
+        let combined = "\(title) \(freePreviewBody)"
+        return Article(
+            id: document.documentID,
+            userID: userID,
+            title: title,
+            freePreviewBody: freePreviewBody,
+            status: ArticleStatus(rawValue: stringValue(data["status"], fallback: ArticleStatus.published.rawValue)) ?? .published,
+            price: ArticlePrice(rawValue: stringValue(data["price"], fallback: ArticlePrice.free.rawValue)) ?? .free,
+            topics: data["topics"] as? [String] ?? TopicExtractor.topics(in: combined),
+            searchTokens: data["searchTokens"] as? [String] ?? PostSearchTokenizer.tokens(in: combined, topics: []),
+            commentPermission: CommentPermission(rawValue: stringValue(data["commentPermission"], fallback: CommentPermission.everyone.rawValue)) ?? .everyone,
+            humanBadge: HumanBadge(rawValue: stringValue(data["humanBadge"], fallback: HumanBadge.checking.rawValue)) ?? .checking,
+            humanScore: intValue(data["humanScore"], fallback: 0),
+            inputDurationMs: intValue(data["inputDurationMs"], fallback: 0),
+            editCount: intValue(data["editCount"], fallback: 0),
+            deleteCount: intValue(data["deleteCount"], fallback: 0),
+            commentCount: intValue(data["commentCount"], fallback: 0),
+            purchaseCount: intValue(data["purchaseCount"], fallback: 0),
+            bookmarkCount: intValue(data["bookmarkCount"], fallback: 0),
+            createdAt: dateValue(data["createdAt"], fallback: Date()),
+            updatedAt: dateValue(data["updatedAt"], fallback: Date()),
+            isDeleted: boolValue(data["isDeleted"], fallback: false),
+            moderationStatus: ModerationStatus(rawValue: stringValue(data["moderationStatus"], fallback: ModerationStatus.active.rawValue)) ?? .active,
+            hiddenReason: data["hiddenReason"] as? String,
+            hiddenAt: optionalDateValue(data["hiddenAt"])
+        )
+        #else
+        return nil
+        #endif
+    }
 }
 
 private extension Post {
@@ -1365,6 +1541,33 @@ private extension Comment {
             "userID": userId,
             "body": body,
             "humanScore": humanScore,
+            "createdAt": Timestamp(date: createdAt),
+            "updatedAt": Timestamp(date: updatedAt),
+            "isDeleted": isDeleted,
+            "moderationStatus": moderationStatus.rawValue
+        ]
+    }
+}
+
+private extension Article {
+    var firestoreData: [String: Any] {
+        [
+            "userID": userID,
+            "title": title,
+            "freePreviewBody": freePreviewBody,
+            "status": status.rawValue,
+            "price": price.rawValue,
+            "topics": topics,
+            "searchTokens": searchTokens,
+            "commentPermission": commentPermission.rawValue,
+            "humanBadge": humanBadge.rawValue,
+            "humanScore": humanScore,
+            "inputDurationMs": inputDurationMs,
+            "editCount": editCount,
+            "deleteCount": deleteCount,
+            "commentCount": commentCount,
+            "purchaseCount": purchaseCount,
+            "bookmarkCount": bookmarkCount,
             "createdAt": Timestamp(date: createdAt),
             "updatedAt": Timestamp(date: updatedAt),
             "isDeleted": isDeleted,

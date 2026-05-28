@@ -1,0 +1,95 @@
+{
+  "identifier" : "B0010000-0000-0000-0000-00000000A001",
+  "nonConsumableProducts" : [
+
+  ],
+  "consumableProducts" : [
+    {
+      "displayPrice" : "100",
+      "familySharable" : false,
+      "internalID" : "B0010000-0000-0001-0001-000000000001",
+      "localizations" : [
+        {
+          "description" : "記事の本文を永久にアンロックします（100円）",
+          "displayName" : "Article Unlock 100",
+          "locale" : "ja_JP"
+        }
+      ],
+      "productID" : "jp.hitolog.article_unlock_100",
+      "referenceName" : "Article Unlock 100",
+      "type" : "ConsumableIAP"
+    },
+    {
+      "displayPrice" : "300",
+      "familySharable" : false,
+      "internalID" : "B0010000-0000-0001-0001-000000000002",
+      "localizations" : [
+        {
+          "description" : "記事の本文を永久にアンロックします（300円）",
+          "displayName" : "Article Unlock 300",
+          "locale" : "ja_JP"
+        }
+      ],
+      "productID" : "jp.hitolog.article_unlock_300",
+      "referenceName" : "Article Unlock 300",
+      "type" : "ConsumableIAP"
+    },
+    {
+      "displayPrice" : "500",
+      "familySharable" : false,
+      "internalID" : "B0010000-0000-0001-0001-000000000003",
+      "localizations" : [
+        {
+          "description" : "記事の本文を永久にアンロックします（500円）",
+          "displayName" : "Article Unlock 500",
+          "locale" : "ja_JP"
+        }
+      ],
+      "productID" : "jp.hitolog.article_unlock_500",
+      "referenceName" : "Article Unlock 500",
+      "type" : "ConsumableIAP"
+    },
+    {
+      "displayPrice" : "800",
+      "familySharable" : false,
+      "internalID" : "B0010000-0000-0001-0001-000000000004",
+      "localizations" : [
+        {
+          "description" : "記事の本文を永久にアンロックします（800円）",
+          "displayName" : "Article Unlock 800",
+          "locale" : "ja_JP"
+        }
+      ],
+      "productID" : "jp.hitolog.article_unlock_800",
+      "referenceName" : "Article Unlock 800",
+      "type" : "ConsumableIAP"
+    },
+    {
+      "displayPrice" : "1000",
+      "familySharable" : false,
+      "internalID" : "B0010000-0000-0001-0001-000000000005",
+      "localizations" : [
+        {
+          "description" : "記事の本文を永久にアンロックします（1,000円）",
+          "displayName" : "Article Unlock 1000",
+          "locale" : "ja_JP"
+        }
+      ],
+      "productID" : "jp.hitolog.article_unlock_1000",
+      "referenceName" : "Article Unlock 1000",
+      "type" : "ConsumableIAP"
+    }
+  ],
+  "autoRenewableSubscriptions" : [
+
+  ],
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "formatVersion" : "2"
+  }
+}

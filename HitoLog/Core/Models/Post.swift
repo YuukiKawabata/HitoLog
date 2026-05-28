@@ -508,6 +508,12 @@ enum PostSearchTokenizer {
             || post.topics.contains(where: { normalized($0).contains(needle) })
     }
 
+    static func matches(title: String, preview: String, query: String) -> Bool {
+        let needle = normalized(query)
+        guard !needle.isEmpty else { return false }
+        return normalized(title).contains(needle) || normalized(preview).contains(needle)
+    }
+
     private static func normalized(_ rawValue: String) -> String {
         let allowedScalars = rawValue.lowercased().unicodeScalars.filter { scalar in
             CharacterSet.alphanumerics.contains(scalar)

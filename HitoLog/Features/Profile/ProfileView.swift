@@ -1,10 +1,35 @@
 import SwiftUI
 
+private enum ProfileTab: String, CaseIterable, Identifiable {
+    case posts
+    case articles
+    case saved
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .posts: return "投稿"
+        case .articles: return "記事"
+        case .saved: return "保存"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .posts: return "text.bubble"
+        case .articles: return "doc.text"
+        case .saved: return "bookmark"
+        }
+    }
+}
+
 struct ProfileView: View {
     @EnvironmentObject private var store: AppDataStore
     let userID: String?
     @State private var editingPost: Post?
     @State private var deletingPost: Post?
+    @State private var profileTab: ProfileTab = .posts
 
     init(userID: String? = nil) {
         self.userID = userID
@@ -21,51 +46,22 @@ struct ProfileView: View {
                         )
                         .padding(AppSpacing.md)
 
-                        SectionKicker(text: "Posts", systemImage: "text.bubble")
-                            .padding(.horizontal, AppSpacing.md)
-                            .padding(.top, AppSpacing.sm)
-                            .padding(.bottom, AppSpacing.sm)
-
-                        let posts = profilePosts(for: user)
-                        if posts.isEmpty {
-                            ContentUnavailableView("投稿がありません", systemImage: "text.bubble")
-                                .padding(.top, AppSpacing.xl)
-                        } else {
-                            ForEach(posts) { post in
-                                PostRowView(
-                                    post: post,
-                                    author: user,
-                                    isLiked: store.likedPostIDs.contains(post.id),
-                                    isBookmarked: store.isBookmarked(post.id),
-                                    onLike: {
-                                        store.toggleLike(for: post.id)
-                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                    },
-                                    onBookmark: {
-                                        store.toggleBookmark(for: post.id)
-                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                    },
-                                    commentDestination: AnyView(PostDetailView(postID: post.id)),
-                                    authorDestination: AnyView(ProfileView(userID: user.id)),
-                                    showsOwnerActions: post.userId == store.currentUser.id,
-                                    onEdit: {
-                                        editingPost = post
-                                    },
-                                    onDelete: {
-                                        deletingPost = post
-                                    },
-                                    onReport: {
-                                        store.addReport(
-                                            targetType: .post,
-                                            targetID: post.id,
-                                            targetOwnerID: post.userId,
-                                            targetDescription: "投稿: \(post.body.prefix(40))",
-                                            reason: "不適切な投稿"
-                                        )
-                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                    }
-                                )
+                        Picker("表示", selection: $profileTab) {
+                            ForEach(ProfileTab.allCases) { tab in
+                                Label(tab.title, systemImage: tab.systemImage).tag(tab)
                             }
+                        }
+                        .pickerStyle(.segmented)
+                        .padding(.horizontal, AppSpacing.md)
+                        .padding(.vertical, AppSpacing.sm)
+
+                        switch profileTab {
+                        case .posts:
+                            postsSection(for: user)
+                        case .articles:
+                            articlesSection(for: user)
+                        case .saved:
+                            savedSection
                         }
                     }
                 }
@@ -79,12 +75,6 @@ struct ProfileView: View {
         .toolbar {
             if displayedUser?.id == store.currentUser.id {
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    NavigationLink {
-                        BookmarkedPostsView()
-                    } label: {
-                        Image(systemName: "bookmark")
-                    }
-
                     NavigationLink {
                         SettingsView()
                     } label: {
@@ -101,11 +91,7 @@ struct ProfileView: View {
             "投稿を削除しますか？",
             isPresented: Binding(
                 get: { deletingPost != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        deletingPost = nil
-                    }
-                }
+                set: { isPresented in if !isPresented { deletingPost = nil } }
             ),
             titleVisibility: .visible
         ) {
@@ -116,12 +102,98 @@ struct ProfileView: View {
                 }
                 deletingPost = nil
             }
-            Button("キャンセル", role: .cancel) {
-                deletingPost = nil
-            }
+            Button("キャンセル", role: .cancel) { deletingPost = nil }
         } message: {
             Text("削除した投稿はタイムラインに表示されなくなります。")
         }
+        .task {
+            if let user = displayedUser {
+                await store.loadUserArticles(userID: user.id)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func postsSection(for user: AppUser) -> some View {
+        let posts = store.visibleProfilePosts(for: user.id)
+        if posts.isEmpty {
+            ContentUnavailableView("投稿がありません", systemImage: "text.bubble")
+                .padding(.top, AppSpacing.xl)
+        } else {
+            ForEach(posts) { post in
+                PostRowView(
+                    post: post,
+                    author: user,
+                    isLiked: store.likedPostIDs.contains(post.id),
+                    isBookmarked: store.isBookmarked(post.id),
+                    onLike: {
+                        store.toggleLike(for: post.id)
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    },
+                    onBookmark: {
+                        store.toggleBookmark(for: post.id)
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    },
+                    commentDestination: AnyView(PostDetailView(postID: post.id)),
+                    authorDestination: AnyView(ProfileView(userID: user.id)),
+                    showsOwnerActions: post.userId == store.currentUser.id,
+                    onEdit: { editingPost = post },
+                    onDelete: { deletingPost = post },
+                    onReport: {
+                        store.addReport(
+                            targetType: .post,
+                            targetID: post.id,
+                            targetOwnerID: post.userId,
+                            targetDescription: "投稿: \(post.body.prefix(40))",
+                            reason: "不適切な投稿"
+                        )
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    }
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func articlesSection(for user: AppUser) -> some View {
+        let articles = store.profileArticles(for: user.id)
+        let isOwner = user.id == store.currentUser.id
+        if articles.isEmpty {
+            ContentUnavailableView("記事がありません", systemImage: "doc.text")
+                .padding(.top, AppSpacing.xl)
+        } else {
+            LazyVStack(spacing: AppSpacing.sm) {
+                if isOwner {
+                    EarningsSummaryView(articles: articles)
+                        .padding(.horizontal, AppSpacing.md)
+                        .padding(.top, AppSpacing.sm)
+                }
+                ForEach(articles) { article in
+                    ArticleCardView(
+                        article: article,
+                        author: user,
+                        showsOwnerActions: isOwner,
+                        onReport: {
+                            guard !isOwner else { return }
+                            store.addReport(
+                                targetType: .article,
+                                targetID: article.id,
+                                targetOwnerID: article.userID,
+                                targetDescription: "記事: \(article.title.prefix(40))",
+                                reason: "不適切な記事"
+                            )
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        }
+                    )
+                }
+            }
+            .padding(.vertical, AppSpacing.sm)
+        }
+    }
+
+    @ViewBuilder
+    private var savedSection: some View {
+        BookmarkedPostsView(inline: true)
     }
 
     private var displayedUser: AppUser? {
@@ -136,10 +208,6 @@ struct ProfileView: View {
             return "プロフィール"
         }
         return displayedUser.displayName
-    }
-
-    private func profilePosts(for user: AppUser) -> [Post] {
-        store.visibleProfilePosts(for: user.id)
     }
 }
 
@@ -361,58 +429,62 @@ private struct ProfileSignalTile: View {
 
 private struct BookmarkedPostsView: View {
     @EnvironmentObject private var store: AppDataStore
+    var inline: Bool = false
 
     var body: some View {
-        ScrollView {
-            LazyVStack(spacing: AppSpacing.sm) {
-                if store.bookmarkedPosts.isEmpty {
-                    ContentUnavailableView("保存した投稿はまだありません", systemImage: "bookmark")
-                        .padding(AppSpacing.xl)
-                        .paperSurface()
-                        .padding(AppSpacing.md)
-                } else {
-                    ForEach(store.bookmarkedPosts) { post in
-                        if let author = store.user(for: post.userId) {
-                            PostRowView(
-                                post: post,
-                                author: author,
-                                isLiked: store.likedPostIDs.contains(post.id),
-                                isBookmarked: store.isBookmarked(post.id),
-                                onLike: {
-                                    store.toggleLike(for: post.id)
-                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                },
-                                onBookmark: {
-                                    store.toggleBookmark(for: post.id)
-                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                },
-                                commentDestination: AnyView(PostDetailView(postID: post.id)),
-                                authorDestination: AnyView(ProfileView(userID: author.id)),
-                                onReport: {
-                                    store.addReport(
-                                        targetType: .post,
-                                        targetID: post.id,
-                                        targetOwnerID: post.userId,
-                                        targetDescription: "投稿: \(post.body.prefix(40))",
-                                        reason: "不適切な投稿"
-                                    )
-                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                }
-                            )
-                        }
+        let content = LazyVStack(spacing: AppSpacing.sm) {
+            if store.bookmarkedPosts.isEmpty {
+                ContentUnavailableView("保存した投稿はまだありません", systemImage: "bookmark")
+                    .padding(AppSpacing.xl)
+                    .paperSurface()
+                    .padding(AppSpacing.md)
+            } else {
+                ForEach(store.bookmarkedPosts) { post in
+                    if let author = store.user(for: post.userId) {
+                        PostRowView(
+                            post: post,
+                            author: author,
+                            isLiked: store.likedPostIDs.contains(post.id),
+                            isBookmarked: store.isBookmarked(post.id),
+                            onLike: {
+                                store.toggleLike(for: post.id)
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            },
+                            onBookmark: {
+                                store.toggleBookmark(for: post.id)
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            },
+                            commentDestination: AnyView(PostDetailView(postID: post.id)),
+                            authorDestination: AnyView(ProfileView(userID: author.id)),
+                            onReport: {
+                                store.addReport(
+                                    targetType: .post,
+                                    targetID: post.id,
+                                    targetOwnerID: post.userId,
+                                    targetDescription: "投稿: \(post.body.prefix(40))",
+                                    reason: "不適切な投稿"
+                                )
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            }
+                        )
                     }
                 }
             }
-            .padding(.vertical, AppSpacing.md)
         }
-        .background(PaperCanvas())
-        .navigationTitle("ブックマーク")
-        .navigationBarTitleDisplayMode(.inline)
-        .task {
-            await store.loadBookmarkedPosts()
-        }
-        .refreshable {
-            await store.loadBookmarkedPosts()
+
+        if inline {
+            content
+                .padding(.vertical, AppSpacing.sm)
+                .task { await store.loadBookmarkedPosts() }
+        } else {
+            ScrollView {
+                content.padding(.vertical, AppSpacing.md)
+            }
+            .background(PaperCanvas())
+            .navigationTitle("ブックマーク")
+            .navigationBarTitleDisplayMode(.inline)
+            .task { await store.loadBookmarkedPosts() }
+            .refreshable { await store.loadBookmarkedPosts() }
         }
     }
 }

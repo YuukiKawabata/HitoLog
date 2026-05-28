@@ -483,5 +483,63 @@ service cloud.firestore {
     match /fcmTokens/{userID}/tokens/{tokenID} {
       allow read, write: if isOwner(userID);
     }
+
+    match /articles/{articleID} {
+      allow read: if signedIn();
+      allow create: if isOwner(request.resource.data.userID)
+        && isActiveAccount()
+        && request.resource.data.keys().hasOnly([
+          'userID', 'title', 'freePreviewBody', 'status', 'price',
+          'topics', 'searchTokens', 'commentPermission',
+          'humanBadge', 'humanScore', 'inputDurationMs', 'editCount', 'deleteCount',
+          'commentCount', 'purchaseCount', 'bookmarkCount',
+          'createdAt', 'updatedAt', 'isDeleted', 'moderationStatus'
+        ])
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 100
+        && request.resource.data.freePreviewBody is string
+        && request.resource.data.freePreviewBody.size() > 0
+        && request.resource.data.commentCount == 0
+        && request.resource.data.purchaseCount == 0
+        && request.resource.data.bookmarkCount == 0
+        && request.resource.data.isDeleted == false
+        && request.resource.data.moderationStatus == 'active'
+        && request.resource.data.status in ['draft', 'published', 'unpublished']
+        && request.resource.data.price in ['free', 'yen100', 'yen300', 'yen500', 'yen800', 'yen1000'];
+      allow update: if isOwner(resource.data.userID)
+        && changedOnly(['title', 'freePreviewBody', 'status', 'topics', 'searchTokens', 'updatedAt', 'isDeleted', 'commentPermission'])
+        && (!request.resource.data.diff(resource.data).changedKeys().hasAny(['isDeleted'])
+          || request.resource.data.isDeleted == true);
+      allow update: if isAdmin()
+        && changedOnly(['moderationStatus', 'hiddenReason', 'hiddenAt', 'hiddenBy', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    match /articleBodies/{articleID} {
+      allow read: if signedIn()
+        && (
+          !exists(/databases/$(database)/documents/articles/$(articleID))
+          || get(/databases/$(database)/documents/articles/$(articleID)).data.price == 'free'
+          || exists(/databases/$(database)/documents/articleUnlocks/$(request.auth.uid + '_' + articleID))
+          || get(/databases/$(database)/documents/articles/$(articleID)).data.userID == request.auth.uid
+        );
+      allow write: if false;
+    }
+
+    match /articleUnlocks/{unlockID} {
+      allow read: if signedIn() && unlockID.matches(request.auth.uid + '_.*');
+      allow write: if false;
+    }
+
+    match /articleBookmarks/{bookmarkID} {
+      allow read: if isOwner(resource.data.userID);
+      allow create: if isOwner(request.resource.data.userID)
+        && isActiveAccount()
+        && request.resource.data.keys().hasOnly(['userID', 'articleID', 'createdAt'])
+        && bookmarkID == request.resource.data.userID + '_' + request.resource.data.articleID;
+      allow delete: if isOwner(resource.data.userID);
+      allow update: if false;
+    }
   }
 }

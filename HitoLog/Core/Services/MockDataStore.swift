@@ -608,18 +608,16 @@ enum ReportTargetType: String, Codable, Equatable, CaseIterable {
     case post
     case comment
     case user
+    case article
     case other
 
     var displayText: String {
         switch self {
-        case .post:
-            return "投稿"
-        case .comment:
-            return "コメント"
-        case .user:
-            return "ユーザー"
-        case .other:
-            return "その他"
+        case .post:    return "投稿"
+        case .comment: return "コメント"
+        case .user:    return "ユーザー"
+        case .article: return "記事"
+        case .other:   return "その他"
         }
     }
 }
