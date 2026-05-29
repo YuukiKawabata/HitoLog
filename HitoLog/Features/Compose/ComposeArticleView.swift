@@ -9,10 +9,17 @@ struct ComposeArticleView: View {
     @State private var didRestoreExistingDraft = false
     @State private var isShowingDeleteDraftConfirmation = false
     @State private var isSubmitting = false
-    let onSubmitted: () -> Void
+    @State private var freePreviewMode: EditorMode = .edit
+    @State private var paidBodyMode: EditorMode = .edit
+    @State private var isKeyboardVisible = false
+
+    private enum EditorMode: Hashable { case edit, preview }
+    let editingArticle: Article?
+    let onSubmitted: (ArticleStatus) -> Void
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
-    init(onSubmitted: @escaping () -> Void = {}) {
+    init(editingArticle: Article? = nil, onSubmitted: @escaping (ArticleStatus) -> Void = { _ in }) {
+        self.editingArticle = editingArticle
         self.onSubmitted = onSubmitted
     }
 
@@ -21,6 +28,13 @@ struct ComposeArticleView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: AppSpacing.lg) {
                     headerPanel
+
+                    if hasSavedDraft {
+                        Label("下書きを復元しました", systemImage: "tray.and.arrow.down.fill")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(AppColor.accent)
+                    }
+
                     titlePanel
                     freePreviewPanel
                     paidBodyPanel
@@ -33,7 +47,7 @@ struct ComposeArticleView: View {
                 .padding(AppSpacing.md)
             }
             .background(PaperCanvas())
-            .navigationTitle("記事")
+            .navigationTitle(viewModel.isEditing ? "記事を編集" : "記事")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -57,28 +71,38 @@ struct ComposeArticleView: View {
                 Text("削除した下書きは元に戻せません。")
             }
             .safeAreaInset(edge: .bottom) {
-                HStack(spacing: AppSpacing.sm) {
-                    Button { submit(status: .draft) } label: {
-                        Label("下書き保存", systemImage: "tray")
-                    }
-                    .buttonStyle(SecondaryButtonStyle())
-                    .disabled(!canSubmit || isSubmitting)
+                if !isKeyboardVisible {
+                    HStack(spacing: AppSpacing.sm) {
+                        Button { submit(status: .draft) } label: {
+                            Label("下書き保存", systemImage: "tray")
+                        }
+                        .buttonStyle(SecondaryButtonStyle())
+                        .disabled(!canSubmit || isSubmitting)
 
-                    Button { submit(status: .published) } label: {
-                        submitButtonLabel
+                        Button { submit(status: .published) } label: {
+                            submitButtonLabel
+                        }
+                        .buttonStyle(PrimaryButtonStyle())
+                        .disabled(!canSubmit || isSubmitting)
                     }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .disabled(!canSubmit || isSubmitting)
+                    .padding(.horizontal, AppSpacing.md)
+                    .padding(.vertical, AppSpacing.sm)
+                    .background(.ultraThinMaterial)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                .padding(.horizontal, AppSpacing.md)
-                .padding(.vertical, AppSpacing.sm)
-                .background(.ultraThinMaterial)
+            }
+            .animation(.easeInOut(duration: 0.22), value: isKeyboardVisible)
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                isKeyboardVisible = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                isKeyboardVisible = false
             }
             .onReceive(timer) { _ in
                 viewModel.refreshMetricsDuration()
                 saveDraft()
             }
-            .onAppear { restoreDraftIfNeeded() }
+            .onAppear { restoreOrLoadIfNeeded() }
         }
     }
 
@@ -123,72 +147,135 @@ struct ComposeArticleView: View {
 
     private var freePreviewPanel: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
-            SectionKicker(text: "無料プレビュー", systemImage: "eye")
+            HStack {
+                SectionKicker(text: "無料プレビュー", systemImage: "eye")
+                Spacer(minLength: AppSpacing.sm)
+                editorModePicker($freePreviewMode)
+            }
 
             Text("誰でも読める冒頭部分。読者が続きを読みたくなる内容を書きましょう。")
                 .font(.caption)
                 .foregroundStyle(AppColor.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            ZStack(alignment: .topLeading) {
-                NoPasteTextViewRepresentable(
-                    text: $viewModel.freePreviewBody,
-                    onTextChanged: viewModel.recordChange(from:to:)
-                )
-                .frame(minHeight: 160)
-                .padding(AppSpacing.sm)
-
-                if viewModel.freePreviewBody.isEmpty {
-                    Text("読者に届けたい冒頭の言葉を入力")
-                        .font(.body)
-                        .foregroundStyle(AppColor.placeholder)
-                        .padding(.horizontal, AppSpacing.md + 4)
-                        .padding(.vertical, AppSpacing.md + 2)
+            Group {
+                if freePreviewMode == .edit {
+                    editorField(
+                        text: $viewModel.freePreviewBody,
+                        placeholder: "読者に届けたい冒頭の言葉を入力",
+                        minHeight: 160
+                    )
+                } else {
+                    markdownPreview(viewModel.freePreviewBody, minHeight: 160)
                 }
             }
-            .background(AppColor.background, in: RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
+            .id(freePreviewMode)
+            .transition(.opacity)
 
-            Label("ペースト不可", systemImage: "doc.on.clipboard")
-                .font(.caption)
-                .foregroundStyle(AppColor.textSecondary)
+            if freePreviewMode == .edit {
+                Label("ペースト不可", systemImage: "doc.on.clipboard")
+                    .font(.caption)
+                    .foregroundStyle(AppColor.textSecondary)
+            }
         }
         .padding(AppSpacing.md)
         .paperSurface()
+        .animation(.easeInOut(duration: 0.2), value: freePreviewMode)
     }
 
     private var paidBodyPanel: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
-            SectionKicker(text: "有料本文", systemImage: "lock.doc")
+            HStack {
+                SectionKicker(text: "有料本文", systemImage: "lock.doc")
+                Spacer(minLength: AppSpacing.sm)
+                editorModePicker($paidBodyMode)
+            }
 
             Text("有料記事の場合、購入者のみが読める部分です。無料記事は全文公開されます。")
                 .font(.caption)
                 .foregroundStyle(AppColor.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            ZStack(alignment: .topLeading) {
-                NoPasteTextViewRepresentable(
-                    text: $viewModel.paidBody,
-                    onTextChanged: viewModel.recordChange(from:to:)
-                )
-                .frame(minHeight: 240)
-                .padding(AppSpacing.sm)
-
-                if viewModel.paidBody.isEmpty {
-                    Text("本文（省略可）")
-                        .font(.body)
-                        .foregroundStyle(AppColor.placeholder)
-                        .padding(.horizontal, AppSpacing.md + 4)
-                        .padding(.vertical, AppSpacing.md + 2)
+            Group {
+                if paidBodyMode == .edit {
+                    editorField(
+                        text: $viewModel.paidBody,
+                        placeholder: "本文（省略可）",
+                        minHeight: 240
+                    )
+                } else {
+                    markdownPreview(viewModel.paidBody, minHeight: 240)
                 }
             }
-            .background(AppColor.background, in: RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
+            .id(paidBodyMode)
+            .transition(.opacity)
 
-            Label("ペースト不可", systemImage: "doc.on.clipboard")
-                .font(.caption)
-                .foregroundStyle(AppColor.textSecondary)
+            if paidBodyMode == .edit {
+                Label("ペースト不可", systemImage: "doc.on.clipboard")
+                    .font(.caption)
+                    .foregroundStyle(AppColor.textSecondary)
+            }
         }
         .padding(AppSpacing.md)
         .paperSurface()
+        .animation(.easeInOut(duration: 0.2), value: paidBodyMode)
+    }
+
+    // MARK: - エディタ / プレビュー 共通部品
+
+    private func editorModePicker(_ mode: Binding<EditorMode>) -> some View {
+        Picker("表示モード", selection: mode) {
+            Text("編集").tag(EditorMode.edit)
+            Text("プレビュー").tag(EditorMode.preview)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .frame(width: 168)
+    }
+
+    private func editorField(text: Binding<String>, placeholder: String, minHeight: CGFloat) -> some View {
+        ZStack(alignment: .topLeading) {
+            NoPasteTextViewRepresentable(
+                text: text,
+                onTextChanged: viewModel.recordChange(from:to:),
+                accessory: .formatting
+            )
+            .frame(minHeight: minHeight)
+            .padding(AppSpacing.sm)
+
+            if text.wrappedValue.isEmpty {
+                Text(placeholder)
+                    .font(.body)
+                    .foregroundStyle(AppColor.placeholder)
+                    .padding(.horizontal, AppSpacing.md + 4)
+                    .padding(.vertical, AppSpacing.md + 2)
+            }
+        }
+        .background(AppColor.background, in: RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                .stroke(AppColor.border, lineWidth: 0.7)
+        }
+    }
+
+    private func markdownPreview(_ text: String, minHeight: CGFloat) -> some View {
+        Group {
+            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text("プレビューする内容がありません")
+                    .font(.body)
+                    .foregroundStyle(AppColor.placeholder)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                MarkdownBodyView(markdown: text)
+            }
+        }
+        .padding(AppSpacing.md)
+        .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .topLeading)
+        .background(AppColor.background, in: RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                .stroke(AppColor.border, lineWidth: 0.7)
+        }
     }
 
     private var pricePanel: some View {
@@ -253,7 +340,7 @@ struct ComposeArticleView: View {
                         ForEach(topics, id: \.self) { topic in
                             Label("#\(topic)", systemImage: "number")
                                 .font(.caption.weight(.semibold))
-                                .padding(.vertical, 7)
+                                .padding(.vertical, AppSpacing.xs)
                                 .padding(.horizontal, AppSpacing.sm)
                                 .background(AppColor.accentSoft, in: Capsule())
                                 .foregroundStyle(AppColor.accent)
@@ -336,21 +423,38 @@ struct ComposeArticleView: View {
         defer { isSubmitting = false }
 
         let (article, paidBody) = viewModel.makeArticle(using: store.currentUser, status: status)
-        store.insertArticle(article, paidBody: paidBody)
-        clearDraft()
+        if viewModel.isEditing {
+            store.updateArticle(article, paidBody: paidBody)
+        } else {
+            store.insertArticle(article, paidBody: paidBody)
+            clearDraft()
+        }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
-        onSubmitted()
+        onSubmitted(status)
         dismiss()
     }
 
-    private func restoreDraftIfNeeded() {
+    private func restoreOrLoadIfNeeded() {
         guard !didRestoreDraft else { return }
         didRestoreDraft = true
+
+        if let editingArticle {
+            viewModel.load(article: editingArticle, paidBody: "")
+            Task {
+                if let body = try? await store.loadArticleBody(articleID: editingArticle.id), !body.isEmpty {
+                    viewModel.paidBody = body
+                }
+            }
+            return
+        }
+
         didRestoreExistingDraft = !draftPayload.isEmpty
         viewModel.restoreDraft(from: draftPayload)
     }
 
     private func saveDraft() {
+        // 既存記事の編集中は、新規作成用の自動下書き(@AppStorage)を上書きしない。
+        guard !viewModel.isEditing else { return }
         draftPayload = viewModel.encodedDraft()
     }
 

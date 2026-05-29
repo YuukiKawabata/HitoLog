@@ -423,6 +423,9 @@ struct FirebaseDataStore {
             data["appleUserID"] = appleUserID
         }
         data["avatarUrl"] = user.avatarUrl ?? FieldValue.delete()
+        data["website"] = user.website ?? FieldValue.delete()
+        data["location"] = user.location ?? FieldValue.delete()
+        data["occupation"] = user.occupation ?? FieldValue.delete()
 
         let ref = Firestore.firestore().collection("users").document(user.id)
         let snapshot = try await ref.getDocument()
@@ -998,7 +1001,10 @@ private extension FirebaseDataStore {
             isAdmin: boolValue(data["isAdmin"], fallback: false),
             isSuspended: boolValue(data["isSuspended"], fallback: false),
             followerCount: intValue(data["followerCount"], fallback: 0),
-            followingCount: intValue(data["followingCount"], fallback: 0)
+            followingCount: intValue(data["followingCount"], fallback: 0),
+            website: (data["website"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+            location: (data["location"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+            occupation: (data["occupation"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         )
     }
 

@@ -585,11 +585,27 @@ final class AppDataStore: ObservableObject {
         }
     }
 
-    func updateCurrentUser(displayName: String, handle: String, bio: String, avatarUrl: String? = nil) async throws {
+    func updateCurrentUser(
+        displayName: String,
+        handle: String,
+        bio: String,
+        avatarUrl: String? = nil,
+        website: String? = nil,
+        location: String? = nil,
+        occupation: String? = nil
+    ) async throws {
+        func normalized(_ value: String?) -> String? {
+            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (trimmed?.isEmpty ?? true) ? nil : trimmed
+        }
+
         currentUser.displayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         currentUser.handle = handle.trimmingCharacters(in: .whitespacesAndNewlines)
         currentUser.bio = bio.trimmingCharacters(in: .whitespacesAndNewlines)
         currentUser.avatarUrl = avatarUrl
+        currentUser.website = normalized(website)
+        currentUser.location = normalized(location)
+        currentUser.occupation = normalized(occupation)
         currentUser.updatedAt = Date()
 
         if let index = users.firstIndex(where: { $0.id == currentUser.id }) {
@@ -1153,6 +1169,23 @@ final class AppDataStore: ObservableObject {
         guard canCurrentUserCreateContent else { return }
         articles.insert(article, at: 0)
         AnalyticsService.shared.capture("article_created", properties: [
+            "article_id": article.id,
+            "status": article.status.rawValue,
+            "price": article.price.rawValue,
+            "human_badge": article.humanBadge.rawValue
+        ])
+        runRemoteWrite {
+            try await self.remoteStore.saveArticle(article)
+            if !paidBody.isEmpty {
+                try await self.remoteStore.saveArticleBody(articleID: article.id, body: paidBody)
+            }
+        }
+    }
+
+    func updateArticle(_ article: Article, paidBody: String) {
+        guard let index = articles.firstIndex(where: { $0.id == article.id && $0.userID == currentUser.id }) else { return }
+        articles[index] = article
+        AnalyticsService.shared.capture("article_updated", properties: [
             "article_id": article.id,
             "status": article.status.rawValue,
             "price": article.price.rawValue,
@@ -1806,6 +1839,8 @@ final class AppDataStore: ObservableObject {
             users = initialUsers
             posts = initialPosts
             comments = initialComments
+            articles = articles.filter { !$0.id.hasPrefix("demo-") }
+            unlockedArticleIDs = unlockedArticleIDs.filter { !$0.hasPrefix("demo-") }
             likedPostIDs = initialLikedPostIDs
             bookmarkedPostIDs = initialBookmarkedPostIDs
             blockedUserIDs = []
@@ -1904,6 +1939,12 @@ final class AppDataStore: ObservableObject {
         comments = uniqueComments(comments.filter { !$0.id.hasPrefix("demo-") } + seed.comments.map { comment in
             comment.demoCopy(currentUserID: activeCurrentUserID, seedCurrentUserID: seedCurrentUserID)
         })
+        articles = uniqueArticles(articles.filter { !$0.id.hasPrefix("demo-") } + seed.articles.map { article in
+            article.demoCopy(currentUserID: activeCurrentUserID, seedCurrentUserID: seedCurrentUserID)
+        })
+        // 購入済み記事の閲覧画面もスクショできるよう、有料デモ記事を1本解錠しておく
+        unlockedArticleIDs = Set(unlockedArticleIDs.filter { !$0.hasPrefix("demo-") })
+        unlockedArticleIDs.insert("demo-article-1")
         likedPostIDs = Set(likedPostIDs.filter { !$0.hasPrefix("demo-") })
         likedPostIDs.formUnion(seed.likedPostIDs.map { "demo-\($0)" })
         bookmarkedPostIDs = Set(bookmarkedPostIDs.filter { !$0.hasPrefix("demo-") })
@@ -1926,6 +1967,8 @@ final class AppDataStore: ObservableObject {
         users = mergeCurrentUser(into: users.filter { !demoUserIDs.contains($0.id) })
         posts = posts.filter { !$0.id.hasPrefix("demo-") }
         comments = comments.filter { !$0.id.hasPrefix("demo-") }
+        articles = articles.filter { !$0.id.hasPrefix("demo-") }
+        unlockedArticleIDs = unlockedArticleIDs.filter { !$0.hasPrefix("demo-") }
         likedPostIDs = Set(likedPostIDs.filter { !$0.hasPrefix("demo-") })
         bookmarkedPostIDs = Set(bookmarkedPostIDs.filter { !$0.hasPrefix("demo-") })
         blockedUserIDs.subtract(demoUserIDs)
@@ -2329,6 +2372,17 @@ final class AppDataStore: ObservableObject {
         }
     }
 
+    private func uniqueArticles(_ articles: [Article]) -> [Article] {
+        var seen = Set<String>()
+        return articles
+            .filter { article in
+                guard !seen.contains(article.id), !article.isDeleted else { return false }
+                seen.insert(article.id)
+                return true
+            }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
     private func adoptSignedInUser(uid: String, appleUserID: String?, displayName: String?) {
         guard currentUser.id != uid else { return }
 
@@ -2427,7 +2481,10 @@ private extension AppUser {
             isAdmin: isAdmin,
             isSuspended: isSuspended,
             followerCount: followerCount,
-            followingCount: followingCount
+            followingCount: followingCount,
+            website: website,
+            location: location,
+            occupation: occupation
         )
     }
 }
@@ -2490,6 +2547,36 @@ private extension Post {
             commentCount: commentCount,
             repostCount: repostCount,
             quoteCount: quoteCount,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            isDeleted: isDeleted,
+            moderationStatus: moderationStatus,
+            hiddenReason: hiddenReason,
+            hiddenAt: hiddenAt
+        )
+    }
+}
+
+private extension Article {
+    func demoCopy(currentUserID: String, seedCurrentUserID: String) -> Article {
+        Article(
+            id: "demo-\(id)",
+            userID: userID == seedCurrentUserID ? currentUserID : userID,
+            title: title,
+            freePreviewBody: freePreviewBody,
+            status: status,
+            price: price,
+            topics: topics,
+            searchTokens: searchTokens,
+            commentPermission: commentPermission,
+            humanBadge: humanBadge,
+            humanScore: humanScore,
+            inputDurationMs: inputDurationMs,
+            editCount: editCount,
+            deleteCount: deleteCount,
+            commentCount: commentCount,
+            purchaseCount: purchaseCount,
+            bookmarkCount: bookmarkCount,
             createdAt: createdAt,
             updatedAt: updatedAt,
             isDeleted: isDeleted,

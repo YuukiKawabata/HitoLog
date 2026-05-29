@@ -5,6 +5,7 @@ struct LoginView: View {
     @EnvironmentObject private var authSession: AuthSessionStore
     let onContinue: () -> Void
     @State private var isSigningIn = false
+    @State private var appeared = false
 
     init(onContinue: @escaping () -> Void = {}) {
         self.onContinue = onContinue
@@ -37,6 +38,8 @@ struct LoginView: View {
                 }
                 .padding(AppSpacing.lg)
                 .paperSurface()
+                .opacity(appeared ? 1 : 0)
+                .offset(y: appeared ? 0 : 16)
 
                 VStack(spacing: AppSpacing.sm) {
                     if authSession.isFirebaseAuthAvailable {
@@ -89,6 +92,11 @@ struct LoginView: View {
                 Spacer()
             }
             .padding(AppSpacing.lg)
+        }
+        .onAppear {
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.1)) {
+                appeared = true
+            }
         }
         .alert("サインインできません", isPresented: Binding(
             get: { authSession.errorMessage != nil },

@@ -22,6 +22,7 @@ enum AppColor {
 }
 
 enum AppSpacing {
+    static let xxs: CGFloat = 2
     static let xs: CGFloat = 4
     static let sm: CGFloat = 8
     static let md: CGFloat = 16
@@ -120,6 +121,7 @@ struct PaperMetricTile: View {
                 if let systemImage {
                     Image(systemName: systemImage)
                         .font(.caption.weight(.semibold))
+                        .contentTransition(.symbolEffect(.replace))
                 }
 
                 Text(title)
@@ -160,7 +162,7 @@ struct HumanSignalStrip: View {
                 .foregroundStyle(tint)
                 .frame(width: 22, height: 22)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                 Text(title)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(AppColor.textPrimary)

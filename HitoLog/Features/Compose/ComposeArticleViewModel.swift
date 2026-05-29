@@ -9,6 +9,10 @@ final class ComposeArticleViewModel: ObservableObject {
     @Published var commentPermission: CommentPermission = .everyone
     @Published private(set) var metrics = TypingMetrics()
 
+    /// 編集中の既存記事（新規作成時は nil）。
+    private(set) var editingArticle: Article?
+    var isEditing: Bool { editingArticle != nil }
+
     private let humanScoreService = HumanScoreService()
 
     var hasDraft: Bool {
@@ -40,6 +44,17 @@ final class ComposeArticleViewModel: ObservableObject {
     }
 
     var canSetPaidPrice: Bool { humanBadge == .verified }
+
+    /// 既存記事を編集用に読み込む。本人入力スコア等の検証値は元記事のものを保持する。
+    func load(article: Article, paidBody: String) {
+        editingArticle = article
+        title = article.title
+        freePreviewBody = article.freePreviewBody
+        self.paidBody = paidBody
+        price = article.price
+        commentPermission = article.commentPermission
+        metrics = TypingMetrics()
+    }
 
     func recordChange(from oldText: String, to newText: String) {
         metrics.recordChange(from: oldText, to: newText, at: Date())
@@ -90,6 +105,24 @@ final class ComposeArticleViewModel: ObservableObject {
         using user: AppUser,
         status: ArticleStatus
     ) -> (article: Article, paidBody: String) {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedPreview = freePreviewBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedPaidBody = paidBody.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // 既存記事の編集 — 検証値（humanBadge/score/作成日）を保持し、内容のみ更新する。
+        if var updated = editingArticle {
+            let combined = "\(trimmedTitle) \(trimmedPreview)"
+            updated.title = trimmedTitle
+            updated.freePreviewBody = trimmedPreview
+            updated.status = status
+            updated.price = updated.humanBadge == .verified ? price : .free
+            updated.topics = TopicExtractor.topics(in: combined)
+            updated.searchTokens = PostSearchTokenizer.tokens(in: combined, topics: updated.topics)
+            updated.commentPermission = commentPermission
+            updated.updatedAt = Date()
+            return (updated, trimmedPaidBody)
+        }
+
         let input = HumanScoreInput(
             inputDurationMs: metrics.inputDurationMs,
             characterCount: freePreviewBody.count + paidBody.count,

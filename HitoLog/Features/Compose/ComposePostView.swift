@@ -15,6 +15,7 @@ struct ComposePostView: View {
     @State private var isLoadingMedia = false
     @State private var isSubmitting = false
     @State private var mediaErrorMessage: String?
+    @State private var isKeyboardVisible = false
     let onSubmitted: () -> Void
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     private let mediaUploadService = MediaUploadService()
@@ -62,7 +63,8 @@ struct ComposePostView: View {
                         ZStack(alignment: .topLeading) {
                             NoPasteTextViewRepresentable(
                                 text: $viewModel.text,
-                                onTextChanged: viewModel.recordChange(from:to:)
+                                onTextChanged: viewModel.recordChange(from:to:),
+                                accessory: .formatting
                             )
                             .frame(minHeight: 300)
                             .padding(AppSpacing.sm)
@@ -147,15 +149,25 @@ struct ComposePostView: View {
                 Text("削除した下書きは元に戻せません。")
             }
             .safeAreaInset(edge: .bottom) {
-                Button(action: submit) {
-                    submitButtonLabel
+                if !isKeyboardVisible {
+                    Button(action: submit) {
+                        submitButtonLabel
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(!canSubmit)
+                    .padding(.horizontal, AppSpacing.md)
+                    .padding(.top, AppSpacing.sm)
+                    .padding(.bottom, AppSpacing.sm)
+                    .background(.ultraThinMaterial)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(!canSubmit)
-                .padding(.horizontal, AppSpacing.md)
-                .padding(.top, AppSpacing.sm)
-                .padding(.bottom, AppSpacing.sm)
-                .background(.ultraThinMaterial)
+            }
+            .animation(.easeInOut(duration: 0.22), value: isKeyboardVisible)
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                isKeyboardVisible = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                isKeyboardVisible = false
             }
             .onReceive(timer) { _ in
                 viewModel.refreshMetricsDuration()
@@ -243,7 +255,7 @@ struct ComposePostView: View {
                             }
                         }
                     }
-                    .padding(.vertical, 2)
+                    .padding(.vertical, AppSpacing.xxs)
                 }
             }
 
@@ -283,7 +295,7 @@ struct ComposePostView: View {
                         ForEach(topics, id: \.self) { topic in
                             Label("#\(topic)", systemImage: "number")
                                 .font(.caption.weight(.semibold))
-                                .padding(.vertical, 7)
+                                .padding(.vertical, AppSpacing.xs)
                                 .padding(.horizontal, AppSpacing.sm)
                                 .background(AppColor.accentSoft, in: Capsule())
                                 .foregroundStyle(AppColor.accent)
@@ -430,7 +442,7 @@ private struct ComposeMediaPreviewTile: View {
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, AppSpacing.xs)
-                        .padding(.vertical, 3)
+                        .padding(.vertical, AppSpacing.xxs)
                         .background(.black.opacity(0.56), in: Capsule())
                         .padding(AppSpacing.xs)
                 }

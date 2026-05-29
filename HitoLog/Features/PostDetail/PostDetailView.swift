@@ -104,17 +104,14 @@ struct PostDetailView: View {
                                     Image(systemName: "ellipsis")
                                         .font(.subheadline.weight(.semibold))
                                         .foregroundStyle(AppColor.textSecondary)
-                                        .frame(width: 32, height: 28)
+                                        .frame(width: 36, height: 36)
                                         .contentShape(Rectangle())
                                 }
+                                .accessibilityLabel("その他の操作")
                             }
 
                             if !post.body.isEmpty {
-                                Text(post.body)
-                                    .font(AppFont.postDetailBody)
-                                    .lineSpacing(5)
-                                    .foregroundStyle(AppColor.textPrimary)
-                                    .fixedSize(horizontal: false, vertical: true)
+                                MarkdownBodyView(markdown: post.body)
                             }
 
                             if !post.mediaItems.isEmpty {
@@ -125,7 +122,7 @@ struct PostDetailView: View {
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     HStack(spacing: AppSpacing.xs) {
                                         ForEach(post.topics, id: \.self) { topic in
-                                            DetailTopicChip(topic: topic)
+                                            TopicChip(topic: topic)
                                         }
                                     }
                                 }
@@ -165,7 +162,7 @@ struct PostDetailView: View {
                                         tint: store.likedPostIDs.contains(post.id) ? AppColor.stamp : AppColor.accent
                                     )
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(ScaleButtonStyle(scale: 0.95))
 
                                 PaperMetricTile(title: "コメント", value: "\(post.commentCount)", systemImage: "bubble.right")
 
@@ -180,7 +177,7 @@ struct PostDetailView: View {
                                         tint: store.isReposted(targetPost.id) ? AppColor.stamp : AppColor.accent
                                     )
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(ScaleButtonStyle(scale: 0.95))
 
                                 Button {
                                     isShowingQuoteSheet = true
@@ -191,7 +188,7 @@ struct PostDetailView: View {
                                         systemImage: "quote.bubble"
                                     )
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(ScaleButtonStyle(scale: 0.95))
 
                                 Button {
                                     store.toggleBookmark(for: post.id)
@@ -201,10 +198,10 @@ struct PostDetailView: View {
                                         title: "保存",
                                         value: store.isBookmarked(post.id) ? "済み" : "未保存",
                                         systemImage: store.isBookmarked(post.id) ? "bookmark.fill" : "bookmark",
-                                        tint: store.isBookmarked(post.id) ? AppColor.stamp : AppColor.accent
+                                        tint: store.isBookmarked(post.id) ? AppColor.inkBlue : AppColor.accent
                                     )
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(ScaleButtonStyle(scale: 0.95))
                                 PaperMetricTile(title: "入力", value: "\(post.inputDurationMs / 1000)秒", systemImage: "keyboard")
                             }
                         }
@@ -325,23 +322,6 @@ struct PostDetailView: View {
     }
 }
 
-private struct DetailTopicChip: View {
-    let topic: String
-
-    var body: some View {
-        Text("#\(topic)")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(AppColor.accent)
-            .padding(.vertical, 5)
-            .padding(.horizontal, AppSpacing.sm)
-            .background(AppColor.accent.opacity(0.08), in: Capsule())
-            .overlay {
-                Capsule()
-                    .stroke(AppColor.accent.opacity(0.18), lineWidth: 0.7)
-            }
-    }
-}
-
 private struct PostDetailMetric: View {
     let title: String
     let value: String
@@ -399,7 +379,7 @@ private struct CommentComposer: View {
                             .font(.body)
                             .foregroundStyle(AppColor.placeholder)
                             .padding(.horizontal, AppSpacing.md)
-                            .padding(.vertical, 12)
+                            .padding(.vertical, AppSpacing.sm)
                     }
                 }
                 .background(AppColor.surface, in: RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
@@ -414,7 +394,9 @@ private struct CommentComposer: View {
                         .foregroundStyle(AppColor.background)
                         .background(canSend ? AppColor.accent : AppColor.textTertiary, in: Circle())
                 }
+                .buttonStyle(ScaleButtonStyle(scale: 0.88))
                 .disabled(!canSend)
+                .accessibilityLabel("コメントを送信")
             }
 
             if didSendComment {
@@ -464,7 +446,7 @@ private struct CommentRow: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                Text(comment.body)
+                Text(InlineRichText.attributedBody(comment.body))
                     .font(.subheadline)
                     .lineSpacing(4)
                     .foregroundStyle(AppColor.textPrimary)
@@ -495,8 +477,9 @@ private struct CommentRow: View {
                 Image(systemName: "ellipsis")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(AppColor.textSecondary)
-                    .frame(width: 28, height: 28)
+                    .frame(width: 32, height: 32)
             }
+            .accessibilityLabel("コメントの操作")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, AppSpacing.sm)

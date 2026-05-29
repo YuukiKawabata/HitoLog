@@ -57,7 +57,7 @@ struct EarningsSummaryView: View {
 
                     ForEach(paidArticles) { article in
                         HStack(spacing: AppSpacing.sm) {
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                                 Text(article.title)
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(AppColor.textPrimary)
@@ -67,7 +67,7 @@ struct EarningsSummaryView: View {
                                     .foregroundStyle(AppColor.textSecondary)
                             }
                             Spacer(minLength: 0)
-                            VStack(alignment: .trailing, spacing: 2) {
+                            VStack(alignment: .trailing, spacing: AppSpacing.xxs) {
                                 Text("\(article.purchaseCount)件")
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(AppColor.textPrimary)

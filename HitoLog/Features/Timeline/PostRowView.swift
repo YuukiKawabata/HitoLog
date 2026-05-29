@@ -120,18 +120,14 @@ struct PostRowView: View {
                     Image(systemName: "ellipsis")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(AppColor.textSecondary)
-                        .frame(width: 32, height: 28)
+                        .frame(width: 36, height: 36)
                         .contentShape(Rectangle())
                 }
+                .accessibilityLabel("その他の操作")
             }
 
             if !post.body.isEmpty {
-                Text(post.body)
-                    .font(AppFont.postBody)
-                    .lineSpacing(4)
-                    .foregroundStyle(AppColor.textPrimary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
+                MarkdownBodyView(markdown: post.body)
             }
 
             if !post.mediaItems.isEmpty {
@@ -173,18 +169,20 @@ struct PostRowView: View {
                     PostActionView(
                         systemImage: isLiked ? "heart.fill" : "heart",
                         value: post.likeCount,
-                        isActive: isLiked
+                        isActive: isLiked,
+                        activeTint: AppColor.stamp,
+                        label: "いいね"
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ScaleButtonStyle())
 
                 if let commentDestination {
                     NavigationLink(destination: commentDestination) {
-                        PostActionView(systemImage: "bubble.right", value: post.commentCount)
+                        PostActionView(systemImage: "bubble.right", value: post.commentCount, label: "コメント")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(ScaleButtonStyle())
                 } else {
-                    PostActionView(systemImage: "bubble.right", value: post.commentCount)
+                    PostActionView(systemImage: "bubble.right", value: post.commentCount, label: "コメント")
                 }
 
                 Button {
@@ -194,26 +192,30 @@ struct PostRowView: View {
                     PostActionView(
                         systemImage: "arrow.2.squarepath",
                         value: targetPost.repostCount,
-                        isActive: store.isReposted(targetPost.id)
+                        isActive: store.isReposted(targetPost.id),
+                        activeTint: AppColor.accent,
+                        label: "リポスト"
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ScaleButtonStyle())
 
                 Button {
                     isShowingQuoteSheet = true
                 } label: {
-                    PostActionView(systemImage: "quote.bubble", value: targetPost.quoteCount)
+                    PostActionView(systemImage: "quote.bubble", value: targetPost.quoteCount, label: "引用")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ScaleButtonStyle())
 
                 Button(action: onBookmark) {
                     PostActionView(
                         systemImage: isBookmarked ? "bookmark.fill" : "bookmark",
                         value: nil,
-                        isActive: isBookmarked
+                        isActive: isBookmarked,
+                        activeTint: AppColor.inkBlue,
+                        label: "ブックマーク"
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ScaleButtonStyle())
 
                 Spacer(minLength: 0)
             }
@@ -322,7 +324,7 @@ struct ReferencedPostCard: View {
                 HStack(spacing: AppSpacing.sm) {
                     AvatarView(user: author, size: 28)
 
-                    VStack(alignment: .leading, spacing: 1) {
+                    VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                         Text(author.displayName)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(AppColor.textPrimary)
@@ -337,7 +339,7 @@ struct ReferencedPostCard: View {
                 }
 
                 if !post.body.isEmpty {
-                    Text(post.body)
+                    Text(MarkdownInline.attributed(post.body))
                         .font(.subheadline)
                         .foregroundStyle(AppColor.textPrimary)
                         .lineLimit(4)
@@ -469,7 +471,7 @@ struct QuotePostSheet: View {
     }
 }
 
-private struct TopicChip: View {
+struct TopicChip: View {
     let topic: String
 
     var body: some View {
@@ -477,7 +479,7 @@ private struct TopicChip: View {
             .font(.caption.weight(.semibold))
             .foregroundStyle(AppColor.accent)
             .lineLimit(1)
-            .padding(.vertical, 5)
+            .padding(.vertical, AppSpacing.xs)
             .padding(.horizontal, AppSpacing.sm)
             .background(AppColor.accent.opacity(0.08), in: Capsule())
             .overlay {
@@ -594,25 +596,35 @@ private struct PostActionView: View {
     let systemImage: String
     let value: Int?
     var isActive = false
+    var activeTint: Color = AppColor.stamp
+    var label: String
 
     var body: some View {
         HStack(spacing: AppSpacing.xs) {
             Image(systemName: systemImage)
-                .font(.caption.weight(.semibold))
-            if let value {
+                .font(.callout)
+                .contentTransition(.symbolEffect(.replace))
+                .symbolEffect(.bounce, value: isActive)
+            if let value, value > 0 {
                 Text("\(value)")
                     .font(.caption.weight(.semibold))
+                    .contentTransition(.numericText())
+                    .monospacedDigit()
             }
         }
-        .foregroundStyle(isActive ? AppColor.stamp : AppColor.textSecondary)
+        .foregroundStyle(isActive ? activeTint : AppColor.textSecondary)
         .padding(.horizontal, AppSpacing.sm)
-        .frame(minWidth: 52, minHeight: 32, alignment: .center)
-        .background((isActive ? AppColor.stamp.opacity(0.08) : AppColor.surface), in: RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                .stroke(isActive ? AppColor.stamp.opacity(0.22) : AppColor.border, lineWidth: 0.5)
+        .frame(minHeight: 36)
+        .frame(minWidth: 44)
+        .background {
+            Capsule(style: .continuous)
+                .fill(activeTint.opacity(isActive ? 0.12 : 0))
         }
-        .contentShape(RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
+        .contentShape(Capsule(style: .continuous))
+        .animation(.snappy(duration: 0.28), value: isActive)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(value.map { "\(label) \($0)件" } ?? label)
+        .accessibilityAddTraits(.isButton)
     }
 }
 

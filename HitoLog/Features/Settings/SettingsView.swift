@@ -400,6 +400,9 @@ private struct ProfileEditView: View {
     @State private var displayName = ""
     @State private var handle = ""
     @State private var bio = ""
+    @State private var occupation = ""
+    @State private var location = ""
+    @State private var website = ""
     @State private var avatarDataURL: String?
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var avatarProcessingError: String?
@@ -488,6 +491,30 @@ private struct ProfileEditView: View {
                 TextField("自己紹介", text: $bio, axis: .vertical)
                     .lineLimit(3...6)
             }
+
+            Section("詳細") {
+                HStack(spacing: AppSpacing.sm) {
+                    Image(systemName: "briefcase")
+                        .foregroundStyle(AppColor.textSecondary)
+                        .frame(width: 22)
+                    TextField("肩書き・活動分野", text: $occupation)
+                }
+                HStack(spacing: AppSpacing.sm) {
+                    Image(systemName: "mappin.and.ellipse")
+                        .foregroundStyle(AppColor.textSecondary)
+                        .frame(width: 22)
+                    TextField("場所", text: $location)
+                }
+                HStack(spacing: AppSpacing.sm) {
+                    Image(systemName: "link")
+                        .foregroundStyle(AppColor.textSecondary)
+                        .frame(width: 22)
+                    TextField("ウェブサイト", text: $website)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                }
+            }
         }
         .scrollContentBackground(.hidden)
         .background(PaperCanvas())
@@ -507,6 +534,9 @@ private struct ProfileEditView: View {
             displayName = store.currentUser.displayName
             handle = store.currentUser.handle
             bio = store.currentUser.bio
+            occupation = store.currentUser.occupation ?? ""
+            location = store.currentUser.location ?? ""
+            website = store.currentUser.website ?? ""
             avatarDataURL = store.currentUser.avatarUrl
         }
         .task(id: selectedPhotoItem) {
@@ -543,7 +573,15 @@ private struct ProfileEditView: View {
         defer { isSavingProfile = false }
 
         do {
-            try await store.updateCurrentUser(displayName: trimmedName, handle: trimmedHandle, bio: bio, avatarUrl: avatarDataURL)
+            try await store.updateCurrentUser(
+                displayName: trimmedName,
+                handle: trimmedHandle,
+                bio: bio,
+                avatarUrl: avatarDataURL,
+                website: website,
+                location: location,
+                occupation: occupation
+            )
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             dismiss()
         } catch {
@@ -789,7 +827,7 @@ private struct ManagedUserRow: View {
     var body: some View {
         HStack(spacing: AppSpacing.md) {
             AvatarView(user: user, size: 38)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                 Text(user.displayName)
                     .font(.subheadline.weight(.semibold))
                 Text("@\(user.handle)")
@@ -816,7 +854,7 @@ private struct FeedControlSettingsView: View {
                 } else {
                     ForEach(store.feedControls.sorted { $0.updatedAt > $1.updatedAt }) { control in
                         HStack(spacing: AppSpacing.md) {
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                                 Text("#\(control.targetID)")
                                     .font(.subheadline.weight(.semibold))
 
@@ -834,6 +872,7 @@ private struct FeedControlSettingsView: View {
                                 Image(systemName: "xmark.circle")
                             }
                             .buttonStyle(.borderless)
+                            .accessibilityLabel("#\(control.targetID) の調整を解除")
                         }
                         .padding(.vertical, AppSpacing.xs)
                     }
@@ -876,7 +915,7 @@ private struct MutedWordsView: View {
                 } else {
                     ForEach(store.mutedWords) { mutedWord in
                         HStack(spacing: AppSpacing.md) {
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                                 Text(mutedWord.word)
                                     .font(.subheadline.weight(.semibold))
                                 Text("判定: \(mutedWord.normalizedWord)")
@@ -894,6 +933,7 @@ private struct MutedWordsView: View {
                                 Image(systemName: "trash")
                             }
                             .buttonStyle(.borderless)
+                            .accessibilityLabel("「\(mutedWord.word)」を削除")
                         }
                         .padding(.vertical, AppSpacing.xs)
                     }

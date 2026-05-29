@@ -16,6 +16,27 @@ struct AppUser: Identifiable, Codable, Equatable {
     var isSuspended: Bool = false
     var followerCount: Int = 0
     var followingCount: Int = 0
+    var website: String? = nil
+    var location: String? = nil
+    var occupation: String? = nil
+
+    /// 表示用にスキーム補完したウェブサイトURL
+    var websiteURL: URL? {
+        guard let website, !website.isEmpty else { return nil }
+        if website.lowercased().hasPrefix("http://") || website.lowercased().hasPrefix("https://") {
+            return URL(string: website)
+        }
+        return URL(string: "https://\(website)")
+    }
+
+    /// 表示用にスキームを省いたウェブサイト文字列
+    var websiteDisplayText: String? {
+        guard let website, !website.isEmpty else { return nil }
+        return website
+            .replacingOccurrences(of: "https://", with: "")
+            .replacingOccurrences(of: "http://", with: "")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
 
     var initials: String {
         let source = displayName.isEmpty ? handle : displayName

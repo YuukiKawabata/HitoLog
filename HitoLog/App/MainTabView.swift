@@ -8,6 +8,9 @@ struct MainTabView: View {
     @State private var isShowingArticleCompose = false
     @State private var isShowingPostToast = false
     @State private var celebrationToken = 0
+    @State private var toastMessage = "投稿しました"
+    @State private var toastSystemImage = "checkmark.circle.fill"
+    @State private var toastShowsCelebration = true
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -58,23 +61,27 @@ struct MainTabView: View {
         .tint(AppColor.accent)
         .sheet(isPresented: $isShowingCompose) {
             ComposePostView {
-                showPostToast()
+                showCompletionToast(message: "投稿しました", systemImage: "checkmark.circle.fill", celebration: true)
             }
         }
         .sheet(isPresented: $isShowingArticleCompose) {
-            ComposeArticleView {
-                showPostToast()
+            ComposeArticleView { status in
+                if status == .published {
+                    showCompletionToast(message: "記事を公開しました", systemImage: "checkmark.circle.fill", celebration: true)
+                } else {
+                    showCompletionToast(message: "下書きを保存しました", systemImage: "tray.and.arrow.down.fill", celebration: false)
+                }
             }
         }
         .overlay(alignment: .top) {
             if isShowingPostToast {
-                PostSubmittedToast()
+                PostSubmittedToast(message: toastMessage, systemImage: toastSystemImage)
                     .padding(.top, 10)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .overlay {
-            if isShowingPostToast {
+            if isShowingPostToast && toastShowsCelebration {
                 PostSubmittedCelebration(token: celebrationToken)
                     .transition(.scale(scale: 0.92).combined(with: .opacity))
                     .allowsHitTesting(false)
@@ -89,7 +96,10 @@ struct MainTabView: View {
         }
     }
 
-    private func showPostToast() {
+    private func showCompletionToast(message: String, systemImage: String, celebration: Bool) {
+        toastMessage = message
+        toastSystemImage = systemImage
+        toastShowsCelebration = celebration
         celebrationToken += 1
         let currentToken = celebrationToken
         isShowingPostToast = true
@@ -132,7 +142,6 @@ private struct UserSearchView: View {
     @State private var query = ""
     @State private var scope: SearchScope = .users
     @State private var searchTask: Task<Void, Never>?
-    @State private var selectedStarterPack: StarterPackCategory = .writers
 
     var body: some View {
         List {
@@ -145,25 +154,6 @@ private struct UserSearchView: View {
             .listRowBackground(Color.clear)
 
             if scope == .users && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Section("スターターパック") {
-                    Picker("カテゴリ", selection: $selectedStarterPack) {
-                        ForEach(StarterPackCategory.allCases) { category in
-                            Text(category.title).tag(category)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    let starterUsers = store.starterPackUsers(for: selectedStarterPack)
-                    if starterUsers.isEmpty {
-                        ContentUnavailableView("候補はまだありません", systemImage: selectedStarterPack.systemImage)
-                            .listRowBackground(Color.clear)
-                    } else {
-                        ForEach(starterUsers) { user in
-                            UserSearchRow(user: user)
-                        }
-                    }
-                }
-
                 Section("フォロー候補") {
                     if store.followSuggestions.isEmpty {
                         ContentUnavailableView("候補はまだありません", systemImage: "person.crop.circle.badge.plus")
@@ -443,7 +433,7 @@ private struct TopicTrendRow: View {
                     .foregroundStyle(AppColor.accent)
                     .frame(width: 32, height: 32)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                     Text(trend.displayText)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(AppColor.textPrimary)
@@ -476,7 +466,7 @@ private struct TopicRoomSearchRow: View {
                         .foregroundStyle(AppColor.accent)
                         .frame(width: 36, height: 36)
 
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                         Text(room.displayTitle)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(AppColor.textPrimary)
@@ -490,25 +480,9 @@ private struct TopicRoomSearchRow: View {
 
             Spacer()
 
-            Button {
+            FollowPillButton(isFollowing: store.isFollowingTopic(room.topic)) {
                 store.toggleTopicFollow(topic: room.topic)
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            } label: {
-                Text(store.isFollowingTopic(room.topic) ? "フォロー中" : "フォロー")
-                    .font(.caption.weight(.semibold))
-                    .padding(.vertical, 7)
-                    .padding(.horizontal, AppSpacing.sm)
-                    .foregroundStyle(store.isFollowingTopic(room.topic) ? AppColor.textPrimary : AppColor.background)
-                    .background(
-                        store.isFollowingTopic(room.topic) ? AppColor.surface : AppColor.accent,
-                        in: RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
-                            .stroke(store.isFollowingTopic(room.topic) ? AppColor.border : AppColor.accent.opacity(0.3), lineWidth: 0.7)
-                    }
             }
-            .buttonStyle(.plain)
         }
         .padding(.vertical, AppSpacing.xs)
     }
@@ -736,7 +710,7 @@ private struct UserSearchRow: View {
             NavigationLink(destination: ProfileView(userID: user.id)) {
                 HStack(spacing: AppSpacing.md) {
                     AvatarView(user: user, size: 40)
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                         Text(user.displayName)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(AppColor.textPrimary)
@@ -750,25 +724,9 @@ private struct UserSearchRow: View {
 
             Spacer()
 
-            Button {
+            FollowPillButton(isFollowing: store.isFollowing(user.id)) {
                 store.toggleFollow(userID: user.id)
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            } label: {
-                Text(store.isFollowing(user.id) ? "フォロー中" : "フォロー")
-                    .font(.caption.weight(.semibold))
-                    .padding(.vertical, 7)
-                    .padding(.horizontal, AppSpacing.sm)
-                    .foregroundStyle(store.isFollowing(user.id) ? AppColor.textPrimary : AppColor.background)
-                    .background(
-                        store.isFollowing(user.id) ? AppColor.surface : AppColor.accent,
-                        in: RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
-                            .stroke(store.isFollowing(user.id) ? AppColor.border : AppColor.accent.opacity(0.3), lineWidth: 0.7)
-                    }
             }
-            .buttonStyle(.plain)
         }
         .padding(.vertical, AppSpacing.xs)
     }
@@ -815,7 +773,7 @@ private struct NotificationRow: View {
                     .foregroundStyle(notification.isRead ? AppColor.textSecondary : AppColor.accent)
                     .frame(width: 32, height: 32)
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: AppSpacing.xs) {
                     Text(notification.text)
                         .font(.subheadline.weight(notification.isRead ? .regular : .semibold))
                         .foregroundStyle(AppColor.textPrimary)
@@ -869,7 +827,7 @@ private struct PostSubmittedCelebration: View {
             VStack(spacing: AppSpacing.sm) {
                 BrandIconView(size: 58)
 
-                VStack(spacing: 2) {
+                VStack(spacing: AppSpacing.xxs) {
                     Text("投稿しました")
                         .font(AppFont.sectionTitle)
                         .foregroundStyle(AppColor.textPrimary)
@@ -898,14 +856,17 @@ private struct PostSubmittedCelebration: View {
 }
 
 private struct PostSubmittedToast: View {
+    var message = "投稿しました"
+    var systemImage = "checkmark.circle.fill"
+
     var body: some View {
         HStack(spacing: AppSpacing.sm) {
-            Image(systemName: "checkmark.circle.fill")
+            Image(systemName: systemImage)
                 .foregroundStyle(AppColor.accent)
-            Text("投稿しました")
+            Text(message)
                 .font(.subheadline.weight(.semibold))
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, AppSpacing.sm)
         .padding(.horizontal, AppSpacing.md)
         .background(AppColor.background, in: RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
         .overlay {
@@ -951,7 +912,7 @@ private struct ComposeEntryView: View {
                             .background(AppColor.accentSoft, in: RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
                             .foregroundStyle(AppColor.accent)
 
-                        VStack(alignment: .leading, spacing: 3) {
+                        VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                             Text("投稿を書く")
                                 .font(AppFont.button)
                                 .foregroundStyle(AppColor.textPrimary)
@@ -969,7 +930,7 @@ private struct ComposeEntryView: View {
                     .padding(AppSpacing.md)
                     .paperSurface()
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ScaleButtonStyle(scale: 0.97))
 
                 Button(action: onArticleTap) {
                     HStack(spacing: AppSpacing.md) {
@@ -979,7 +940,7 @@ private struct ComposeEntryView: View {
                             .background(AppColor.accentSoft, in: RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
                             .foregroundStyle(AppColor.accent)
 
-                        VStack(alignment: .leading, spacing: 3) {
+                        VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                             Text("記事を書く")
                                 .font(AppFont.button)
                                 .foregroundStyle(AppColor.textPrimary)
@@ -997,7 +958,7 @@ private struct ComposeEntryView: View {
                     .padding(AppSpacing.md)
                     .paperSurface()
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ScaleButtonStyle(scale: 0.97))
             }
         }
         .padding(AppSpacing.lg)

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ArticleDetailView: View {
     @EnvironmentObject private var store: AppDataStore
+    @Environment(\.dismiss) private var dismiss
     let article: Article
     let author: AppUser
     @State private var paidBody: String?
@@ -10,6 +11,7 @@ struct ArticleDetailView: View {
     @State private var purchaseError: String?
     @State private var showsPurchaseError = false
     @State private var showsReportConfirmation = false
+    @State private var isShowingEdit = false
 
     private var isOwner: Bool { article.userID == store.currentUser.id }
     private var isUnlocked: Bool { isOwner || store.isUnlocked(article.id) }
@@ -54,7 +56,17 @@ struct ArticleDetailView: View {
             Text("通報は運営が確認します。悪用防止のため、通報は慎重にお願いします。")
         }
         .toolbar {
-            if !isOwner {
+            if isOwner {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        isShowingEdit = true
+                    } label: {
+                        Image(systemName: "square.and.pencil")
+                            .foregroundStyle(AppColor.accent)
+                    }
+                    .accessibilityLabel("記事を編集")
+                }
+            } else {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showsReportConfirmation = true
@@ -62,8 +74,15 @@ struct ArticleDetailView: View {
                         Image(systemName: "flag")
                             .foregroundStyle(AppColor.textSecondary)
                     }
+                    .accessibilityLabel("この記事を通報")
                 }
             }
+        }
+        .sheet(isPresented: $isShowingEdit) {
+            ComposeArticleView(editingArticle: article) { _ in
+                dismiss()
+            }
+            .environmentObject(store)
         }
     }
 
@@ -80,7 +99,7 @@ struct ArticleDetailView: View {
 
             HStack(spacing: AppSpacing.sm) {
                 AvatarView(user: author, size: 32)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                     Text(author.displayName)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(AppColor.textPrimary)
@@ -106,6 +125,9 @@ struct ArticleDetailView: View {
             }
 
             HStack(spacing: AppSpacing.sm) {
+                if !article.isPublished {
+                    draftChip
+                }
                 humanBadgeChip
                 if article.price.isPaid {
                     priceBadge
@@ -124,12 +146,7 @@ struct ArticleDetailView: View {
 
     private var freeContent: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(article.freePreviewBody)
-                .font(AppFont.body)
-                .lineSpacing(6)
-                .foregroundStyle(AppColor.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            MarkdownBodyView(markdown: article.freePreviewBody)
         }
         .padding(AppSpacing.md)
         .paperSurface()
@@ -168,12 +185,7 @@ struct ArticleDetailView: View {
 
     private func bodyText(_ body: String) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(body)
-                .font(AppFont.body)
-                .lineSpacing(6)
-                .foregroundStyle(AppColor.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            MarkdownBodyView(markdown: body)
         }
         .padding(AppSpacing.md)
         .paperSurface()
@@ -183,8 +195,14 @@ struct ArticleDetailView: View {
     private var paywallView: some View {
         VStack(spacing: AppSpacing.md) {
             Image(systemName: "lock.doc")
-                .font(.system(size: 32))
+                .font(.system(size: 28, weight: .light))
                 .foregroundStyle(AppColor.accent)
+                .frame(width: 76, height: 76)
+                .background(AppColor.accentSoft, in: Circle())
+                .overlay {
+                    Circle()
+                        .stroke(AppColor.accent.opacity(0.18), lineWidth: 1)
+                }
 
             Text("続きは\(article.price.displayText)で読めます")
                 .font(AppFont.sectionTitle)
@@ -225,19 +243,41 @@ struct ArticleDetailView: View {
 
     @ViewBuilder
     private var humanBadgeChip: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: AppSpacing.xs) {
             Image(systemName: article.humanBadge.systemImage)
                 .font(.caption2)
             Text(article.humanBadge.displayText)
                 .font(.caption2.weight(.semibold))
         }
         .foregroundStyle(article.humanBadge == .verified ? AppColor.accent : AppColor.textSecondary)
-        .padding(.vertical, 4)
+        .padding(.vertical, AppSpacing.xs)
         .padding(.horizontal, AppSpacing.xs)
         .background(
             article.humanBadge == .verified ? AppColor.accentSoft : AppColor.surface,
             in: Capsule()
         )
+        .overlay {
+            Capsule()
+                .stroke(article.humanBadge == .verified ? AppColor.accent.opacity(0.28) : AppColor.border, lineWidth: 0.5)
+        }
+    }
+
+    private var draftChip: some View {
+        HStack(spacing: AppSpacing.xs) {
+            Image(systemName: "tray")
+                .font(.caption2)
+            Text("下書き")
+                .font(.caption2.weight(.semibold))
+        }
+        .foregroundStyle(AppColor.warning)
+        .padding(.vertical, AppSpacing.xs)
+        .padding(.horizontal, AppSpacing.xs)
+        .background(AppColor.warning.opacity(0.12), in: Capsule())
+        .overlay {
+            Capsule()
+                .stroke(AppColor.warning.opacity(0.32), lineWidth: 0.5)
+        }
+        .accessibilityLabel("下書き、未公開")
     }
 
     @ViewBuilder
@@ -245,7 +285,7 @@ struct ArticleDetailView: View {
         Text(article.price.displayText)
             .font(.caption2.weight(.bold))
             .foregroundStyle(AppColor.background)
-            .padding(.vertical, 4)
+            .padding(.vertical, AppSpacing.xs)
             .padding(.horizontal, AppSpacing.xs)
             .background(AppColor.accent, in: Capsule())
     }

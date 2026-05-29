@@ -6,6 +6,7 @@ final class MockDataStore: ObservableObject {
     @Published private(set) var currentUser: AppUser
     @Published private(set) var users: [AppUser]
     @Published private(set) var posts: [Post]
+    @Published private(set) var articles: [Article]
     @Published private(set) var comments: [Comment]
     @Published private(set) var likedPostIDs: Set<String>
     @Published private(set) var blockedUserIDs: Set<String>
@@ -20,6 +21,7 @@ final class MockDataStore: ObservableObject {
     private let initialCurrentUser: AppUser
     private let initialUsers: [AppUser]
     private let initialPosts: [Post]
+    private let initialArticles: [Article]
     private let initialComments: [Comment]
     private let initialLikedPostIDs: Set<String>
     private let initialFollowingUserIDs: Set<String>
@@ -64,46 +66,65 @@ final class MockDataStore: ObservableObject {
     init() {
         let now = Date()
         let calendar = Calendar.current
+        func daysAgo(_ days: Int) -> Date {
+            calendar.date(byAdding: .day, value: -days, to: now) ?? now
+        }
+
         let currentUser = AppUser(
             id: "user-nagi",
             displayName: "Nagi",
             handle: "nagi_words",
-            bio: "AI時代に、自分で考えて入力した言葉を残しています。",
+            bio: "AI時代に、自分で考えて入力した言葉を残しています。短くても、その日の自分の温度を。",
             avatarUrl: nil,
             appleUserId: nil,
             humanLevel: 4,
             humanVerifiedPostRate: 0.97,
-            createdAt: calendar.date(byAdding: .day, value: -32, to: now) ?? now,
+            createdAt: daysAgo(32),
             updatedAt: now,
-            isDeleted: false
+            isDeleted: false,
+            followerCount: 0,
+            followingCount: 0,
+            website: "nagi-words.example.com",
+            location: "京都",
+            occupation: "言葉を書く人 / エッセイ"
         )
 
         let secondUser = AppUser(
             id: "user-aoi",
             displayName: "Aoi",
             handle: "aoi_note",
-            bio: "夜に少しだけ、考えたことを書き残します。",
+            bio: "夜に少しだけ、考えたことを書き残します。エッセイと、読んだ本のこと。",
             avatarUrl: nil,
             appleUserId: nil,
             humanLevel: 5,
             humanVerifiedPostRate: 0.99,
-            createdAt: calendar.date(byAdding: .day, value: -118, to: now) ?? now,
+            createdAt: daysAgo(118),
             updatedAt: now,
-            isDeleted: false
+            isDeleted: false,
+            followerCount: 0,
+            followingCount: 0,
+            website: "aoi-essay.example.com",
+            location: "東京",
+            occupation: "エッセイスト"
         )
 
         let thirdUser = AppUser(
             id: "user-ren",
             displayName: "Ren",
             handle: "ren_thinks",
-            bio: "速さより、自分で考えた言葉を大事にしています。",
+            bio: "速さより、自分で考えた言葉を大事にしています。本づくりの仕事をしています。",
             avatarUrl: nil,
             appleUserId: nil,
             humanLevel: 4,
             humanVerifiedPostRate: 0.94,
-            createdAt: calendar.date(byAdding: .day, value: -76, to: now) ?? now,
+            createdAt: daysAgo(76),
             updatedAt: now,
-            isDeleted: false
+            isDeleted: false,
+            followerCount: 0,
+            followingCount: 0,
+            website: nil,
+            location: "福岡",
+            occupation: "編集者"
         )
 
         let fourthUser = AppUser(
@@ -115,33 +136,91 @@ final class MockDataStore: ObservableObject {
             appleUserId: nil,
             humanLevel: 3,
             humanVerifiedPostRate: 0.91,
-            createdAt: calendar.date(byAdding: .day, value: -44, to: now) ?? now,
+            createdAt: daysAgo(44),
             updatedAt: now,
-            isDeleted: false
+            isDeleted: false,
+            followerCount: 0,
+            followingCount: 0,
+            website: nil,
+            location: "札幌",
+            occupation: "会社員 / 日記"
         )
 
         let fifthUser = AppUser(
             id: "user-haru",
             displayName: "Haru",
             handle: "haru_log",
-            bio: "SNSをゆっくり使いたい人です。",
+            bio: "SNSをゆっくり使いたい人です。大学で言語学を勉強中。",
             avatarUrl: nil,
             appleUserId: nil,
             humanLevel: 3,
             humanVerifiedPostRate: 0.89,
-            createdAt: calendar.date(byAdding: .day, value: -21, to: now) ?? now,
+            createdAt: daysAgo(21),
             updatedAt: now,
-            isDeleted: false
+            isDeleted: false,
+            followerCount: 0,
+            followingCount: 0,
+            website: nil,
+            location: "名古屋",
+            occupation: "大学生"
         )
 
-        let post1Body = "AIが文章をすぐ作れる時代だからこそ、少し迷いながら自分で入力した言葉を残しておきたい。今日はその一文だけで十分。"
-        let post2Body = "貼り付けではなく、その場で考えながら打った言葉には、その人の温度が残る気がする。HitoLogはその小さな跡を大切にしたい。"
-        let post3Body = "速く投稿するより、自分の言葉になるまで少し待つ。AIのきれいな文章より、今の自分にしか書けない違和感を残したい。"
-        let post4Body = "今日はうまく言えない気持ちを、そのまま書いた。整っていない文章でも、自分で入力した跡があると少し安心する。"
-        let post5Body = "SNSを開くたびに急かされる感じが苦手だった。ここでは短くても、自分で打った言葉だけをゆっくり読めるのがいい。"
-        let post6Body = "コメントも短くていい。読んだ人が、自分の言葉で返してくれるだけで十分うれしい。"
+        let sixthUser = AppUser(
+            id: "user-sora",
+            displayName: "Sora",
+            handle: "sora_draws",
+            bio: "絵と言葉のあいだを行き来しています。ラフのような文章が好き。",
+            avatarUrl: nil,
+            appleUserId: nil,
+            humanLevel: 4,
+            humanVerifiedPostRate: 0.93,
+            createdAt: daysAgo(64),
+            updatedAt: now,
+            isDeleted: false,
+            followerCount: 0,
+            followingCount: 0,
+            website: "sora-art.example.com",
+            location: "大阪",
+            occupation: "イラストレーター"
+        )
 
-        let users = [currentUser, secondUser, thirdUser, fourthUser, fifthUser]
+        let seventhUser = AppUser(
+            id: "user-yuki",
+            displayName: "Yuki",
+            handle: "yuki_coffee",
+            bio: "小さな珈琲店をやっています。開店前の十五分だけ書く人。",
+            avatarUrl: nil,
+            appleUserId: nil,
+            humanLevel: 5,
+            humanVerifiedPostRate: 0.96,
+            createdAt: daysAgo(150),
+            updatedAt: now,
+            isDeleted: false,
+            followerCount: 0,
+            followingCount: 0,
+            website: nil,
+            location: "神戸",
+            occupation: "珈琲店主"
+        )
+
+        let users = [
+            currentUser, secondUser, thirdUser, fourthUser,
+            fifthUser, sixthUser, seventhUser
+        ]
+
+        // 本文末尾のハッシュタグから topics が自動抽出され、話題ルームに集計される
+        let post1Body = "AIが文章をすぐ作れる時代だからこそ、少し迷いながら自分で入力した言葉を残しておきたい。今日はその一文だけで十分。 #言葉"
+        let post2Body = "貼り付けではなく、その場で考えながら打った言葉には、その人の温度が残る気がする。HitoLogはその小さな跡を大切にしたい。 #言葉 #創作"
+        let post3Body = "速く投稿するより、自分の言葉になるまで少し待つ。AIのきれいな文章より、今の自分にしか書けない違和感を残したい。 #学び"
+        let post4Body = "今日はうまく言えない気持ちを、そのまま書いた。整っていない文章でも、自分で入力した跡があると少し安心する。 #日常ログ"
+        let post5Body = "SNSを開くたびに急かされる感じが苦手だった。ここでは短くても、自分で打った言葉だけをゆっくり読めるのがいい。 #日常ログ"
+        let post6Body = "コメントも短くていい。読んだ人が、自分の言葉で返してくれるだけで十分うれしい。 #言葉"
+        let post7Body = "ラフを描くみたいに、まず下手でもいいから書いてみる。あとで整える前の言葉が、いちばん自分らしいと思う。 #創作 #言葉"
+        let post8Body = "朝、店を開ける前の十五分だけ、その日の一杯について書く。淹れた数だけ、言葉も静かに増えていく。 #日常ログ #コーヒー"
+        let post9Body = "読み終えた本のことを、要約ではなく自分の感想で残す。誰かの言葉の借り物にはしたくないから。 #読書 #学び"
+        let post10Body = "編集をしていると、整いすぎた文章の奥にある『その人の癖』が恋しくなる。ここではそれが読める気がする。 #言葉"
+        let quote12Body = "これ、すごく分かる。整えるほど消えていくものがあるんだよな。 #創作"
+
         let posts = [
             Post(
                 id: "post-1",
@@ -157,6 +236,7 @@ final class MockDataStore: ObservableObject {
                 appCheckVerified: true,
                 likeCount: 34,
                 commentCount: 2,
+                repostCount: 1,
                 createdAt: now.addingTimeInterval(-240),
                 updatedAt: now.addingTimeInterval(-240),
                 isDeleted: false
@@ -250,8 +330,229 @@ final class MockDataStore: ObservableObject {
                 createdAt: now.addingTimeInterval(-15_200),
                 updatedAt: now.addingTimeInterval(-15_200),
                 isDeleted: false
+            ),
+            Post(
+                id: "post-7",
+                userId: sixthUser.id,
+                body: post7Body,
+                humanScore: 90,
+                humanBadge: .verified,
+                inputDurationMs: 65_000,
+                characterCount: post7Body.count,
+                editCount: 11,
+                deleteCount: 5,
+                suspiciousBulkInputCount: 0,
+                appCheckVerified: true,
+                likeCount: 19,
+                commentCount: 1,
+                createdAt: now.addingTimeInterval(-20_000),
+                updatedAt: now.addingTimeInterval(-20_000),
+                isDeleted: false
+            ),
+            Post(
+                id: "post-8",
+                userId: seventhUser.id,
+                body: post8Body,
+                humanScore: 93,
+                humanBadge: .verified,
+                inputDurationMs: 71_000,
+                characterCount: post8Body.count,
+                editCount: 13,
+                deleteCount: 4,
+                suspiciousBulkInputCount: 0,
+                appCheckVerified: true,
+                likeCount: 23,
+                commentCount: 2,
+                createdAt: now.addingTimeInterval(-28_800),
+                updatedAt: now.addingTimeInterval(-28_800),
+                isDeleted: false
+            ),
+            Post(
+                id: "post-9",
+                userId: secondUser.id,
+                body: post9Body,
+                humanScore: 91,
+                humanBadge: .verified,
+                inputDurationMs: 60_000,
+                characterCount: post9Body.count,
+                editCount: 9,
+                deleteCount: 3,
+                suspiciousBulkInputCount: 0,
+                appCheckVerified: true,
+                likeCount: 15,
+                commentCount: 0,
+                createdAt: now.addingTimeInterval(-43_200),
+                updatedAt: now.addingTimeInterval(-43_200),
+                isDeleted: false
+            ),
+            Post(
+                id: "post-10",
+                userId: thirdUser.id,
+                body: post10Body,
+                humanScore: 97,
+                humanBadge: .verified,
+                inputDurationMs: 88_000,
+                characterCount: post10Body.count,
+                editCount: 16,
+                deleteCount: 7,
+                suspiciousBulkInputCount: 0,
+                appCheckVerified: true,
+                likeCount: 30,
+                commentCount: 1,
+                quoteCount: 1,
+                createdAt: now.addingTimeInterval(-54_000),
+                updatedAt: now.addingTimeInterval(-54_000),
+                isDeleted: false
+            ),
+            // リポスト: Nagi が Aoi の post-1 をそのまま広める
+            Post(
+                id: "post-11",
+                userId: currentUser.id,
+                body: "",
+                topics: ["言葉"],
+                shareType: .repost,
+                sourcePostID: "post-1",
+                sourceUserID: secondUser.id,
+                commentPermission: .closed,
+                humanScore: 100,
+                humanBadge: .verified,
+                inputDurationMs: 0,
+                characterCount: 0,
+                editCount: 0,
+                deleteCount: 0,
+                suspiciousBulkInputCount: 0,
+                appCheckVerified: true,
+                likeCount: 0,
+                commentCount: 0,
+                createdAt: now.addingTimeInterval(-7_200),
+                updatedAt: now.addingTimeInterval(-7_200),
+                isDeleted: false
+            ),
+            // 引用: Sora が Ren の post-10 に言葉を添える
+            Post(
+                id: "post-12",
+                userId: sixthUser.id,
+                body: quote12Body,
+                shareType: .quote,
+                sourcePostID: "post-10",
+                sourceUserID: thirdUser.id,
+                humanScore: 89,
+                humanBadge: .verified,
+                inputDurationMs: 41_000,
+                characterCount: quote12Body.count,
+                editCount: 7,
+                deleteCount: 2,
+                suspiciousBulkInputCount: 0,
+                appCheckVerified: true,
+                likeCount: 11,
+                commentCount: 0,
+                createdAt: now.addingTimeInterval(-50_000),
+                updatedAt: now.addingTimeInterval(-50_000),
+                isDeleted: false
             )
         ]
+
+        let article1Preview = """
+        夜になると、昼間は言えなかった言葉が少しずつ戻ってくる。
+        誰に見せるためでもなく、ただ自分のために書く時間のこと。
+        この記事では、わたしが夜だけ書くようになった理由と、続けるための小さな習慣を綴ります。
+        """
+        let article2Preview = """
+        速く書ける時代に、あえて速く書かないという選択について。
+        推敲を重ねることは効率の敵のように見えて、実は「自分の言葉」を守る最後の砦だと思っています。
+        """
+        let article3Preview = """
+        AIがいくらでも文章を出力できるいま、手で打つことの意味はどこにあるのか。
+        三十二日間、毎日この問いと向き合いながら書いてきた記録をまとめました。
+        """
+        let article4Preview = """
+        札幌の冬は長い。だからこそ、毎日の小さなメモが積もると景色になる。
+        今日はその書き方のコツを、ゆるくシェアします。
+        """
+
+        let articles = [
+            Article(
+                id: "article-1",
+                userID: secondUser.id,
+                title: "夜にだけ書ける言葉について",
+                freePreviewBody: article1Preview,
+                status: .published,
+                price: .yen300,
+                topics: ["言葉", "創作"],
+                commentPermission: .everyone,
+                humanBadge: .verified,
+                humanScore: 95,
+                inputDurationMs: 540_000,
+                editCount: 42,
+                deleteCount: 13,
+                commentCount: 3,
+                purchaseCount: 18,
+                bookmarkCount: 24,
+                createdAt: daysAgo(2),
+                updatedAt: daysAgo(2)
+            ),
+            Article(
+                id: "article-2",
+                userID: thirdUser.id,
+                title: "速く書かない、という技術",
+                freePreviewBody: article2Preview,
+                status: .published,
+                price: .free,
+                topics: ["学び", "言葉"],
+                commentPermission: .everyone,
+                humanBadge: .verified,
+                humanScore: 96,
+                inputDurationMs: 420_000,
+                editCount: 35,
+                deleteCount: 10,
+                commentCount: 5,
+                purchaseCount: 0,
+                bookmarkCount: 31,
+                createdAt: daysAgo(5),
+                updatedAt: daysAgo(5)
+            ),
+            Article(
+                id: "article-3",
+                userID: currentUser.id,
+                title: "AI時代に、手で書く意味",
+                freePreviewBody: article3Preview,
+                status: .published,
+                price: .yen500,
+                topics: ["言葉", "学び"],
+                commentPermission: .everyone,
+                humanBadge: .verified,
+                humanScore: 94,
+                inputDurationMs: 600_000,
+                editCount: 48,
+                deleteCount: 15,
+                commentCount: 2,
+                purchaseCount: 9,
+                bookmarkCount: 14,
+                createdAt: daysAgo(1),
+                updatedAt: daysAgo(1)
+            ),
+            Article(
+                id: "article-4",
+                userID: fourthUser.id,
+                title: "札幌の冬、毎日のメモ",
+                freePreviewBody: article4Preview,
+                status: .published,
+                price: .free,
+                topics: ["日常ログ"],
+                commentPermission: .everyone,
+                humanBadge: .checking,
+                humanScore: 88,
+                inputDurationMs: 300_000,
+                editCount: 22,
+                deleteCount: 6,
+                commentCount: 1,
+                purchaseCount: 0,
+                bookmarkCount: 8,
+                createdAt: daysAgo(3),
+                updatedAt: daysAgo(3)
+            )
+        ]
+
         let comments = [
             Comment(
                 id: "comment-1",
@@ -332,18 +633,52 @@ final class MockDataStore: ObservableObject {
                 createdAt: now.addingTimeInterval(-14_600),
                 updatedAt: now.addingTimeInterval(-14_600),
                 isDeleted: false
+            ),
+            Comment(
+                id: "comment-9",
+                postId: "post-7",
+                userId: currentUser.id,
+                body: "下書きのような言葉、わたしも好きです。整える前のほうが正直ですよね。",
+                humanScore: 92,
+                createdAt: now.addingTimeInterval(-19_000),
+                updatedAt: now.addingTimeInterval(-19_000),
+                isDeleted: false
+            ),
+            Comment(
+                id: "comment-10",
+                postId: "post-8",
+                userId: fifthUser.id,
+                body: "開店前の十五分、想像しただけで気持ちのいい時間です。",
+                humanScore: 87,
+                createdAt: now.addingTimeInterval(-27_000),
+                updatedAt: now.addingTimeInterval(-27_000),
+                isDeleted: false
+            ),
+            Comment(
+                id: "comment-11",
+                postId: "post-8",
+                userId: secondUser.id,
+                body: "淹れた数だけ言葉が増える、という表現が好きです。",
+                humanScore: 95,
+                createdAt: now.addingTimeInterval(-26_000),
+                updatedAt: now.addingTimeInterval(-26_000),
+                isDeleted: false
             )
         ]
+
         self.initialCurrentUser = currentUser
         self.initialUsers = users
         self.initialPosts = posts
+        self.initialArticles = articles
         self.initialComments = comments
-        self.initialLikedPostIDs = ["post-1", "post-5"]
+        self.initialLikedPostIDs = ["post-1", "post-5", "post-8"]
         let initialFollowingByUserID: [String: Set<String>] = [
-            currentUser.id: [secondUser.id, thirdUser.id],
-            secondUser.id: [currentUser.id, fourthUser.id],
-            thirdUser.id: [fifthUser.id],
-            fourthUser.id: [currentUser.id]
+            currentUser.id: [secondUser.id, thirdUser.id, sixthUser.id],
+            secondUser.id: [currentUser.id, fourthUser.id, seventhUser.id],
+            thirdUser.id: [fifthUser.id, sixthUser.id],
+            fourthUser.id: [currentUser.id],
+            sixthUser.id: [currentUser.id, thirdUser.id],
+            seventhUser.id: [secondUser.id]
         ]
         let initialFollowersByUserID = Self.followersByUserID(from: initialFollowingByUserID)
         self.initialFollowingUserIDs = initialFollowingByUserID[currentUser.id, default: []]
@@ -355,13 +690,14 @@ final class MockDataStore: ObservableObject {
         self.currentUser = currentUser
         self.users = users
         self.posts = posts
+        self.articles = articles
         self.comments = comments
-        self.likedPostIDs = ["post-1", "post-5"]
+        self.likedPostIDs = ["post-1", "post-5", "post-8"]
         self.blockedUserIDs = []
         self.mutedUserIDs = []
-        self.followingUserIDs = initialFollowingUserIDs
-        self.followerCountsByUserID = initialFollowerCountsByUserID
-        self.followingCountsByUserID = initialFollowingCountsByUserID
+        self.followingUserIDs = self.initialFollowingUserIDs
+        self.followerCountsByUserID = self.initialFollowerCountsByUserID
+        self.followingCountsByUserID = self.initialFollowingCountsByUserID
         self.followersByUserID = initialFollowersByUserID
         self.followingByUserID = initialFollowingByUserID
         self.reportHistory = [
@@ -524,6 +860,7 @@ final class MockDataStore: ObservableObject {
         currentUser = initialCurrentUser
         users = initialUsers
         posts = initialPosts
+        articles = initialArticles
         comments = initialComments
         likedPostIDs = initialLikedPostIDs
         blockedUserIDs = []

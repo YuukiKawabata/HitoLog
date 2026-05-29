@@ -26,6 +26,7 @@ struct TimelineView: View {
                 .padding(.horizontal, AppSpacing.md)
                 .padding(.bottom, AppSpacing.xs)
 
+                Group {
                 if items.isEmpty {
                     if selectedFilter == .rooms {
                         TimelineTopicRoomEmptyView(
@@ -123,8 +124,12 @@ struct TimelineView: View {
                         .padding(.vertical, AppSpacing.sm)
                     }
                 }
+                }
+                .id(selectedFilter)
+                .transition(.opacity)
             }
             .padding(.bottom, AppSpacing.lg)
+            .animation(.easeInOut(duration: 0.22), value: selectedFilter)
         }
         .background(PaperCanvas())
         .refreshable {
@@ -346,7 +351,7 @@ private struct TopicRoomCompactRow: View {
                         .foregroundStyle(AppColor.accent)
                         .frame(width: 34, height: 34)
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                         Text(room.displayTitle)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(AppColor.textPrimary)
@@ -360,14 +365,9 @@ private struct TopicRoomCompactRow: View {
 
             Spacer()
 
-            Button {
+            FollowPillButton(isFollowing: store.isFollowingTopic(room.topic)) {
                 store.toggleTopicFollow(topic: room.topic)
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            } label: {
-                Label(store.isFollowingTopic(room.topic) ? "フォロー中" : "フォロー", systemImage: store.isFollowingTopic(room.topic) ? "checkmark" : "plus")
-                    .font(.caption.weight(.semibold))
             }
-            .buttonStyle(.bordered)
         }
         .padding(.vertical, AppSpacing.xs)
     }
@@ -382,7 +382,7 @@ private struct StarterPackUserRow: View {
             NavigationLink(destination: ProfileView(userID: user.id)) {
                 HStack(spacing: AppSpacing.sm) {
                     AvatarView(user: user, size: 38)
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                         Text(user.displayName)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(AppColor.textPrimary)
@@ -396,14 +396,9 @@ private struct StarterPackUserRow: View {
 
             Spacer()
 
-            Button {
+            FollowPillButton(isFollowing: store.isFollowing(user.id)) {
                 store.toggleFollow(userID: user.id)
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            } label: {
-                Label(store.isFollowing(user.id) ? "フォロー中" : "フォロー", systemImage: store.isFollowing(user.id) ? "checkmark" : "plus")
-                    .font(.caption.weight(.semibold))
             }
-            .buttonStyle(.bordered)
         }
         .padding(.vertical, AppSpacing.xs)
     }
@@ -413,22 +408,43 @@ private struct EmptyTimelineView: View {
     var title = "まだ投稿がありません"
     var message = "あなたの言葉で、最初の投稿をしてみましょう。"
 
+    @State private var appeared = false
+
     var body: some View {
         VStack(spacing: AppSpacing.md) {
             Image(systemName: "text.bubble")
-                .font(.system(size: 40))
+                .font(.system(size: 30, weight: .light))
                 .foregroundStyle(AppColor.accent)
+                .frame(width: 76, height: 76)
+                .background(AppColor.accentSoft, in: Circle())
+                .overlay {
+                    Circle()
+                        .stroke(AppColor.accent.opacity(0.18), lineWidth: 1)
+                }
+                .scaleEffect(appeared ? 1 : 0.8)
+                .opacity(appeared ? 1 : 0)
 
-            Text(title)
-                .font(AppFont.sectionTitle)
+            VStack(spacing: AppSpacing.xs) {
+                Text(title)
+                    .font(AppFont.sectionTitle)
+                    .foregroundStyle(AppColor.textPrimary)
+                    .multilineTextAlignment(.center)
 
-            Text(message)
-                .font(.subheadline)
-                .foregroundStyle(AppColor.textSecondary)
-                .multilineTextAlignment(.center)
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(AppColor.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .opacity(appeared ? 1 : 0)
         }
         .frame(maxWidth: .infinity)
         .padding(AppSpacing.xl)
         .paperSurface()
+        .onAppear {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                appeared = true
+            }
+        }
     }
 }

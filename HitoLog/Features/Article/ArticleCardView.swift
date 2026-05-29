@@ -43,9 +43,10 @@ struct ArticleCardView: View {
                             Image(systemName: "ellipsis")
                                 .font(.caption)
                                 .foregroundStyle(AppColor.textSecondary)
-                                .frame(width: 28, height: 28)
+                                .frame(width: 32, height: 32)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("記事の操作")
                     }
 
                     if !article.freePreviewBody.isEmpty {
@@ -68,6 +69,10 @@ struct ArticleCardView: View {
 
                         Spacer(minLength: 0)
 
+                        if !article.isPublished {
+                            draftPill
+                        }
+
                         humanBadgePill
 
                         if article.price.isPaid {
@@ -87,7 +92,7 @@ struct ArticleCardView: View {
                 }
                 .padding(AppSpacing.md)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ScaleButtonStyle(scale: 0.98))
         }
         .paperSurface()
         .padding(.horizontal, AppSpacing.md)
@@ -95,19 +100,42 @@ struct ArticleCardView: View {
 
     @ViewBuilder
     private var humanBadgePill: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: AppSpacing.xs) {
             Image(systemName: article.humanBadge.systemImage)
                 .font(.caption2)
             Text(article.humanBadge.displayText)
                 .font(.caption2.weight(.semibold))
         }
         .foregroundStyle(article.humanBadge == .verified ? AppColor.accent : AppColor.textSecondary)
-        .padding(.vertical, 3)
+        .padding(.vertical, AppSpacing.xs)
         .padding(.horizontal, AppSpacing.xs)
         .background(
             article.humanBadge == .verified ? AppColor.accentSoft : AppColor.surface,
             in: Capsule()
         )
+        .overlay {
+            Capsule()
+                .stroke(article.humanBadge == .verified ? AppColor.accent.opacity(0.28) : AppColor.border, lineWidth: 0.5)
+        }
+    }
+
+    @ViewBuilder
+    private var draftPill: some View {
+        HStack(spacing: AppSpacing.xs) {
+            Image(systemName: "tray")
+                .font(.caption2)
+            Text("下書き")
+                .font(.caption2.weight(.semibold))
+        }
+        .foregroundStyle(AppColor.warning)
+        .padding(.vertical, AppSpacing.xs)
+        .padding(.horizontal, AppSpacing.xs)
+        .background(AppColor.warning.opacity(0.12), in: Capsule())
+        .overlay {
+            Capsule()
+                .stroke(AppColor.warning.opacity(0.32), lineWidth: 0.5)
+        }
+        .accessibilityLabel("下書き、未公開")
     }
 
     @ViewBuilder
@@ -115,7 +143,7 @@ struct ArticleCardView: View {
         Text(article.price.displayText)
             .font(.caption2.weight(.bold))
             .foregroundStyle(AppColor.background)
-            .padding(.vertical, 3)
+            .padding(.vertical, AppSpacing.xs)
             .padding(.horizontal, AppSpacing.xs)
             .background(AppColor.accent, in: Capsule())
     }

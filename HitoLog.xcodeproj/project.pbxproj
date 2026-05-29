@@ -35,6 +35,8 @@
 		B00100000000000000000026 /* AppColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000026 /* AppColor.swift */; };
 		B00100000000000000000027 /* AppFont.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000027 /* AppFont.swift */; };
 		B00100000000000000000028 /* AppButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000028 /* AppButton.swift */; };
+		B00100000000000000000057 /* MarkdownBodyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000053 /* MarkdownBodyView.swift */; };
+		B00100000000000000000058 /* InlineRichText.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000054 /* InlineRichText.swift */; };
 		B00100000000000000000029 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000029 /* Assets.xcassets */; };
 		B00100000000000000000030 /* BrandIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000031 /* BrandIconView.swift */; };
 		B00100000000000000000031 /* HitoLogAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000032 /* HitoLogAppDelegate.swift */; };
@@ -93,6 +95,8 @@
 		F00100000000000000000026 /* AppColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppColor.swift; sourceTree = "<group>"; };
 		F00100000000000000000027 /* AppFont.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFont.swift; sourceTree = "<group>"; };
 		F00100000000000000000028 /* AppButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppButton.swift; sourceTree = "<group>"; };
+		F00100000000000000000053 /* MarkdownBodyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownBodyView.swift; sourceTree = "<group>"; };
+		F00100000000000000000054 /* InlineRichText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineRichText.swift; sourceTree = "<group>"; };
 		F00100000000000000000029 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F00100000000000000000030 /* HitoLog.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HitoLog.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F00100000000000000000031 /* BrandIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandIconView.swift; sourceTree = "<group>"; };
@@ -334,6 +338,8 @@
 				F00100000000000000000026 /* AppColor.swift */,
 				F00100000000000000000027 /* AppFont.swift */,
 				F00100000000000000000028 /* AppButton.swift */,
+				F00100000000000000000053 /* MarkdownBodyView.swift */,
+				F00100000000000000000054 /* InlineRichText.swift */,
 				F00100000000000000000031 /* BrandIconView.swift */,
 			);
 			path = DesignSystem;
@@ -483,6 +489,8 @@
 				B00100000000000000000026 /* AppColor.swift in Sources */,
 				B00100000000000000000027 /* AppFont.swift in Sources */,
 				B00100000000000000000028 /* AppButton.swift in Sources */,
+				B00100000000000000000057 /* MarkdownBodyView.swift in Sources */,
+				B00100000000000000000058 /* InlineRichText.swift in Sources */,
 				B00100000000000000000030 /* BrandIconView.swift in Sources */,
 				B00100000000000000000043 /* PostMediaGridView.swift in Sources */,
 				B00100000000000000000045 /* AppFeedback.swift in Sources */,

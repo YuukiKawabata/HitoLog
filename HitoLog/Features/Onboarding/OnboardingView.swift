@@ -157,27 +157,42 @@ private struct OnboardingTopicPage: View {
 
                 VStack(spacing: AppSpacing.sm) {
                     ForEach(StarterPackCategory.allCases) { category in
+                        let isSelected = selectedTopics.contains(category.topic)
                         Button {
-                            if selectedTopics.contains(category.topic) {
+                            if isSelected {
                                 selectedTopics.remove(category.topic)
                             } else {
                                 selectedTopics.insert(category.topic)
                             }
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         } label: {
                             HStack(spacing: AppSpacing.sm) {
                                 Image(systemName: category.systemImage)
                                     .frame(width: 24)
+                                    .foregroundStyle(isSelected ? AppColor.accent : AppColor.textSecondary)
                                 Text(category.title)
                                     .font(.subheadline.weight(.semibold))
                                 Spacer()
-                                Image(systemName: selectedTopics.contains(category.topic) ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(selectedTopics.contains(category.topic) ? AppColor.accent : AppColor.textSecondary)
+                                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                                    .contentTransition(.symbolEffect(.replace))
+                                    .symbolEffect(.bounce, value: isSelected)
+                                    .foregroundStyle(isSelected ? AppColor.accent : AppColor.textSecondary)
                             }
                             .foregroundStyle(AppColor.textPrimary)
                             .padding(AppSpacing.sm)
-                            .background(AppColor.surface, in: RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
+                            .background(
+                                isSelected ? AppColor.accentSoft : AppColor.surface,
+                                in: RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                            )
+                            .overlay {
+                                RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                                    .stroke(isSelected ? AppColor.accent.opacity(0.3) : AppColor.border, lineWidth: 0.7)
+                            }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(ScaleButtonStyle(scale: 0.97))
+                        .animation(.snappy(duration: 0.25), value: isSelected)
+                        .accessibilityLabel(category.title)
+                        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
                     }
                 }
 
