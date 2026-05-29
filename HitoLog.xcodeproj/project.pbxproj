@@ -59,6 +59,7 @@
 		B00100000000000000000048 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = E00100000000000000000007 /* PostHog */; };
 		B00100000000000000000049 /* Article.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000045 /* Article.swift */; };
 		B00100000000000000000050 /* ComposeArticleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000046 /* ComposeArticleView.swift */; };
+		B00100000000000000000099 /* FocusedEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000099 /* FocusedEditorView.swift */; };
 		B00100000000000000000051 /* ComposeArticleViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000047 /* ComposeArticleViewModel.swift */; };
 		B00100000000000000000052 /* ArticleCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000048 /* ArticleCardView.swift */; };
 		B00100000000000000000053 /* ArticleDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000049 /* ArticleDetailView.swift */; };
@@ -115,6 +116,7 @@
 		F00100000000000000000044 /* AppReviewService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppReviewService.swift; sourceTree = "<group>"; };
 		F00100000000000000000045 /* Article.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Article.swift; sourceTree = "<group>"; };
 		F00100000000000000000046 /* ComposeArticleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeArticleView.swift; sourceTree = "<group>"; };
+		F00100000000000000000099 /* FocusedEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusedEditorView.swift; sourceTree = "<group>"; };
 		F00100000000000000000047 /* ComposeArticleViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeArticleViewModel.swift; sourceTree = "<group>"; };
 		F00100000000000000000048 /* ArticleCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleCardView.swift; sourceTree = "<group>"; };
 		F00100000000000000000049 /* ArticleDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleDetailView.swift; sourceTree = "<group>"; };
@@ -262,6 +264,7 @@
 				F00100000000000000000012 /* NoPasteTextViewRepresentable.swift */,
 				F00100000000000000000013 /* TypingMetrics.swift */,
 				F00100000000000000000046 /* ComposeArticleView.swift */,
+				F00100000000000000000099 /* FocusedEditorView.swift */,
 				F00100000000000000000047 /* ComposeArticleViewModel.swift */,
 			);
 			path = Compose;
@@ -496,6 +499,7 @@
 				B00100000000000000000045 /* AppFeedback.swift in Sources */,
 				B00100000000000000000049 /* Article.swift in Sources */,
 				B00100000000000000000050 /* ComposeArticleView.swift in Sources */,
+				B00100000000000000000099 /* FocusedEditorView.swift in Sources */,
 				B00100000000000000000051 /* ComposeArticleViewModel.swift in Sources */,
 				B00100000000000000000052 /* ArticleCardView.swift in Sources */,
 				B00100000000000000000053 /* ArticleDetailView.swift in Sources */,

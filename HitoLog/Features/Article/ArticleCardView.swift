@@ -49,12 +49,26 @@ struct ArticleCardView: View {
                         .accessibilityLabel("記事の操作")
                     }
 
-                    if !article.freePreviewBody.isEmpty {
-                        Text(article.freePreviewBody)
-                            .font(.subheadline)
-                            .foregroundStyle(AppColor.textSecondary)
-                            .lineLimit(3)
-                            .fixedSize(horizontal: false, vertical: true)
+                    let previewText = MarkdownBlock.plainPreview(from: article.freePreviewBody)
+                    let previewMedia = InlineMedia.firstMedia(in: article.freePreviewBody)
+
+                    if !previewText.isEmpty || previewMedia != nil {
+                        HStack(alignment: .top, spacing: AppSpacing.sm) {
+                            if !previewText.isEmpty {
+                                Text(previewText)
+                                    .font(.subheadline)
+                                    .foregroundStyle(AppColor.textSecondary)
+                                    .lineLimit(3)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            } else {
+                                Spacer(minLength: 0)
+                            }
+
+                            if let previewMedia {
+                                MediaThumbnailView(media: previewMedia.postMedia, size: 64)
+                            }
+                        }
                     }
 
                     InkDivider()

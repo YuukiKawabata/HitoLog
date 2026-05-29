@@ -1,6 +1,9 @@
 import UIKit
 
 final class NoPasteTextView: UITextView {
+    /// メディア挿入ボタンが押されたときに SwiftUI 側へ通知するクロージャ。
+    var onRequestMediaInsert: (() -> Void)?
+
     override init(frame: CGRect, textContainer: NSTextContainer?) {
         super.init(frame: frame, textContainer: textContainer)
         configure()
@@ -40,9 +43,43 @@ final class NoPasteTextView: UITextView {
     @objc func mdToggleHeading() { applyLinePrefix("## ") }
     @objc func mdToggleQuote() { applyLinePrefix("> ") }
     @objc func mdToggleBullet() { applyLinePrefix("- ") }
+    @objc func mdToggleOrdered() { applyLinePrefix("1. ") }
     @objc func mdBold() { wrapSelection("**") }
+    @objc func mdItalic() { wrapSelection("*") }
+    @objc func mdCode() { wrapSelection("`") }
+    @objc func mdInsertRule() { insertBlockLine("---") }
     @objc func mdInsertLink() { insertLink() }
+    @objc func mdInsertMedia() { onRequestMediaInsert?() }
     @objc func mdDismissKeyboard() { resignFirstResponder() }
+
+    /// メディアの Markdown スニペットを、独立した行になるようカーソル位置へ挿入する。
+    func insertMediaSnippet(_ snippet: String) {
+        insertBlockLine(snippet)
+    }
+
+    /// スニペットを独立した行になるようカーソル位置へ挿入する。
+    /// 直前・直後が改行でなければ改行を補い、レンダラがブロックとして認識できるようにする。
+    private func insertBlockLine(_ snippet: String) {
+        let source = (text ?? "") as NSString
+        let range = selectedRange
+        let caret = min(range.location, source.length)
+
+        var insertion = snippet
+        if caret > 0, source.substring(with: NSRange(location: caret - 1, length: 1)) != "\n" {
+            insertion = "\n" + insertion
+        }
+        if caret < source.length {
+            if source.substring(with: NSRange(location: caret, length: 1)) != "\n" {
+                insertion += "\n"
+            }
+        } else {
+            insertion += "\n"
+        }
+
+        text = source.replacingCharacters(in: range, with: insertion)
+        setCaret(caret + (insertion as NSString).length)
+        notifyChange()
+    }
 
     /// 現在行の行頭にマーカーを挿入（既に付いていれば外す）。
     private func applyLinePrefix(_ marker: String) {

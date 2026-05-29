@@ -16,6 +16,7 @@ struct ComposePostView: View {
     @State private var isSubmitting = false
     @State private var mediaErrorMessage: String?
     @State private var isKeyboardVisible = false
+    @State private var isFocusedEditing = false
     let onSubmitted: () -> Void
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     private let mediaUploadService = MediaUploadService()
@@ -60,6 +61,18 @@ struct ComposePostView: View {
                     }
 
                     VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                        HStack {
+                            Spacer()
+                            Button {
+                                isFocusedEditing = true
+                            } label: {
+                                Label("全画面で書く", systemImage: "arrow.up.left.and.arrow.down.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AppColor.accent)
+                            }
+                            .accessibilityLabel("全画面で書く")
+                        }
+
                         ZStack(alignment: .topLeading) {
                             NoPasteTextViewRepresentable(
                                 text: $viewModel.text,
@@ -184,6 +197,15 @@ struct ComposePostView: View {
             }
             .onChange(of: selectedPhotoItems) { _, newItems in
                 appendSelectedMedia(from: newItems)
+            }
+            .fullScreenCover(isPresented: $isFocusedEditing) {
+                FocusedEditorView(
+                    title: "投稿",
+                    placeholder: "思っていることを、そのまま入力",
+                    text: $viewModel.text,
+                    onTextChanged: viewModel.recordChange(from:to:)
+                )
+                .environmentObject(store)
             }
         }
     }

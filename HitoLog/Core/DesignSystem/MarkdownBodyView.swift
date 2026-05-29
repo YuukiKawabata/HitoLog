@@ -27,6 +27,7 @@ enum MarkdownBlock {
     case bulletList([String])
     case orderedList([String])
     case rule
+    case media(InlineMedia)
     case paragraph(String)
 
     /// Markdown 文字列を行スキャンでブロック配列に変換する。
@@ -81,6 +82,11 @@ enum MarkdownBlock {
                 blocks.append(.heading(level: heading.level, text: heading.text))
                 continue
             }
+            if let media = InlineMedia.match(line) {
+                flushAll()
+                blocks.append(.media(media))
+                continue
+            }
             if line.hasPrefix(">") {
                 flushParagraph(); flushBullets(); flushOrdered()
                 quotes.append(String(line.dropFirst()).trimmingCharacters(in: .whitespaces))
@@ -103,6 +109,22 @@ enum MarkdownBlock {
         return blocks
     }
 
+    /// 一覧カードなどの抜粋用に、Markdown 記号・メディア行・区切り線を除いたプレーンテキストを返す。
+    static func plainPreview(from markdown: String) -> String {
+        parse(markdown).compactMap { block -> String? in
+            switch block {
+            case let .heading(_, text), let .quote(text), let .paragraph(text):
+                return String(MarkdownInline.attributed(text).characters)
+            case let .bulletList(items), let .orderedList(items):
+                return items.map { String(MarkdownInline.attributed($0).characters) }.joined(separator: "  ")
+            case .media, .rule:
+                return nil
+            }
+        }
+        .joined(separator: "\n")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private static func headingMatch(_ line: String) -> (level: Int, text: String)? {
         var level = 0
         var index = line.startIndex
@@ -121,6 +143,87 @@ enum MarkdownBlock {
         let prefix = line[line.startIndex..<dotRange.lowerBound]
         guard !prefix.isEmpty, prefix.allSatisfy(\.isNumber) else { return nil }
         return String(line[dotRange.upperBound...])
+    }
+}
+
+// MARK: - インラインメディア（記事本文に差し込む写真・動画）
+
+/// 記事本文の Markdown に単独行として差し込まれる写真・動画への参照。
+///
+/// 記法は拡張 Markdown 画像構文に揃える:
+/// - 写真: `![image](URL)`
+/// - 動画: `![video](URL "サムネイルURL")`（サムネイルは省略可）
+///
+/// alt テキストで種別を、タイトル（引用符内）で動画サムネイルURLを表す。
+struct InlineMedia: Equatable {
+    let type: PostMediaType
+    let url: String
+    let thumbnailURL: String?
+
+    /// 表示用に `PostMedia` へ変換し、既存のメディアグリッド／ビューアを再利用する。
+    var postMedia: PostMedia {
+        PostMedia(
+            id: url,
+            type: type,
+            storagePath: "",
+            downloadURL: url,
+            thumbnailURL: thumbnailURL,
+            width: 0,
+            height: 0,
+            durationMs: nil,
+            sizeBytes: 0,
+            sortOrder: 0
+        )
+    }
+
+    /// `PostMedia` から本文へ差し込む Markdown スニペットを生成する。
+    static func snippet(for media: PostMedia) -> String {
+        switch media.type {
+        case .image:
+            return "![image](\(media.downloadURL))"
+        case .video:
+            if let thumbnail = media.thumbnailURL, !thumbnail.isEmpty {
+                return "![video](\(media.downloadURL) \"\(thumbnail)\")"
+            }
+            return "![video](\(media.downloadURL))"
+        }
+    }
+
+    /// Markdown 本文に最初に現れるメディア（写真・動画）を返す。一覧のサムネイル用。
+    static func firstMedia(in markdown: String) -> InlineMedia? {
+        for rawLine in markdown.components(separatedBy: "\n") {
+            if let media = match(rawLine.trimmingCharacters(in: .whitespaces)) {
+                return media
+            }
+        }
+        return nil
+    }
+
+    /// 単独行を解析し、メディア参照に一致すれば返す（段落中のインライン画像は対象外）。
+    static func match(_ line: String) -> InlineMedia? {
+        guard line.hasPrefix("!["), line.hasSuffix(")"),
+              let altEnd = line.range(of: "](") else { return nil }
+
+        let altStart = line.index(line.startIndex, offsetBy: 2)
+        let alt = String(line[altStart..<altEnd.lowerBound]).lowercased()
+        let inner = String(line[altEnd.upperBound..<line.index(before: line.endIndex)])
+
+        var urlPart = inner
+        var thumbnail: String?
+        // `URL "サムネイルURL"` 形式ならタイトルをサムネイルとして切り出す。
+        if inner.hasSuffix("\""), let titleStart = inner.range(of: " \"") {
+            urlPart = String(inner[inner.startIndex..<titleStart.lowerBound])
+            thumbnail = String(inner[titleStart.upperBound..<inner.index(before: inner.endIndex)])
+        }
+
+        let url = urlPart.trimmingCharacters(in: .whitespaces)
+        guard !url.isEmpty else { return nil }
+
+        return InlineMedia(
+            type: alt == "video" ? .video : .image,
+            url: url,
+            thumbnailURL: thumbnail
+        )
     }
 }
 
@@ -174,6 +277,10 @@ private struct MarkdownBlockView: View {
                     listRow(marker: "\(index + 1).", text: item)
                 }
             }
+
+        case let .media(media):
+            PostMediaGridView(mediaItems: [media.postMedia], isDetail: true)
+                .padding(.vertical, AppSpacing.xs)
 
         case .rule:
             InkDivider()

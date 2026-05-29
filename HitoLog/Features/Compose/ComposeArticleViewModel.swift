@@ -13,6 +13,9 @@ final class ComposeArticleViewModel: ObservableObject {
     private(set) var editingArticle: Article?
     var isEditing: Bool { editingArticle != nil }
 
+    /// 作成セッションを通じて安定した記事ID。本文に差し込むメディアのアップロード先パスに使う。
+    private(set) var workingArticleID = UUID().uuidString
+
     private let humanScoreService = HumanScoreService()
 
     var hasDraft: Bool {
@@ -48,6 +51,7 @@ final class ComposeArticleViewModel: ObservableObject {
     /// 既存記事を編集用に読み込む。本人入力スコア等の検証値は元記事のものを保持する。
     func load(article: Article, paidBody: String) {
         editingArticle = article
+        workingArticleID = article.id
         title = article.title
         freePreviewBody = article.freePreviewBody
         self.paidBody = paidBody

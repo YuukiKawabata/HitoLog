@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 
 struct ComposeArticleView: View {
@@ -13,7 +14,37 @@ struct ComposeArticleView: View {
     @State private var paidBodyMode: EditorMode = .edit
     @State private var isKeyboardVisible = false
 
+    // 本文へのメディア差し込み
+    @State private var mediaField: MediaField?
+    @State private var isMediaPickerPresented = false
+    @State private var mediaPickerItem: PhotosPickerItem?
+    @State private var isInsertingMedia = false
+    @State private var mediaErrorMessage: String?
+    @State private var freePreviewInserter = TextInsertionController()
+    @State private var paidBodyInserter = TextInsertionController()
+    @State private var focusedField: MediaField?
+    @FocusState private var isTitleFocused: Bool
+    private let mediaUploadService = MediaUploadService()
+
     private enum EditorMode: Hashable { case edit, preview }
+    private enum MediaField: Identifiable {
+        case freePreview, paidBody
+        var id: Self { self }
+
+        var title: String {
+            switch self {
+            case .freePreview: return "無料プレビュー"
+            case .paidBody: return "本文"
+            }
+        }
+
+        var placeholder: String {
+            switch self {
+            case .freePreview: return "読者に届けたい冒頭の言葉を入力"
+            case .paidBody: return "本文（省略可）"
+            }
+        }
+    }
     let editingArticle: Article?
     let onSubmitted: (ArticleStatus) -> Void
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -28,6 +59,15 @@ struct ComposeArticleView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: AppSpacing.lg) {
                     headerPanel
+                        .toolbar {
+                            ToolbarItemGroup(placement: .keyboard) {
+                                if isTitleFocused {
+                                    Spacer()
+                                    Button("完了") { isTitleFocused = false }
+                                        .fontWeight(.semibold)
+                                }
+                            }
+                        }
 
                     if hasSavedDraft {
                         Label("下書きを復元しました", systemImage: "tray.and.arrow.down.fill")
@@ -47,6 +87,7 @@ struct ComposeArticleView: View {
                 .padding(AppSpacing.md)
             }
             .background(PaperCanvas())
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle(viewModel.isEditing ? "記事を編集" : "記事")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -103,6 +144,72 @@ struct ComposeArticleView: View {
                 saveDraft()
             }
             .onAppear { restoreOrLoadIfNeeded() }
+            .photosPicker(
+                isPresented: $isMediaPickerPresented,
+                selection: $mediaPickerItem,
+                matching: .any(of: [.images, .videos])
+            )
+            .onChange(of: mediaPickerItem) { _, newItem in
+                guard let newItem, let field = mediaField else { return }
+                handlePickedMedia(newItem, field: field)
+            }
+            .fullScreenCover(item: $focusedField) { field in
+                FocusedEditorView(
+                    title: field.title,
+                    placeholder: field.placeholder,
+                    text: binding(for: field),
+                    onTextChanged: viewModel.recordChange(from:to:),
+                    allowsMediaInsertion: true,
+                    contentID: viewModel.workingArticleID
+                )
+                .environmentObject(store)
+            }
+        }
+    }
+
+    private func binding(for field: MediaField) -> Binding<String> {
+        switch field {
+        case .freePreview: return $viewModel.freePreviewBody
+        case .paidBody: return $viewModel.paidBody
+        }
+    }
+
+    private func requestMedia(for field: MediaField) {
+        mediaErrorMessage = nil
+        mediaField = field
+        isMediaPickerPresented = true
+    }
+
+    private func inserter(for field: MediaField) -> TextInsertionController {
+        switch field {
+        case .freePreview: return freePreviewInserter
+        case .paidBody: return paidBodyInserter
+        }
+    }
+
+    private func handlePickedMedia(_ item: PhotosPickerItem, field: MediaField) {
+        Task { @MainActor in
+            isInsertingMedia = true
+            mediaErrorMessage = nil
+            defer {
+                isInsertingMedia = false
+                mediaPickerItem = nil
+                mediaField = nil
+            }
+
+            do {
+                let media = try await loadComposeMedia(
+                    from: item,
+                    store: store,
+                    uploadService: mediaUploadService,
+                    contentID: viewModel.workingArticleID
+                )
+                inserter(for: field).insert(InlineMedia.snippet(for: media))
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            } catch {
+                mediaErrorMessage = error.localizedDescription
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+            }
         }
     }
 
@@ -133,6 +240,7 @@ struct ComposeArticleView: View {
                 .font(AppFont.sectionTitle)
                 .foregroundStyle(AppColor.textPrimary)
                 .lineLimit(1...3)
+                .focused($isTitleFocused)
                 .padding(AppSpacing.sm)
                 .background(AppColor.background, in: RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
 
@@ -150,6 +258,7 @@ struct ComposeArticleView: View {
             HStack {
                 SectionKicker(text: "無料プレビュー", systemImage: "eye")
                 Spacer(minLength: AppSpacing.sm)
+                expandButton(for: .freePreview)
                 editorModePicker($freePreviewMode)
             }
 
@@ -163,7 +272,9 @@ struct ComposeArticleView: View {
                     editorField(
                         text: $viewModel.freePreviewBody,
                         placeholder: "読者に届けたい冒頭の言葉を入力",
-                        minHeight: 160
+                        minHeight: 160,
+                        inserter: freePreviewInserter,
+                        onRequestMedia: { requestMedia(for: .freePreview) }
                     )
                 } else {
                     markdownPreview(viewModel.freePreviewBody, minHeight: 160)
@@ -173,9 +284,7 @@ struct ComposeArticleView: View {
             .transition(.opacity)
 
             if freePreviewMode == .edit {
-                Label("ペースト不可", systemImage: "doc.on.clipboard")
-                    .font(.caption)
-                    .foregroundStyle(AppColor.textSecondary)
+                editorFootnote
             }
         }
         .padding(AppSpacing.md)
@@ -188,6 +297,7 @@ struct ComposeArticleView: View {
             HStack {
                 SectionKicker(text: "有料本文", systemImage: "lock.doc")
                 Spacer(minLength: AppSpacing.sm)
+                expandButton(for: .paidBody)
                 editorModePicker($paidBodyMode)
             }
 
@@ -201,7 +311,9 @@ struct ComposeArticleView: View {
                     editorField(
                         text: $viewModel.paidBody,
                         placeholder: "本文（省略可）",
-                        minHeight: 240
+                        minHeight: 240,
+                        inserter: paidBodyInserter,
+                        onRequestMedia: { requestMedia(for: .paidBody) }
                     )
                 } else {
                     markdownPreview(viewModel.paidBody, minHeight: 240)
@@ -211,9 +323,7 @@ struct ComposeArticleView: View {
             .transition(.opacity)
 
             if paidBodyMode == .edit {
-                Label("ペースト不可", systemImage: "doc.on.clipboard")
-                    .font(.caption)
-                    .foregroundStyle(AppColor.textSecondary)
+                editorFootnote
             }
         }
         .padding(AppSpacing.md)
@@ -222,6 +332,19 @@ struct ComposeArticleView: View {
     }
 
     // MARK: - エディタ / プレビュー 共通部品
+
+    private func expandButton(for field: MediaField) -> some View {
+        Button {
+            focusedField = field
+        } label: {
+            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppColor.accent)
+                .frame(width: 32, height: 32)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("\(field.title)を全画面で書く")
+    }
 
     private func editorModePicker(_ mode: Binding<EditorMode>) -> some View {
         Picker("表示モード", selection: mode) {
@@ -233,12 +356,20 @@ struct ComposeArticleView: View {
         .frame(width: 168)
     }
 
-    private func editorField(text: Binding<String>, placeholder: String, minHeight: CGFloat) -> some View {
+    private func editorField(
+        text: Binding<String>,
+        placeholder: String,
+        minHeight: CGFloat,
+        inserter: TextInsertionController,
+        onRequestMedia: @escaping () -> Void
+    ) -> some View {
         ZStack(alignment: .topLeading) {
             NoPasteTextViewRepresentable(
                 text: text,
                 onTextChanged: viewModel.recordChange(from:to:),
-                accessory: .formatting
+                accessory: .formatting,
+                onRequestMediaInsert: onRequestMedia,
+                insertionController: inserter
             )
             .frame(minHeight: minHeight)
             .padding(AppSpacing.sm)
@@ -255,6 +386,34 @@ struct ComposeArticleView: View {
         .overlay {
             RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
                 .stroke(AppColor.border, lineWidth: 0.7)
+        }
+    }
+
+    @ViewBuilder
+    private var editorFootnote: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.xs) {
+            HStack(spacing: AppSpacing.md) {
+                Label("ペースト不可", systemImage: "doc.on.clipboard")
+                Label("写真・動画はツールバーの ⊕ から差し込めます", systemImage: "photo.badge.plus")
+            }
+            .font(.caption)
+            .foregroundStyle(AppColor.textSecondary)
+
+            if isInsertingMedia {
+                HStack(spacing: AppSpacing.sm) {
+                    ProgressView()
+                    Text("メディアを挿入しています")
+                        .font(.caption)
+                        .foregroundStyle(AppColor.textSecondary)
+                }
+            }
+
+            if let mediaErrorMessage {
+                Label(mediaErrorMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(AppColor.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -422,7 +581,7 @@ struct ComposeArticleView: View {
         isSubmitting = true
         defer { isSubmitting = false }
 
-        let (article, paidBody) = viewModel.makeArticle(using: store.currentUser, status: status)
+        let (article, paidBody) = viewModel.makeArticle(id: viewModel.workingArticleID, using: store.currentUser, status: status)
         if viewModel.isEditing {
             store.updateArticle(article, paidBody: paidBody)
         } else {
