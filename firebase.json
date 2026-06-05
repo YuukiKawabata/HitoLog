@@ -27,6 +27,20 @@
           "functionId": "publicPage",
           "region": "asia-northeast1"
         }
+      },
+      {
+        "source": "/i/**",
+        "function": {
+          "functionId": "publicPage",
+          "region": "asia-northeast1"
+        }
+      },
+      {
+        "source": "/og/**",
+        "function": {
+          "functionId": "publicPage",
+          "region": "asia-northeast1"
+        }
       }
     ]
   },

@@ -17,6 +17,7 @@ enum PurchaseError: LocalizedError {
 struct PurchaseResult {
     let transactionID: String
     let productID: String
+    let expirationDate: Date?
 }
 
 actor PurchaseService {
@@ -28,6 +29,10 @@ actor PurchaseService {
         guard let productID = price.iapProductID else {
             throw PurchaseError.productNotFound
         }
+        return try await fetchProduct(productID: productID)
+    }
+
+    func fetchProduct(productID: String) async throws -> Product {
         if let cached = productCache[productID] { return cached }
         let fetched = try await Product.products(for: [productID])
         guard let product = fetched.first else {
@@ -40,6 +45,20 @@ actor PurchaseService {
     // Returns nil if user cancelled; throws on error or pending.
     func purchase(price: ArticlePrice) async throws -> PurchaseResult? {
         let product = try await fetchProduct(for: price)
+        return try await purchase(product: product)
+    }
+
+    func purchase(membershipPlan: CreatorMembershipPlan) async throws -> PurchaseResult? {
+        let product = try await fetchProduct(productID: membershipPlan.productID)
+        return try await purchase(product: product)
+    }
+
+    func purchase(supportAmount: SupportAmount) async throws -> PurchaseResult? {
+        let product = try await fetchProduct(productID: supportAmount.productID)
+        return try await purchase(product: product)
+    }
+
+    private func purchase(product: Product) async throws -> PurchaseResult? {
         let result = try await product.purchase()
         switch result {
         case .success(let verification):
@@ -47,7 +66,8 @@ actor PurchaseService {
             await transaction.finish()
             return PurchaseResult(
                 transactionID: String(transaction.id),
-                productID: product.id
+                productID: product.id,
+                expirationDate: transaction.expirationDate
             )
         case .userCancelled:
             return nil

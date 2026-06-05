@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "976WT2WW6X.com.yukikawabata.HitoLog",
+        "paths": [
+          "/i/*",
+          "/p/*",
+          "/t/*"
+        ]
+      }
+    ]
+  }
+}

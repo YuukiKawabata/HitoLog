@@ -12,4 +12,5 @@ enum AppConstants {
     static let maxMutedWordLength = 40
     static let maxFeedbackLength = 1_000
     static let minimumStarterPackFollowerCount = 1
+    static let publicBaseURL = "https://hitolog-e22d2.web.app"
 }

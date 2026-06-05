@@ -1,9 +1,10 @@
 import { initializeApp } from "firebase-admin/app";
-import { DocumentReference, FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
+import { DocumentData, DocumentReference, FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { onDocumentCreated, onDocumentDeleted, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { onRequest } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
 
 initializeApp();
@@ -11,7 +12,7 @@ setGlobalOptions({ region: "asia-northeast1" });
 
 const db = getFirestore();
 
-type NotificationType = "comment" | "like" | "follow" | "repost" | "quote";
+type NotificationType = "comment" | "like" | "follow" | "repost" | "quote" | "mention";
 type ModerationStatus = "active" | "reviewRequired" | "hidden";
 type PostShareType = "original" | "repost" | "quote";
 type CommentPermission = "everyone" | "following" | "closed";
@@ -34,7 +35,19 @@ interface PostRecord {
   topics?: string[];
   createdAt?: Timestamp;
   topicCounted?: boolean;
+  // Human Score 関連（クライアントが自己申告するが、サーバーで再計算して上書きする）
+  humanScore?: number;
+  humanBadge?: HumanBadge;
+  inputDurationMs?: number;
+  characterCount?: number;
+  editCount?: number;
+  deleteCount?: number;
+  suspiciousBulkInputCount?: number;
+  appCheckVerified?: boolean;
+  aiAssisted?: boolean;
 }
+
+type HumanBadge = "verified" | "checking" | "lowTrust";
 
 interface CommentRecord {
   postID: string;
@@ -50,6 +63,12 @@ interface LikeRecord {
   userID: string;
 }
 
+interface ReactionRecord {
+  postID: string;
+  userID: string;
+  kind: string;
+}
+
 interface FollowRecord {
   followerID: string;
   followeeID: string;
@@ -60,6 +79,26 @@ interface TopicFollowRecord {
   userID: string;
   topic: string;
   counted?: boolean;
+}
+
+interface ArticleUnlockRecord {
+  userID: string;
+  articleID: string;
+  counted?: boolean;
+}
+
+interface InviteCodeRecord {
+  code: string;
+  inviterID: string;
+  maxUses?: number;
+  useCount?: number;
+  isActive?: boolean;
+  expiresAt?: Timestamp;
+}
+
+interface InviteRedemptionRecord {
+  code: string;
+  inviteeID: string;
 }
 
 interface PublicPageResponse {
@@ -85,7 +124,9 @@ export const onPostCreated = onDocumentCreated("posts/{postID}", async (event) =
     return;
   }
 
+  await finalizeHumanScore(postRef, post);
   await handlePostShareCreated(post, event.params.postID);
+  await sendMentionNotifications(post, event.params.postID);
   await markPostTopicsCounted(postRef, post);
 });
 
@@ -205,6 +246,61 @@ export const onLikeDeleted = onDocumentDeleted("likes/{likeID}", async (event) =
   });
 });
 
+const REACTION_KINDS = ["empathy", "insight", "cheer"];
+
+function isValidReactionKind(kind: unknown): kind is string {
+  return typeof kind === "string" && REACTION_KINDS.includes(kind);
+}
+
+async function adjustReactionCount(postID: string, kind: string, amount: 1 | -1) {
+  await db.collection("posts").doc(postID).set({
+    reactionCounts: { [kind]: FieldValue.increment(amount) },
+    updatedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+}
+
+// リアクション付与時に、投稿ドキュメントの reactionCounts.{kind} を集計する。
+// 全ユーザーに同じ件数が見えるよう、サーバー側で権威ある集計を保つ。
+export const onReactionCreated = onDocumentCreated("reactions/{reactionID}", async (event) => {
+  const reaction = event.data?.data() as ReactionRecord | undefined;
+  if (!reaction || !reaction.postID || !isValidReactionKind(reaction.kind)) {
+    return;
+  }
+
+  await adjustReactionCount(reaction.postID, reaction.kind, 1);
+});
+
+export const onReactionDeleted = onDocumentDeleted("reactions/{reactionID}", async (event) => {
+  const reaction = event.data?.data() as ReactionRecord | undefined;
+  if (!reaction || !reaction.postID || !isValidReactionKind(reaction.kind)) {
+    return;
+  }
+
+  await adjustReactionCount(reaction.postID, reaction.kind, -1);
+});
+
+export const onReactionUpdated = onDocumentUpdated("reactions/{reactionID}", async (event) => {
+  const before = event.data?.before.data() as ReactionRecord | undefined;
+  const after = event.data?.after.data() as ReactionRecord | undefined;
+  if (!before || !after || before.postID !== after.postID || before.kind === after.kind) {
+    return;
+  }
+
+  const reactionCounts: Record<string, FieldValue> = {};
+  if (isValidReactionKind(before.kind)) {
+    reactionCounts[before.kind] = FieldValue.increment(-1);
+  }
+  if (isValidReactionKind(after.kind)) {
+    reactionCounts[after.kind] = FieldValue.increment(1);
+  }
+  if (Object.keys(reactionCounts).length > 0) {
+    await db.collection("posts").doc(after.postID).set({
+      reactionCounts,
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+  }
+});
+
 export const onFollowCreated = onDocumentCreated("follows/{followID}", async (event) => {
   const followRef = db.collection("follows").doc(event.params.followID);
   const follow = event.data?.data() as FollowRecord | undefined;
@@ -272,6 +368,84 @@ export const onTopicFollowDeleted = onDocumentDeleted("topicFollows/{followID}",
   await adjustTopicFollowerCount(follow.topic, -1);
 });
 
+export const onArticleUnlockCreated = onDocumentCreated("articleUnlocks/{unlockID}", async (event) => {
+  const unlock = event.data?.data() as ArticleUnlockRecord | undefined;
+  if (!unlock || !unlock.userID || !unlock.articleID || unlock.counted === true) {
+    return;
+  }
+
+  await db.collection("articles").doc(unlock.articleID).set({
+    purchaseCount: FieldValue.increment(1),
+    updatedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+  await db.collection("articleUnlocks").doc(event.params.unlockID).set({
+    counted: true
+  }, { merge: true });
+});
+
+export const onInviteRedemptionCreated = onDocumentCreated("inviteRedemptions/{redemptionID}", async (event) => {
+  const redemption = event.data?.data() as InviteRedemptionRecord | undefined;
+  if (!redemption || !redemption.code || !redemption.inviteeID) {
+    return;
+  }
+
+  const code = normalizeInviteCode(redemption.code);
+  if (!code) {
+    await db.collection("inviteRedemptions").doc(event.params.redemptionID).set({
+      status: "rejected",
+      rejectionReason: "invalid_code",
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    return;
+  }
+  const redemptionRef = db.collection("inviteRedemptions").doc(event.params.redemptionID);
+  const inviteRef = db.collection("inviteCodes").doc(code);
+  const inviteeRef = db.collection("users").doc(redemption.inviteeID);
+
+  await db.runTransaction(async (transaction) => {
+    const [inviteSnapshot, inviteeSnapshot] = await Promise.all([
+      transaction.get(inviteRef),
+      transaction.get(inviteeRef)
+    ]);
+    const invite = inviteSnapshot.data() as InviteCodeRecord | undefined;
+    const invitee = inviteeSnapshot.data();
+
+    const rejectionReason = inviteRedemptionRejectionReason(invite, invitee, redemption.inviteeID);
+    if (rejectionReason) {
+      transaction.set(redemptionRef, {
+        code,
+        status: "rejected",
+        rejectionReason,
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+      return;
+    }
+
+    const inviterID = invite?.inviterID ?? "";
+    transaction.set(inviteRef, {
+      useCount: FieldValue.increment(1),
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    transaction.set(inviteeRef, {
+      invitedByUserID: inviterID,
+      invitedByInviteCode: code,
+      invitedAt: FieldValue.serverTimestamp(),
+      humanLevel: FieldValue.increment(1),
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    transaction.set(db.collection("users").doc(inviterID), {
+      humanLevel: FieldValue.increment(1),
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    transaction.set(redemptionRef, {
+      code,
+      inviterID,
+      status: "accepted",
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+  });
+});
+
 export const publicPage = onRequest(async (request, response) => {
   const path = decodeURIComponent(request.path || new URL(request.url, "https://hitolog.local").pathname);
   const host = request.get("host") || "hitolog-e22d2.web.app";
@@ -287,6 +461,16 @@ export const publicPage = onRequest(async (request, response) => {
     return;
   }
 
+  if (path.startsWith("/i/")) {
+    await renderInvitePage(path.replace("/i/", "").split("/")[0], baseURL, response);
+    return;
+  }
+
+  if (path.startsWith("/og/post/")) {
+    await renderPostOGImage(path.replace("/og/post/", "").split("/")[0], response);
+    return;
+  }
+
   response.status(404).send(renderBaseHTML({
     title: "HitoLog",
     description: "HitoLogは、自分の言葉で書くSNSです。",
@@ -294,6 +478,101 @@ export const publicPage = onRequest(async (request, response) => {
     body: "<main><h1>HitoLog</h1><p>ページが見つかりません。</p></main>"
   }));
 });
+
+// ===== 習慣化リエンゲージ通知（1日1回のダイジェスト）=====
+//
+// フォロー中の新着や自分の投稿への反応を1日分まとめて配信し、毎日開く理由をつくる。
+// スパムにならないよう「未読がある人」だけに1日1通。ユーザー設定（notificationsEnabled）で制御。
+export const sendDailyDigest = onSchedule(
+  { schedule: "0 19 * * *", timeZone: "Asia/Tokyo" },
+  async () => {
+    const since = Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
+    const snapshot = await db.collection("notifications")
+      .where("createdAt", ">=", since)
+      .where("isRead", "==", false)
+      .limit(5000)
+      .get();
+
+    // 受信者ごとに未読件数を集計する。
+    const unreadByRecipient = new Map<string, number>();
+    for (const doc of snapshot.docs) {
+      const recipientID = doc.data().recipientID;
+      if (typeof recipientID === "string") {
+        unreadByRecipient.set(recipientID, (unreadByRecipient.get(recipientID) ?? 0) + 1);
+      }
+    }
+
+    let sentCount = 0;
+    for (const [recipientID, count] of unreadByRecipient) {
+      const sent = await sendDigestPush(recipientID, count);
+      if (sent) {
+        sentCount += 1;
+      }
+    }
+
+    logger.info("Daily digest processed", { recipients: unreadByRecipient.size, sent: sentCount });
+  }
+);
+
+export const expireCreatorMemberships = onSchedule(
+  { schedule: "15 3 * * *", timeZone: "Asia/Tokyo" },
+  async () => {
+    const now = Timestamp.now();
+    const snapshot = await db.collection("creatorMemberships")
+      .where("status", "==", "active")
+      .where("expiresAt", "<", now)
+      .limit(500)
+      .get();
+
+    if (snapshot.empty) {
+      return;
+    }
+
+    const batch = db.batch();
+    for (const doc of snapshot.docs) {
+      batch.set(doc.ref, {
+        status: "expired",
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+    }
+    await batch.commit();
+    logger.info("Expired creator memberships", { count: snapshot.size });
+  }
+);
+
+async function sendDigestPush(recipientID: string, unreadCount: number): Promise<boolean> {
+  const recipientSnapshot = await db.collection("users").doc(recipientID).get();
+  const recipient = recipientSnapshot.data();
+  if (!recipient || recipient.notificationsEnabled === false || recipient.isDeleted === true || recipient.isSuspended === true) {
+    return false;
+  }
+
+  const tokenSnapshot = await db.collection("fcmTokens")
+    .doc(recipientID)
+    .collection("tokens")
+    .where("isEnabled", "==", true)
+    .get();
+
+  const tokens = tokenSnapshot.docs
+    .map((doc) => doc.data().token)
+    .filter((token): token is string => typeof token === "string" && token.length > 0);
+
+  if (tokens.length === 0) {
+    return false;
+  }
+
+  await getMessaging().sendEachForMulticast({
+    tokens,
+    notification: {
+      title: "HitoLog",
+      body: `あなたの言葉に${unreadCount}件の反応が届いています`
+    },
+    data: { type: "digest" },
+    apns: { payload: { aps: { sound: "default" } } }
+  });
+
+  return true;
+}
 
 async function createAndSendNotification(input: {
   type: NotificationType;
@@ -529,6 +808,41 @@ function isOfficialTopic(topic: string): boolean {
   return ["言葉", "日常ログ", "創作", "学び"].includes(topic);
 }
 
+function normalizeInviteCode(code: string): string {
+  return code.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function inviteRedemptionRejectionReason(
+  invite: InviteCodeRecord | undefined,
+  invitee: DocumentData | undefined,
+  inviteeID: string
+): string | null {
+  if (!invite || !invite.inviterID || normalizeInviteCode(invite.code ?? "") === "") {
+    return "missing_invite";
+  }
+  if (invite.isActive === false) {
+    return "inactive_invite";
+  }
+  if (invite.inviterID === inviteeID) {
+    return "self_invite";
+  }
+  if (!invitee || invitee.isDeleted === true || invitee.isSuspended === true) {
+    return "inactive_invitee";
+  }
+  if (typeof invitee.invitedByUserID === "string" && invitee.invitedByUserID.length > 0) {
+    return "already_redeemed";
+  }
+  const maxUses = typeof invite.maxUses === "number" ? invite.maxUses : 5;
+  const useCount = typeof invite.useCount === "number" ? invite.useCount : 0;
+  if (useCount >= maxUses) {
+    return "invite_exhausted";
+  }
+  if (invite.expiresAt instanceof Timestamp && invite.expiresAt.toMillis() < Date.now()) {
+    return "invite_expired";
+  }
+  return null;
+}
+
 async function canCreateComment(comment: CommentRecord, post: PostRecord): Promise<boolean> {
   if (!post.userID || post.isDeleted === true || (post.moderationStatus ?? "active") !== "active") {
     return false;
@@ -626,8 +940,8 @@ async function renderPostPage(postID: string, baseURL: string, response: PublicP
   const user = userSnapshot.data();
   const authorName = typeof user?.displayName === "string" ? user.displayName : "HitoLog";
   const description = truncate(post.body ?? "", 120) || `${authorName}さんのHitoLog投稿`;
-  const imageURL = post.mediaItems?.find((item) => item.type === "image" && typeof item.downloadURL === "string")?.downloadURL;
   const canonicalURL = `${baseURL}/p/${encodeURIComponent(postID)}`;
+  const imageURL = `${baseURL}/og/post/${encodeURIComponent(postID)}`;
   const topics = (post.topics ?? []).filter(isValidTopic).map((topic) => `<a href="/t/${encodeURIComponent(topic)}">#${escapeHTML(topic)}</a>`).join(" ");
   const createdAt = post.createdAt?.toDate().toLocaleString("ja-JP") ?? "";
 
@@ -702,6 +1016,79 @@ async function renderTopicPage(topic: string, baseURL: string, response: PublicP
     }));
 }
 
+async function renderInvitePage(rawCode: string, baseURL: string, response: PublicPageResponse) {
+  const code = normalizeInviteCode(rawCode);
+  if (!code) {
+    response.status(404).send(renderNotFound(baseURL));
+    return;
+  }
+
+  const inviteSnapshot = await db.collection("inviteCodes").doc(code).get();
+  const invite = inviteSnapshot.data() as InviteCodeRecord | undefined;
+  const inviterSnapshot = invite?.inviterID ? await db.collection("users").doc(invite.inviterID).get() : undefined;
+  const inviter = inviterSnapshot?.data();
+  const inviterName = typeof inviter?.displayName === "string" ? inviter.displayName : "HitoLog";
+  const remainingUses = Math.max((invite?.maxUses ?? 5) - (invite?.useCount ?? 0), 0);
+  const isAvailable = !!invite && invite.isActive !== false && remainingUses > 0
+    && (!(invite.expiresAt instanceof Timestamp) || invite.expiresAt.toMillis() >= Date.now());
+  const canonicalURL = `${baseURL}/i/${encodeURIComponent(code)}`;
+  const appURL = `hitolog://invite?code=${encodeURIComponent(code)}`;
+
+  response
+    .status(200)
+    .set("Cache-Control", "public, max-age=60, s-maxage=120")
+    .send(renderBaseHTML({
+      title: "HitoLogへの招待",
+      description: `${inviterName}さんからHitoLogへの招待です。`,
+      canonicalURL,
+      body: `
+        <main>
+          <p class="kicker">Invitation</p>
+          <h1>HitoLogへの招待</h1>
+          <p class="lead">${escapeHTML(inviterName)}さんから招待が届いています。</p>
+          <section class="card">
+            <p class="meta">招待コード</p>
+            <p class="code">${escapeHTML(code)}</p>
+            <p>${isAvailable ? `残り${remainingUses}回使えます。` : "この招待コードは利用できません。"}</p>
+          </section>
+          <a class="button" href="${escapeAttribute(appURL)}">HitoLogで受け取る</a>
+        </main>`
+    }));
+}
+
+async function renderPostOGImage(postID: string, response: PublicPageResponse) {
+  const postSnapshot = await db.collection("posts").doc(postID).get();
+  const post = postSnapshot.data() as PostRecord | undefined;
+  if (!post || post.isDeleted === true || (post.moderationStatus ?? "active") !== "active") {
+    response.status(404).send("");
+    return;
+  }
+
+  const userSnapshot = await db.collection("users").doc(post.userID).get();
+  const user = userSnapshot.data();
+  const authorName = typeof user?.displayName === "string" ? user.displayName : "HitoLog";
+  const handle = typeof user?.handle === "string" ? `@${user.handle}` : "@hitolog";
+  const bodyLines = svgTextLines(post.body ?? "", 34, 5);
+  const badgeLabel = humanBadgeOGLabel(post.humanBadge);
+  const badgeColor = post.humanBadge === "verified" ? "#2f7d5c" : post.humanBadge === "lowTrust" ? "#8a6a32" : "#67736d";
+
+  response
+    .status(200)
+    .set("Content-Type", "image/svg+xml; charset=utf-8")
+    .set("Cache-Control", "public, max-age=120, s-maxage=300")
+    .send(`<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#fbfaf6"/>
+  <rect x="56" y="56" width="1088" height="518" rx="28" fill="#ffffff" stroke="#ded8cc" stroke-width="2"/>
+  <text x="96" y="124" fill="#2f7d5c" font-family="-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif" font-size="28" font-weight="700">HitoLog</text>
+  <rect x="94" y="154" width="${Math.max(220, badgeLabel.length * 28)}" height="52" rx="26" fill="${badgeColor}" opacity="0.12"/>
+  <text x="122" y="188" fill="${badgeColor}" font-family="-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif" font-size="25" font-weight="700">${escapeHTML(badgeLabel)}</text>
+  ${bodyLines.map((line, index) => `<text x="96" y="${276 + index * 58}" fill="#1e2421" font-family="-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif" font-size="38" font-weight="650">${escapeHTML(line)}</text>`).join("\n  ")}
+  <text x="96" y="522" fill="#67736d" font-family="-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif" font-size="26">${escapeHTML(authorName)} ${escapeHTML(handle)}</text>
+  <text x="868" y="522" fill="#67736d" font-family="-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif" font-size="24">AI時代に、人間の言葉を残すSNS。</text>
+</svg>`);
+}
+
 function renderNotFound(baseURL: string): string {
   return renderBaseHTML({
     title: "ページが見つかりません | HitoLog",
@@ -746,6 +1133,7 @@ function renderBaseHTML(input: {
     .lead,.meta{color:var(--muted)}
     .card{border:1px solid var(--line);border-radius:8px;background:#fff;padding:20px;margin:20px 0}
     .body{font-size:1.1rem;white-space:normal}
+    .code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:1.6rem;font-weight:800;letter-spacing:.04em;margin:.2rem 0}
     .topics a{color:var(--accent);font-weight:700;text-decoration:none;margin-right:8px}
     .button{display:inline-block;background:var(--accent);color:#fff;text-decoration:none;border-radius:8px;padding:10px 14px;font-weight:700}
   </style>
@@ -775,6 +1163,33 @@ function truncate(value: string, maxLength: number): string {
   return `${trimmed.slice(0, maxLength - 1)}…`;
 }
 
+function svgTextLines(value: string, maxCharsPerLine: number, maxLines: number): string[] {
+  const compact = value.replace(/\s+/g, " ").trim();
+  if (!compact) {
+    return ["人間の言葉を、HitoLogに。"];
+  }
+
+  const lines: string[] = [];
+  let cursor = 0;
+  while (cursor < compact.length && lines.length < maxLines) {
+    const next = compact.slice(cursor, cursor + maxCharsPerLine);
+    cursor += maxCharsPerLine;
+    lines.push(cursor < compact.length && lines.length === maxLines - 1 ? `${next.slice(0, -1)}…` : next);
+  }
+  return lines;
+}
+
+function humanBadgeOGLabel(badge: HumanBadge | undefined): string {
+  switch (badge) {
+    case "verified":
+      return "本人入力 verified";
+    case "lowTrust":
+      return "入力確認中";
+    default:
+      return "Human Score 確認中";
+  }
+}
+
 function notificationTextFor(type: NotificationType, actorName: string): string {
   switch (type) {
     case "comment":
@@ -787,5 +1202,198 @@ function notificationTextFor(type: NotificationType, actorName: string): string 
       return `${actorName}さんがリポストしました`;
     case "quote":
       return `${actorName}さんが引用しました`;
+    case "mention":
+      return `${actorName}さんがあなたをメンションしました`;
+  }
+}
+
+// ===== @メンション =====
+
+const MAX_MENTIONS_PER_POST = 10;
+const MAX_HANDLE_LENGTH = 32;
+
+// 本文から @handle を正規化抽出する。HitoLog/Core/Models/Post.swift の MentionExtractor と一致させる。
+function extractHandles(body: string): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const token of body.split(/\s+/)) {
+    if (token[0] !== "@" && token[0] !== "＠") {
+      continue;
+    }
+    const match = token.slice(1).match(/^[A-Za-z0-9_]+/);
+    if (!match) {
+      continue;
+    }
+    const handle = match[0].toLowerCase().slice(0, MAX_HANDLE_LENGTH);
+    if (handle.length < 2 || seen.has(handle)) {
+      continue;
+    }
+    seen.add(handle);
+    result.push(handle);
+    if (result.length >= MAX_MENTIONS_PER_POST) {
+      break;
+    }
+  }
+
+  return result;
+}
+
+async function sendMentionNotifications(post: PostRecord, postID: string): Promise<void> {
+  if (post.shareType === "repost" || !post.body) {
+    return;
+  }
+
+  const handles = extractHandles(post.body);
+  if (handles.length === 0) {
+    return;
+  }
+
+  const notifiedUserIDs = new Set<string>();
+  for (const handle of handles) {
+    const userSnapshot = await db.collection("users")
+      .where("handleLowercase", "==", handle)
+      .limit(1)
+      .get();
+    const mentionedUser = userSnapshot.docs[0];
+    if (!mentionedUser) {
+      continue;
+    }
+
+    const recipientID = mentionedUser.id;
+    // 自分自身・重複・共有元（quote の通知と重複）への二重通知を避ける。
+    if (recipientID === post.userID || notifiedUserIDs.has(recipientID) || recipientID === post.sourceUserID) {
+      continue;
+    }
+    notifiedUserIDs.add(recipientID);
+
+    await createAndSendNotification({
+      type: "mention",
+      recipientID,
+      actorID: post.userID,
+      postID,
+      body: post.body
+    });
+  }
+
+  if (notifiedUserIDs.size > 0) {
+    logger.info("Mention notifications sent", { postID, count: notifiedUserIDs.size });
+  }
+}
+
+// ===== Human Score（サーバー側で確定。クライアントの自己申告を信用しない）=====
+//
+// HitoLog の核となる「人間が、考えて書いた」価値の土台。クライアントが humanScore を
+// 100 と偽って書き込んでも、サーバーが入力計測値から再計算して上書きするため改ざんできない。
+// 算定ロジックは HitoLog/Core/Services/HumanScoreService.swift と一致させること。
+
+interface HumanScoreInput {
+  inputDurationMs: number;
+  characterCount: number;
+  editCount: number;
+  deleteCount: number;
+  suspiciousBulkInputCount: number;
+  appAttestVerified: boolean;
+  accountAgeDays: number;
+  recentPostCount: number;
+  aiAssisted: boolean;
+}
+
+function computeHumanScore(input: HumanScoreInput): number {
+  let score = 100;
+
+  if (!input.appAttestVerified) {
+    score -= 20;
+  }
+
+  // 一括入力（ペースト/AI生成貼り付け）の疑い。ただし正直に「AI併用」を
+  // 開示している場合は、欺瞞ではないためペナルティを科さない。
+  if (input.suspiciousBulkInputCount > 0 && !input.aiAssisted) {
+    score -= 30 * input.suspiciousBulkInputCount;
+  }
+
+  const seconds = Math.max(input.inputDurationMs / 1000, 1);
+  const charsPerSecond = input.characterCount / seconds;
+
+  if (input.characterCount >= 100 && charsPerSecond > 10) {
+    score -= 20;
+  }
+
+  if (input.recentPostCount >= 10) {
+    score -= 10;
+  }
+
+  if (input.accountAgeDays < 1) {
+    score -= 5;
+  }
+
+  if (input.editCount > 0 || input.deleteCount > 0) {
+    score += 5;
+  }
+
+  return Math.min(Math.max(score, 0), 100);
+}
+
+function humanBadgeForScore(score: number): HumanBadge {
+  if (score >= 80) {
+    return "verified";
+  } else if (score >= 50) {
+    return "checking";
+  }
+  return "lowTrust";
+}
+
+function toFiniteNumber(value: unknown, fallback = 0): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function accountAgeDaysFrom(createdAt: unknown): number {
+  if (createdAt instanceof Timestamp) {
+    const ageMs = Date.now() - createdAt.toMillis();
+    return Math.max(Math.floor(ageMs / (24 * 60 * 60 * 1000)), 0);
+  }
+  return 0;
+}
+
+// 直近1時間の自分の投稿数。recentPostCount として Human Score の権威ある入力に使う。
+async function recentPostCountFor(userID: string): Promise<number> {
+  const since = Timestamp.fromMillis(Date.now() - RATE_LIMIT_WINDOW_MS);
+  const snapshot = await db.collection("posts")
+    .where("userID", "==", userID)
+    .where("createdAt", ">=", since)
+    .limit(POST_LIMIT_PER_HOUR + 1)
+    .get();
+  return snapshot.size;
+}
+
+// 投稿の Human Score をサーバー側で再計算し、自己申告と異なれば上書きする。
+// リポストは本文を持たないため対象外（共有元の値を引き継ぐ）。
+async function finalizeHumanScore(postRef: DocumentReference, post: PostRecord): Promise<void> {
+  if (post.shareType === "repost") {
+    return;
+  }
+
+  const authorSnapshot = await db.collection("users").doc(post.userID).get();
+  const accountAgeDays = accountAgeDaysFrom(authorSnapshot.data()?.createdAt);
+
+  const computedScore = computeHumanScore({
+    inputDurationMs: toFiniteNumber(post.inputDurationMs),
+    characterCount: toFiniteNumber(post.characterCount, (post.body ?? "").length),
+    editCount: toFiniteNumber(post.editCount),
+    deleteCount: toFiniteNumber(post.deleteCount),
+    suspiciousBulkInputCount: toFiniteNumber(post.suspiciousBulkInputCount),
+    appAttestVerified: post.appCheckVerified === true,
+    accountAgeDays,
+    recentPostCount: await recentPostCountFor(post.userID),
+    aiAssisted: post.aiAssisted === true,
+  });
+  const computedBadge = humanBadgeForScore(computedScore);
+
+  if (computedScore !== post.humanScore || computedBadge !== post.humanBadge) {
+    await postRef.set({
+      humanScore: computedScore,
+      humanBadge: computedBadge,
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
   }
 }

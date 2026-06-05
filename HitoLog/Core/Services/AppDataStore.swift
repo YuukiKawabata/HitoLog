@@ -73,6 +73,7 @@ final class AppDataStore: ObservableObject {
     @Published private(set) var comments: [Comment]
     @Published private(set) var likedPostIDs: Set<String>
     @Published private(set) var bookmarkedPostIDs: Set<String>
+    @Published private(set) var reactionByPostID: [String: ReactionKind] = [:]
     @Published private(set) var blockedUserIDs: Set<String>
     @Published private(set) var mutedUserIDs: Set<String>
     @Published private(set) var mutedWords: [MutedWord]
@@ -100,6 +101,9 @@ final class AppDataStore: ObservableObject {
     @Published private(set) var articles: [Article] = []
     @Published private(set) var articleSearchResults: [Article] = []
     @Published private(set) var unlockedArticleIDs: Set<String> = []
+    @Published private(set) var inviteCodes: [InviteCode] = []
+    @Published private(set) var pendingInviteCode: String? = UserDefaults.standard.string(forKey: AppDataStore.pendingInviteCodeKey)
+    @Published private(set) var creatorEarnings: CreatorEarnings = .empty
 
     private let remoteStore: FirebaseDataStore
     private let initialCurrentUser: AppUser
@@ -119,6 +123,8 @@ final class AppDataStore: ObservableObject {
     private let initialFollowingByUserID: [String: Set<String>]
     private var remoteUserID: String?
     private var currentUserBeforeDemoData: AppUser?
+    private var remoteListenerRegistrations: [RemoteListenerRegistration] = []
+    private static let pendingInviteCodeKey = "pendingInviteCode"
 
     var recentPostCount: Int {
         let oneHourAgo = Date().addingTimeInterval(-3600)
@@ -309,6 +315,7 @@ final class AppDataStore: ObservableObject {
     }
 
     func activateRemoteUser(uid: String?, appleUserID: String?, displayName: String?, email: String?) async {
+        stopRemoteListeners()
         remoteUserID = uid
 
         guard let uid, remoteStore.isAvailable else {
@@ -327,13 +334,16 @@ final class AppDataStore: ObservableObject {
             }
 
             try await remoteStore.upsertUser(currentUser, email: email)
+            await redeemPendingInviteIfNeeded(inviteeID: uid)
             try await reloadRemoteSnapshot()
+            startRemoteListeners(for: uid)
         } catch {
             recordRemoteError(error)
         }
     }
 
     func deactivateRemoteUser() {
+        stopRemoteListeners()
         remoteUserID = nil
         isRemoteSyncEnabled = false
         lastSyncErrorMessage = nil
@@ -652,6 +662,48 @@ final class AppDataStore: ObservableObject {
         let userID = currentUser.id
         runRemoteWrite {
             try await self.remoteStore.setLike(postID: postID, userID: userID, isLiked: isLiked)
+        }
+    }
+
+    func reaction(for postID: String) -> ReactionKind? {
+        reactionByPostID[postID]
+    }
+
+    /// リアクションを付与・変更・解除する。同じ種別を再選択すると解除、別種別なら付け替え。
+    func toggleReaction(_ kind: ReactionKind, for postID: String) {
+        guard canCurrentUserCreateContent,
+              let index = posts.firstIndex(where: { $0.id == postID && isVisiblePost($0) }) else { return }
+
+        let previous = reactionByPostID[postID]
+        let resolved: ReactionKind?
+
+        if previous == kind {
+            // 同じ種別をもう一度 → 解除
+            posts[index].reactionCounts[kind.rawValue] = max((posts[index].reactionCounts[kind.rawValue] ?? 1) - 1, 0)
+            reactionByPostID[postID] = nil
+            resolved = nil
+        } else {
+            if let previous {
+                posts[index].reactionCounts[previous.rawValue] = max((posts[index].reactionCounts[previous.rawValue] ?? 1) - 1, 0)
+            }
+            posts[index].reactionCounts[kind.rawValue] = (posts[index].reactionCounts[kind.rawValue] ?? 0) + 1
+            reactionByPostID[postID] = kind
+            resolved = kind
+        }
+
+        AnalyticsService.shared.capture("post_reacted", properties: [
+            "post_id": postID,
+            "author_id": posts[index].userId,
+            "reaction": resolved?.rawValue ?? "none"
+        ])
+        if resolved != nil {
+            AppReviewService.shared.recordPositiveMoment(.postLiked)
+        }
+
+        guard !postID.hasPrefix("demo-") else { return }
+        let userID = currentUser.id
+        runRemoteWrite {
+            try await self.remoteStore.setReaction(postID: postID, userID: userID, kind: resolved)
         }
     }
 
@@ -1289,6 +1341,68 @@ final class AppDataStore: ObservableObject {
         return true
     }
 
+    func loadCreatorEarnings() async {
+        guard isRemoteSyncEnabled else { return }
+        do {
+            creatorEarnings = try await remoteStore.loadCreatorEarnings(creatorID: currentUser.id)
+            lastSyncErrorMessage = nil
+        } catch {
+            recordRemoteError(error)
+        }
+    }
+
+    @discardableResult
+    func purchaseCreatorMembership(creatorID: String, plan: CreatorMembershipPlan) async throws -> Bool {
+        guard isRemoteSyncEnabled, creatorID != currentUser.id else { return false }
+        guard let result = try await PurchaseService.shared.purchase(membershipPlan: plan) else {
+            return false
+        }
+        try await remoteStore.recordCreatorMembership(
+            subscriberID: currentUser.id,
+            creatorID: creatorID,
+            plan: plan,
+            transactionID: result.transactionID,
+            productID: result.productID,
+            expirationDate: result.expirationDate
+        )
+        AnalyticsService.shared.capture("creator_membership_purchased", properties: [
+            "creator_id": creatorID,
+            "plan": plan.rawValue,
+            "transaction_id": result.transactionID
+        ])
+        return true
+    }
+
+    @discardableResult
+    func purchaseSupport(
+        recipientID: String,
+        targetType: String = "profile",
+        targetID: String? = nil,
+        amount: SupportAmount
+    ) async throws -> Bool {
+        guard isRemoteSyncEnabled, recipientID != currentUser.id else { return false }
+        guard let result = try await PurchaseService.shared.purchase(supportAmount: amount) else {
+            return false
+        }
+        try await remoteStore.recordSupportPurchase(
+            senderID: currentUser.id,
+            recipientID: recipientID,
+            targetType: targetType,
+            targetID: targetID,
+            amount: amount,
+            transactionID: result.transactionID,
+            productID: result.productID
+        )
+        AnalyticsService.shared.capture("support_purchased", properties: [
+            "recipient_id": recipientID,
+            "target_type": targetType,
+            "target_id": targetID ?? "",
+            "amount": amount.rawValue,
+            "transaction_id": result.transactionID
+        ])
+        return true
+    }
+
     func block(_ userID: String) {
         guard userID != currentUser.id else { return }
         blockedUserIDs.insert(userID)
@@ -1525,6 +1639,56 @@ final class AppDataStore: ObservableObject {
         }
     }
 
+    func handleIncomingURL(_ url: URL) {
+        guard let code = InviteCode.code(from: url) else { return }
+        pendingInviteCode = code
+        UserDefaults.standard.set(code, forKey: Self.pendingInviteCodeKey)
+        AnalyticsService.shared.capture("invite_link_opened", properties: [
+            "code": code
+        ])
+    }
+
+    func loadInviteCodes() async {
+        guard isRemoteSyncEnabled else { return }
+        do {
+            inviteCodes = try await remoteStore.loadInviteCodes(inviterID: currentUser.id)
+            lastSyncErrorMessage = nil
+        } catch {
+            recordRemoteError(error)
+        }
+    }
+
+    @discardableResult
+    func createInviteCode() async throws -> InviteCode {
+        let invite = InviteCode.make(inviterID: currentUser.id)
+        guard isRemoteSyncEnabled else {
+            inviteCodes.insert(invite, at: 0)
+            return invite
+        }
+
+        try await remoteStore.createInviteCode(invite)
+        inviteCodes.insert(invite, at: 0)
+        lastSyncErrorMessage = nil
+        AnalyticsService.shared.capture("invite_code_created", properties: [
+            "code": invite.code
+        ])
+        return invite
+    }
+
+    private func redeemPendingInviteIfNeeded(inviteeID: String) async {
+        guard let pendingInviteCode, isRemoteSyncEnabled else { return }
+        do {
+            try await remoteStore.redeemInviteCode(code: pendingInviteCode, inviteeID: inviteeID)
+            self.pendingInviteCode = nil
+            UserDefaults.standard.removeObject(forKey: Self.pendingInviteCodeKey)
+            AnalyticsService.shared.capture("invite_code_redeemed", properties: [
+                "code": pendingInviteCode
+            ])
+        } catch {
+            recordRemoteError(error)
+        }
+    }
+
     func searchUsers(query: String) async {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -1737,6 +1901,7 @@ final class AppDataStore: ObservableObject {
         comments = initialComments
         likedPostIDs = initialLikedPostIDs
         bookmarkedPostIDs = initialBookmarkedPostIDs
+        reactionByPostID = [:]
         blockedUserIDs = []
         mutedUserIDs = []
         mutedWords = initialMutedWords
@@ -1756,6 +1921,10 @@ final class AppDataStore: ObservableObject {
         topicSearchResults = []
         topicRoomSearchResults = []
         postSearchResults = []
+        inviteCodes = []
+        pendingInviteCode = nil
+        creatorEarnings = .empty
+        UserDefaults.standard.removeObject(forKey: Self.pendingInviteCodeKey)
         hasMoreTimelinePosts = true
         isLoadingTimelinePage = false
         isDemoDataVisible = false
@@ -1877,6 +2046,90 @@ final class AppDataStore: ObservableObject {
             try await reloadRemoteSnapshot()
         } catch {
             recordRemoteError(error)
+        }
+    }
+
+    private func startRemoteListeners(for userID: String) {
+        stopRemoteListeners()
+        guard isRemoteSyncEnabled else { return }
+
+        if let registration = remoteStore.listenTimelinePosts(currentUserID: userID, onChange: { [weak self] result in
+            Task { @MainActor in
+                guard let self else { return }
+                switch result {
+                case .success(let page):
+                    self.applyRealtimeTimeline(page)
+                case .failure(let error):
+                    self.recordRemoteError(error)
+                }
+            }
+        }) {
+            remoteListenerRegistrations.append(registration)
+        }
+
+        if let registration = remoteStore.listenNotifications(recipientID: userID, onChange: { [weak self] result in
+            Task { @MainActor in
+                guard let self else { return }
+                switch result {
+                case .success(let notifications):
+                    self.notifications = notifications
+                    self.lastSyncErrorMessage = nil
+                case .failure(let error):
+                    self.recordRemoteError(error)
+                }
+            }
+        }) {
+            remoteListenerRegistrations.append(registration)
+        }
+
+        if let registration = remoteStore.listenTopicRooms(onChange: { [weak self] result in
+            Task { @MainActor in
+                guard let self else { return }
+                switch result {
+                case .success(let rooms):
+                    self.topicRooms = Self.mergedTopicRooms(
+                        remoteRooms: rooms,
+                        posts: self.posts,
+                        followedTopicIDs: self.followedTopicIDs
+                    )
+                    self.lastSyncErrorMessage = nil
+                case .failure(let error):
+                    self.recordRemoteError(error)
+                }
+            }
+        }) {
+            remoteListenerRegistrations.append(registration)
+        }
+    }
+
+    private func stopRemoteListeners() {
+        remoteListenerRegistrations.forEach { $0.remove() }
+        remoteListenerRegistrations = []
+    }
+
+    private func applyRealtimeTimeline(_ page: TimelinePostPage) {
+        let incomingIDs = Set(page.posts.map(\.id))
+        let oldestIncomingDate = page.posts.map(\.createdAt).min()
+        let retainedPosts = posts.filter { post in
+            guard !incomingIDs.contains(post.id) else { return false }
+            if let oldestIncomingDate, post.createdAt >= oldestIncomingDate {
+                return false
+            }
+            return true
+        }
+
+        posts = uniquePosts(page.posts + retainedPosts)
+        users = mergeCurrentUser(into: uniqueUsers(users + page.users))
+        topicRooms = Self.mergedTopicRooms(
+            remoteRooms: topicRooms,
+            posts: posts,
+            followedTopicIDs: followedTopicIDs
+        )
+        hasMoreTimelinePosts = page.hasMore
+        refilterSearchResults()
+        lastSyncErrorMessage = nil
+        if isDemoDataVisible {
+            applyScreenshotDemoData()
         }
     }
 

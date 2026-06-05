@@ -11,6 +11,9 @@ enum InlineRichText {
     private static let hashtagRegex = try? NSRegularExpression(
         pattern: "[#＃][\\p{L}\\p{N}_ー－-]{2,}"
     )
+    private static let mentionRegex = try? NSRegularExpression(
+        pattern: "[@＠][A-Za-z0-9_]{2,}"
+    )
     private static let linkDetector = try? NSDataDetector(
         types: NSTextCheckingResult.CheckingType.link.rawValue
     )
@@ -33,6 +36,13 @@ enum InlineRichText {
             for match in hashtagRegex.matches(in: plain, range: fullRange) {
                 guard let range = attributedRange(for: match.range, in: attributed, plain: plain) else { continue }
                 attributed[range].foregroundColor = AppColor.accent
+            }
+        }
+
+        if let mentionRegex {
+            for match in mentionRegex.matches(in: plain, range: fullRange) {
+                guard let range = attributedRange(for: match.range, in: attributed, plain: plain) else { continue }
+                attributed[range].foregroundColor = AppColor.inkBlue
             }
         }
 

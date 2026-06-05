@@ -9,6 +9,8 @@ struct HumanScoreInput {
     let appAttestVerified: Bool
     let accountAgeDays: Int
     let recentPostCount: Int
+    /// AI併用を正直に開示したか。true のとき一括入力ペナルティを免除する。
+    var aiAssisted: Bool = false
 }
 
 struct HumanScoreService {
@@ -19,7 +21,9 @@ struct HumanScoreService {
             score -= 20
         }
 
-        if input.suspiciousBulkInputCount > 0 {
+        // 一括入力（ペースト/AI生成貼り付け）の疑い。ただし正直に「AI併用」を
+        // 開示している場合は、欺瞞ではないためペナルティを科さない。
+        if input.suspiciousBulkInputCount > 0 && !input.aiAssisted {
             score -= 30 * input.suspiciousBulkInputCount
         }
 

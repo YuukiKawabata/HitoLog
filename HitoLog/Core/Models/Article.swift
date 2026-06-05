@@ -44,6 +44,88 @@ enum ArticlePrice: String, Codable, CaseIterable {
     }
 }
 
+enum CreatorMembershipPlan: String, Codable, CaseIterable, Identifiable {
+    case monthly300
+    case monthly500
+    case monthly1000
+
+    var id: String { rawValue }
+
+    var displayText: String {
+        switch self {
+        case .monthly300: return "月額300円"
+        case .monthly500: return "月額500円"
+        case .monthly1000: return "月額1,000円"
+        }
+    }
+
+    var monthlyYen: Int {
+        switch self {
+        case .monthly300: return 300
+        case .monthly500: return 500
+        case .monthly1000: return 1000
+        }
+    }
+
+    var productID: String {
+        switch self {
+        case .monthly300: return "jp.hitolog.creator_membership.v2.monthly_300"
+        case .monthly500: return "jp.hitolog.creator_membership.v3.monthly_500"
+        case .monthly1000: return "jp.hitolog.creator_membership.v3.monthly_1000"
+        }
+    }
+}
+
+enum SupportAmount: String, Codable, CaseIterable, Identifiable {
+    case yen100
+    case yen300
+    case yen500
+    case yen1000
+
+    var id: String { rawValue }
+
+    var displayText: String {
+        switch self {
+        case .yen100: return "100円"
+        case .yen300: return "300円"
+        case .yen500: return "500円"
+        case .yen1000: return "1,000円"
+        }
+    }
+
+    var amountYen: Int {
+        switch self {
+        case .yen100: return 100
+        case .yen300: return 300
+        case .yen500: return 500
+        case .yen1000: return 1000
+        }
+    }
+
+    var productID: String {
+        switch self {
+        case .yen100: return "jp.hitolog.support.once_100"
+        case .yen300: return "jp.hitolog.support.once_300"
+        case .yen500: return "jp.hitolog.support.once_500"
+        case .yen1000: return "jp.hitolog.support.once_1000"
+        }
+    }
+}
+
+struct CreatorEarnings: Equatable {
+    var membershipCount: Int
+    var membershipMonthlyYen: Int
+    var supportCount: Int
+    var supportTotalYen: Int
+
+    static let empty = CreatorEarnings(
+        membershipCount: 0,
+        membershipMonthlyYen: 0,
+        supportCount: 0,
+        supportTotalYen: 0
+    )
+}
+
 enum ArticleStatus: String, Codable {
     case draft
     case published

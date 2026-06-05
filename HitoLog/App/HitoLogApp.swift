@@ -70,6 +70,13 @@ struct HitoLogApp: App {
                         }
                     }
                 }
+                .onOpenURL { url in
+                    store.handleIncomingURL(url)
+                }
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    guard let url = activity.webpageURL else { return }
+                    store.handleIncomingURL(url)
+                }
         }
     }
 

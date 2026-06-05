@@ -20,6 +20,9 @@ struct ArticleDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: AppSpacing.lg) {
                 articleHeader
+                if !isOwner {
+                    articleSupportPanel
+                }
                 freeContent
                 if article.price.isPaid {
                     paidSection
@@ -147,6 +150,26 @@ struct ArticleDetailView: View {
     private var freeContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             MarkdownBodyView(markdown: article.freePreviewBody)
+        }
+        .padding(AppSpacing.md)
+        .paperSurface()
+        .padding(.horizontal, AppSpacing.md)
+    }
+
+    private var articleSupportPanel: some View {
+        HStack(spacing: AppSpacing.sm) {
+            ForEach(SupportAmount.allCases) { amount in
+                Button {
+                    Task { await support(amount) }
+                } label: {
+                    Text(amount.displayText)
+                        .font(.caption.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .tint(AppColor.accent)
+                .disabled(isPurchasing)
+            }
         }
         .padding(AppSpacing.md)
         .paperSurface()
@@ -310,6 +333,26 @@ struct ArticleDetailView: View {
                 isLoadingBody = true
                 paidBody = try? await store.loadArticleBody(articleID: article.id)
                 isLoadingBody = false
+            }
+        } catch {
+            purchaseError = error.localizedDescription
+            showsPurchaseError = true
+        }
+    }
+
+    @MainActor
+    private func support(_ amount: SupportAmount) async {
+        isPurchasing = true
+        defer { isPurchasing = false }
+        do {
+            let purchased = try await store.purchaseSupport(
+                recipientID: article.userID,
+                targetType: "article",
+                targetID: article.id,
+                amount: amount
+            )
+            if purchased {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
             }
         } catch {
             purchaseError = error.localizedDescription

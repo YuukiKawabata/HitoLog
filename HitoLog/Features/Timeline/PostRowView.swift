@@ -153,9 +153,11 @@ struct PostRowView: View {
                 HStack(spacing: AppSpacing.sm) {
                     HumanBadgeView(badge: post.humanBadge)
 
-                    Label("\(post.inputDurationMs / 1000)秒", systemImage: "keyboard")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(AppColor.textSecondary)
+                    if post.aiAssisted {
+                        AIAssistedBadge()
+                    }
+
+                    WritingTraceLabel(trace: WritingTrace(post: post))
 
                     Spacer(minLength: 0)
                 }
@@ -218,6 +220,17 @@ struct PostRowView: View {
                 .buttonStyle(ScaleButtonStyle())
 
                 Spacer(minLength: 0)
+            }
+
+            if post.shareType != .repost {
+                ReactionBar(
+                    counts: post.reactionCounts,
+                    selected: store.reaction(for: post.id),
+                    onTap: { kind in
+                        store.toggleReaction(kind, for: post.id)
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    }
+                )
             }
         }
         .padding(AppSpacing.md)
@@ -695,5 +708,147 @@ struct HumanBadgeView: View {
                 .stroke(badge == .verified ? AppColor.accent.opacity(0.28) : AppColor.border, lineWidth: 0.5)
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// 投稿者が AI併用を正直に開示したことを示すラベル。
+struct AIAssistedBadge: View {
+    var body: some View {
+        HStack(spacing: AppSpacing.xs) {
+            Image(systemName: "sparkles")
+                .font(.caption2.weight(.semibold))
+            Text("AI併用")
+                .font(.caption.weight(.medium))
+        }
+        .foregroundStyle(AppColor.inkBlue)
+        .padding(.horizontal, AppSpacing.sm)
+        .padding(.vertical, AppSpacing.xs)
+        .background(AppColor.inkBlue.opacity(0.1), in: RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                .stroke(AppColor.inkBlue.opacity(0.28), lineWidth: 0.5)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("AI併用を開示した投稿")
+    }
+}
+
+/// いいねとは別軸の「思慮深い反応」を選ぶリアクションバー。
+struct ReactionBar: View {
+    let counts: [String: Int]
+    let selected: ReactionKind?
+    let onTap: (ReactionKind) -> Void
+
+    var body: some View {
+        HStack(spacing: AppSpacing.xs) {
+            ForEach(ReactionKind.allCases) { kind in
+                let count = counts[kind.rawValue] ?? 0
+                let isSelected = selected == kind
+                Button {
+                    onTap(kind)
+                } label: {
+                    HStack(spacing: AppSpacing.xxs) {
+                        Text(kind.emoji)
+                            .font(.caption)
+                        Text(kind.displayText)
+                            .font(.caption2.weight(.medium))
+                        if count > 0 {
+                            Text("\(count)")
+                                .font(.caption2.weight(.semibold))
+                                .monospacedDigit()
+                                .contentTransition(.numericText())
+                        }
+                    }
+                    .foregroundStyle(isSelected ? AppColor.accent : AppColor.textSecondary)
+                    .padding(.vertical, AppSpacing.xs)
+                    .padding(.horizontal, AppSpacing.sm)
+                    .background(
+                        (isSelected ? AppColor.accentSoft : AppColor.surface),
+                        in: Capsule()
+                    )
+                    .overlay {
+                        Capsule()
+                            .stroke(isSelected ? AppColor.accent.opacity(0.3) : AppColor.border, lineWidth: 0.5)
+                    }
+                }
+                .buttonStyle(ScaleButtonStyle())
+                .accessibilityLabel("\(kind.displayText)\(count > 0 ? " \(count)件" : "")")
+            }
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+/// 一覧用の「思考の痕跡」一行ラベル（所要時間・推敲回数）。
+struct WritingTraceLabel: View {
+    let trace: WritingTrace
+
+    var body: some View {
+        Label(trace.summaryText, systemImage: trace.depth.systemImage)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(AppColor.textSecondary)
+            .accessibilityLabel("\(trace.depth.label)。\(trace.summaryText)")
+    }
+}
+
+/// 投稿詳細用の「この投稿の書かれ方」カード。
+/// 人間が時間をかけ、推敲して書いたという HitoLog 独自の価値を可視化する。
+struct WritingTraceCard: View {
+    let trace: WritingTrace
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.sm) {
+            SectionKicker(text: "この投稿の書かれ方", systemImage: trace.depth.systemImage)
+
+            Text(trace.depth.label)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppColor.textPrimary)
+
+            HStack(spacing: AppSpacing.sm) {
+                WritingTraceTile(title: "綴った時間", value: trace.durationText, systemImage: "timer")
+                WritingTraceTile(title: "文字数", value: "\(trace.characterCount)字", systemImage: "character.cursor.ibeam")
+                WritingTraceTile(
+                    title: "推敲",
+                    value: trace.revisionCount > 0 ? "\(trace.revisionCount)回" : "—",
+                    systemImage: "pencil.and.outline"
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(AppSpacing.md)
+        .background(AppColor.surface, in: RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                .stroke(AppColor.border, lineWidth: 0.5)
+        }
+    }
+}
+
+private struct WritingTraceTile: View {
+    let title: String
+    let value: String
+    let systemImage: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.xs) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColor.accent)
+            Text(value)
+                .font(.system(size: 15, weight: .semibold, design: .serif))
+                .foregroundStyle(AppColor.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(AppColor.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(AppSpacing.sm)
+        .background(AppColor.background, in: RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                .stroke(AppColor.border.opacity(0.7), lineWidth: 0.5)
+        }
     }
 }

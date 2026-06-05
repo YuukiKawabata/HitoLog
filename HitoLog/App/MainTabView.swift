@@ -810,6 +810,8 @@ private extension AppNotificationType {
             return "arrow.2.squarepath"
         case .quote:
             return "quote.bubble.fill"
+        case .mention:
+            return "at"
         }
     }
 }

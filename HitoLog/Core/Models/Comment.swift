@@ -20,6 +20,7 @@ enum AppNotificationType: String, Codable, Equatable {
     case follow
     case repost
     case quote
+    case mention
 }
 
 struct AppNotification: Identifiable, Codable, Equatable {

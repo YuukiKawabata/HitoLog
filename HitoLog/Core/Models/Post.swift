@@ -19,10 +19,15 @@ struct Post: Identifiable, Codable, Equatable {
     let deleteCount: Int
     let suspiciousBulkInputCount: Int
     let appCheckVerified: Bool
+    /// 投稿者が「AIの助けを借りた」ことを正直に開示したか。
+    /// true のとき一括入力ペナルティを科さず、代わりに「AI併用」として明示表示する。
+    let aiAssisted: Bool
     var likeCount: Int
     var commentCount: Int
     var repostCount: Int
     var quoteCount: Int
+    /// リアクション種別（rawValue）ごとの件数。いいねとは別軸の「思慮深い反応」。
+    var reactionCounts: [String: Int]
     let createdAt: Date
     var updatedAt: Date
     var isDeleted: Bool
@@ -49,10 +54,12 @@ struct Post: Identifiable, Codable, Equatable {
         deleteCount: Int,
         suspiciousBulkInputCount: Int,
         appCheckVerified: Bool,
+        aiAssisted: Bool = false,
         likeCount: Int,
         commentCount: Int,
         repostCount: Int = 0,
         quoteCount: Int = 0,
+        reactionCounts: [String: Int] = [:],
         createdAt: Date,
         updatedAt: Date,
         isDeleted: Bool,
@@ -78,10 +85,12 @@ struct Post: Identifiable, Codable, Equatable {
         self.deleteCount = deleteCount
         self.suspiciousBulkInputCount = suspiciousBulkInputCount
         self.appCheckVerified = appCheckVerified
+        self.aiAssisted = aiAssisted
         self.likeCount = likeCount
         self.commentCount = commentCount
         self.repostCount = repostCount
         self.quoteCount = quoteCount
+        self.reactionCounts = reactionCounts
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.isDeleted = isDeleted
@@ -109,10 +118,12 @@ struct Post: Identifiable, Codable, Equatable {
         case deleteCount
         case suspiciousBulkInputCount
         case appCheckVerified
+        case aiAssisted
         case likeCount
         case commentCount
         case repostCount
         case quoteCount
+        case reactionCounts
         case createdAt
         case updatedAt
         case isDeleted
@@ -141,10 +152,12 @@ struct Post: Identifiable, Codable, Equatable {
         deleteCount = try container.decode(Int.self, forKey: .deleteCount)
         suspiciousBulkInputCount = try container.decode(Int.self, forKey: .suspiciousBulkInputCount)
         appCheckVerified = try container.decode(Bool.self, forKey: .appCheckVerified)
+        aiAssisted = try container.decodeIfPresent(Bool.self, forKey: .aiAssisted) ?? false
         likeCount = try container.decode(Int.self, forKey: .likeCount)
         commentCount = try container.decode(Int.self, forKey: .commentCount)
         repostCount = try container.decodeIfPresent(Int.self, forKey: .repostCount) ?? 0
         quoteCount = try container.decodeIfPresent(Int.self, forKey: .quoteCount) ?? 0
+        reactionCounts = try container.decodeIfPresent([String: Int].self, forKey: .reactionCounts) ?? [:]
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
         isDeleted = try container.decode(Bool.self, forKey: .isDeleted)
@@ -158,6 +171,31 @@ enum PostShareType: String, Codable, Equatable {
     case original
     case repost
     case quote
+}
+
+/// いいねとは別軸の「思慮深い反応」。X の雑な絵文字反応と差別化し、少数の意味ある選択肢に絞る。
+enum ReactionKind: String, Codable, CaseIterable, Identifiable, Equatable {
+    case empathy
+    case insight
+    case cheer
+
+    var id: String { rawValue }
+
+    var displayText: String {
+        switch self {
+        case .empathy: return "共感"
+        case .insight: return "なるほど"
+        case .cheer: return "応援"
+        }
+    }
+
+    var emoji: String {
+        switch self {
+        case .empathy: return "🫶"
+        case .insight: return "💡"
+        case .cheer: return "📣"
+        }
+    }
 }
 
 enum CommentPermission: String, Codable, CaseIterable, Identifiable, Equatable {
@@ -455,6 +493,41 @@ enum TopicExtractor {
     }
 }
 
+enum MentionExtractor {
+    static let maxMentionsPerPost = 10
+    static let maxHandleLength = 32
+
+    /// 本文中の @handle を正規化して抽出する（重複除去・最大件数まで）。
+    /// handle は英数字・アンダースコアのみ（AppUser.handle と同じ規則）。
+    static func handles(in text: String) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+
+        for rawToken in text.split(whereSeparator: { $0.isWhitespace }) {
+            guard let handle = normalizedHandle(from: rawToken), !seen.contains(handle) else {
+                continue
+            }
+            seen.insert(handle)
+            result.append(handle)
+            if result.count >= maxMentionsPerPost {
+                break
+            }
+        }
+
+        return result
+    }
+
+    private static func normalizedHandle(from token: Substring) -> String? {
+        guard token.first == "@" || token.first == "＠" else { return nil }
+        let allowedScalars = token.dropFirst().unicodeScalars.prefix { scalar in
+            CharacterSet.alphanumerics.contains(scalar) || scalar == "_"
+        }
+        let normalized = String(String.UnicodeScalarView(allowedScalars)).lowercased()
+        guard normalized.count >= 2 else { return nil }
+        return String(normalized.prefix(maxHandleLength))
+    }
+}
+
 enum PostSearchTokenizer {
     static let maxTokens = 80
     static let maxTokenLength = 32
@@ -543,4 +616,90 @@ struct PostMedia: Identifiable, Codable, Equatable {
     let durationMs: Int?
     let sizeBytes: Int64
     let sortOrder: Int
+}
+
+/// 投稿が「どのように書かれたか」（思考の痕跡）を要約する派生指標。
+///
+/// HitoLog 独自の「人間が、考えて書いた」という価値を可視化するために使う。
+/// 入力時間・文字数・推敲（編集／削除）回数といった、投稿に既に記録されている
+/// 計測値から、読み手に伝わる言葉へ翻訳する役割を持つ。
+struct WritingTrace: Equatable {
+    let seconds: Int
+    let characterCount: Int
+    let editCount: Int
+    let deleteCount: Int
+
+    init(seconds: Int, characterCount: Int, editCount: Int, deleteCount: Int) {
+        self.seconds = max(seconds, 0)
+        self.characterCount = max(characterCount, 0)
+        self.editCount = max(editCount, 0)
+        self.deleteCount = max(deleteCount, 0)
+    }
+
+    init(post: Post) {
+        self.init(
+            seconds: post.inputDurationMs / 1000,
+            characterCount: post.characterCount,
+            editCount: post.editCount,
+            deleteCount: post.deleteCount
+        )
+    }
+
+    /// 推敲（書き直し）の合計回数。編集と削除を合算する。
+    var revisionCount: Int { editCount + deleteCount }
+
+    /// 書かれ方の深さ。時間のかけ方と推敲の有無から判定する。
+    enum Depth {
+        case quick
+        case considered
+        case deliberate
+
+        var label: String {
+            switch self {
+            case .quick: return "さっと書いた言葉"
+            case .considered: return "考えて書いた言葉"
+            case .deliberate: return "じっくり推敲した言葉"
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .quick: return "bolt"
+            case .considered: return "pencil.line"
+            case .deliberate: return "signature"
+            }
+        }
+    }
+
+    var depth: Depth {
+        if seconds >= 60 && revisionCount >= 2 {
+            return .deliberate
+        }
+        if seconds >= 20 || revisionCount >= 1 {
+            return .considered
+        }
+        return .quick
+    }
+
+    /// "1分20秒" / "45秒" のような所要時間表記。
+    var durationText: String {
+        if seconds >= 60 {
+            let minutes = seconds / 60
+            let remainder = seconds % 60
+            return remainder == 0 ? "\(minutes)分" : "\(minutes)分\(remainder)秒"
+        }
+        return "\(seconds)秒"
+    }
+
+    /// 推敲回数の短い表記。推敲が無ければ nil。
+    var revisionText: String? {
+        revisionCount > 0 ? "推敲\(revisionCount)回" : nil
+    }
+
+    /// 一覧などで使う一行要約。例: "1分20秒・推敲3回"
+    var summaryText: String {
+        [durationText, revisionText]
+            .compactMap { $0 }
+            .joined(separator: "・")
+    }
 }

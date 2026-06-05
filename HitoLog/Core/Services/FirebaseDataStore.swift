@@ -10,6 +10,7 @@ struct RemoteDataSnapshot {
     var comments: [Comment]
     var likedPostIDs: Set<String>
     var bookmarkedPostIDs: Set<String>
+    var reactionByPostID: [String: String]
     var blockedUserIDs: Set<String>
     var mutedUserIDs: Set<String>
     var mutedWords: [MutedWord]
@@ -45,6 +46,23 @@ struct RemoteBookmarkState {
     var users: [AppUser]
 }
 
+final class RemoteListenerRegistration {
+    private var cancellation: (() -> Void)?
+
+    init(_ cancellation: @escaping () -> Void) {
+        self.cancellation = cancellation
+    }
+
+    func remove() {
+        cancellation?()
+        cancellation = nil
+    }
+
+    deinit {
+        remove()
+    }
+}
+
 private struct FollowRecord {
     let followerID: String
     let followeeID: String
@@ -68,6 +86,9 @@ struct FirebaseDataStore {
             .whereField("userID", isEqualTo: currentUserID)
             .order(by: "createdAt", descending: true)
             .limit(to: 100)
+            .getDocuments()
+        async let reactionsSnapshot = db.collection("reactions")
+            .whereField("userID", isEqualTo: currentUserID)
             .getDocuments()
         async let blocksSnapshot = db.collection("blocks")
             .whereField("blockerID", isEqualTo: currentUserID)
@@ -116,6 +137,7 @@ struct FirebaseDataStore {
         let postsResult = try await postsSnapshot
         let likesResult = try await likesSnapshot
         let bookmarksResult = try await bookmarksSnapshot
+        let reactionsResult = try await reactionsSnapshot
         let blocksResult = try await blocksSnapshot
         let mutesResult = try await mutesSnapshot
         let mutedWordsResult = try await mutedWordsSnapshot
@@ -137,6 +159,13 @@ struct FirebaseDataStore {
         let posts = uniquePosts(loadedPosts + sourcePosts)
         let likedPostIDs = Set(likesResult.documents.compactMap { $0.data()["postID"] as? String })
         let bookmarkedPostIDs = Set(bookmarksResult.documents.compactMap { $0.data()["postID"] as? String })
+        var reactionByPostID: [String: String] = [:]
+        for document in reactionsResult.documents {
+            let data = document.data()
+            if let postID = data["postID"] as? String, let kind = data["kind"] as? String {
+                reactionByPostID[postID] = kind
+            }
+        }
         let blockedUserIDs = Set(blocksResult.documents.compactMap { $0.data()["blockedUserID"] as? String })
         let mutedUserIDs = Set(mutesResult.documents.compactMap { $0.data()["mutedUserID"] as? String })
         let mutedWords = mutedWordsResult.documents.compactMap(mapMutedWord)
@@ -159,6 +188,7 @@ struct FirebaseDataStore {
             comments: [],
             likedPostIDs: likedPostIDs,
             bookmarkedPostIDs: bookmarkedPostIDs,
+            reactionByPostID: reactionByPostID,
             blockedUserIDs: blockedUserIDs,
             mutedUserIDs: mutedUserIDs,
             mutedWords: mutedWords,
@@ -182,6 +212,7 @@ struct FirebaseDataStore {
             comments: [],
             likedPostIDs: [],
             bookmarkedPostIDs: [],
+            reactionByPostID: [:],
             blockedUserIDs: [],
             mutedUserIDs: [],
             mutedWords: [],
@@ -235,6 +266,43 @@ struct FirebaseDataStore {
         #endif
     }
 
+    func listenTimelinePosts(
+        currentUserID: String,
+        onChange: @escaping (Result<TimelinePostPage, Error>) -> Void
+    ) -> RemoteListenerRegistration? {
+        #if canImport(FirebaseFirestore)
+        let registration = timelinePostsQuery(db: Firestore.firestore(), before: nil)
+            .addSnapshotListener { snapshot, error in
+                if let error {
+                    onChange(.failure(error))
+                    return
+                }
+                guard let snapshot else { return }
+
+                Task {
+                    do {
+                        let loadedPosts = snapshot.documents.compactMap(mapPost).filter { $0.moderationStatus == .active }
+                        let sourcePosts = try await loadPosts(postIDs: loadedPosts.compactMap(\.sourcePostID))
+                            .filter { !$0.isDeleted && $0.moderationStatus == .active }
+                        let posts = uniquePosts(loadedPosts + sourcePosts)
+                        let authorIDs = Array(Set(posts.map(\.userId) + [currentUserID]))
+                        let users = try await loadUsers(userIDs: authorIDs)
+                        onChange(.success(TimelinePostPage(
+                            posts: posts,
+                            users: users,
+                            hasMore: snapshot.documents.count >= Self.timelinePageSize
+                        )))
+                    } catch {
+                        onChange(.failure(error))
+                    }
+                }
+            }
+        return RemoteListenerRegistration { registration.remove() }
+        #else
+        return nil
+        #endif
+    }
+
     func loadTopicPosts(topic: String, limit: Int = 50) async throws -> TimelinePostPage {
         #if canImport(FirebaseFirestore)
         let snapshot = try await Firestore.firestore()
@@ -253,6 +321,27 @@ struct FirebaseDataStore {
         return TimelinePostPage(posts: posts, users: users, hasMore: snapshot.documents.count >= limit)
         #else
         return TimelinePostPage(posts: [], users: [], hasMore: false)
+        #endif
+    }
+
+    func listenTopicRooms(onChange: @escaping (Result<[TopicRoom], Error>) -> Void) -> RemoteListenerRegistration? {
+        #if canImport(FirebaseFirestore)
+        let registration = Firestore.firestore()
+            .collection("topicRooms")
+            .whereField("moderationStatus", isEqualTo: ModerationStatus.active.rawValue)
+            .order(by: "lastPostAt", descending: true)
+            .limit(to: 100)
+            .addSnapshotListener { snapshot, error in
+                if let error {
+                    onChange(.failure(error))
+                    return
+                }
+                guard let snapshot else { return }
+                onChange(.success(snapshot.documents.compactMap(mapTopicRoom)))
+            }
+        return RemoteListenerRegistration { registration.remove() }
+        #else
+        return nil
         #endif
     }
 
@@ -278,6 +367,30 @@ struct FirebaseDataStore {
         return TimelinePostPage(posts: posts, users: users, hasMore: snapshot.documents.count >= limit)
         #else
         return TimelinePostPage(posts: [], users: [], hasMore: false)
+        #endif
+    }
+
+    func listenNotifications(
+        recipientID: String,
+        onChange: @escaping (Result<[AppNotification], Error>) -> Void
+    ) -> RemoteListenerRegistration? {
+        #if canImport(FirebaseFirestore)
+        let registration = Firestore.firestore()
+            .collection("notifications")
+            .whereField("recipientID", isEqualTo: recipientID)
+            .order(by: "createdAt", descending: true)
+            .limit(to: 100)
+            .addSnapshotListener { snapshot, error in
+                if let error {
+                    onChange(.failure(error))
+                    return
+                }
+                guard let snapshot else { return }
+                onChange(.success(snapshot.documents.compactMap(mapNotification)))
+            }
+        return RemoteListenerRegistration { registration.remove() }
+        #else
+        return nil
         #endif
     }
 
@@ -356,6 +469,44 @@ struct FirebaseDataStore {
         return RemoteBookmarkState(postIDs: Set(postIDs), posts: posts, users: users)
         #else
         return RemoteBookmarkState(postIDs: [], posts: [], users: [])
+        #endif
+    }
+
+    func loadInviteCodes(inviterID: String) async throws -> [InviteCode] {
+        #if canImport(FirebaseFirestore)
+        let snapshot = try await Firestore.firestore()
+            .collection("inviteCodes")
+            .whereField("inviterID", isEqualTo: inviterID)
+            .order(by: "createdAt", descending: true)
+            .limit(to: 20)
+            .getDocuments()
+
+        return snapshot.documents.compactMap(mapInviteCode)
+        #else
+        return []
+        #endif
+    }
+
+    func createInviteCode(_ invite: InviteCode) async throws {
+        #if canImport(FirebaseFirestore)
+        try await Firestore.firestore()
+            .collection("inviteCodes")
+            .document(invite.code)
+            .setData(invite.firestoreData, merge: false)
+        #endif
+    }
+
+    func redeemInviteCode(code: String, inviteeID: String) async throws {
+        #if canImport(FirebaseFirestore)
+        guard let normalizedCode = InviteCode.normalizedCode(code) else { return }
+        try await Firestore.firestore()
+            .collection("inviteRedemptions")
+            .document("\(normalizedCode)_\(inviteeID)")
+            .setData([
+                "code": normalizedCode,
+                "inviteeID": inviteeID,
+                "createdAt": FieldValue.serverTimestamp()
+            ], merge: false)
         #endif
     }
 
@@ -534,6 +685,22 @@ struct FirebaseDataStore {
             try await ref.setData([
                 "postID": postID,
                 "userID": userID,
+                "createdAt": FieldValue.serverTimestamp()
+            ], merge: true)
+        } else {
+            try await ref.delete()
+        }
+        #endif
+    }
+
+    func setReaction(postID: String, userID: String, kind: ReactionKind?) async throws {
+        #if canImport(FirebaseFirestore)
+        let ref = Firestore.firestore().collection("reactions").document("\(postID)_\(userID)")
+        if let kind {
+            try await ref.setData([
+                "postID": postID,
+                "userID": userID,
+                "kind": kind.rawValue,
                 "createdAt": FieldValue.serverTimestamp()
             ], merge: true)
         } else {
@@ -1034,10 +1201,12 @@ private extension FirebaseDataStore {
             deleteCount: intValue(data["deleteCount"], fallback: 0),
             suspiciousBulkInputCount: intValue(data["suspiciousBulkInputCount"], fallback: 0),
             appCheckVerified: boolValue(data["appCheckVerified"], fallback: false),
+            aiAssisted: boolValue(data["aiAssisted"], fallback: false),
             likeCount: intValue(data["likeCount"], fallback: 0),
             commentCount: intValue(data["commentCount"], fallback: 0),
             repostCount: intValue(data["repostCount"], fallback: 0),
             quoteCount: intValue(data["quoteCount"], fallback: 0),
+            reactionCounts: (data["reactionCounts"] as? [String: Int]) ?? [:],
             createdAt: dateValue(data["createdAt"], fallback: Date()),
             updatedAt: dateValue(data["updatedAt"], fallback: Date()),
             isDeleted: boolValue(data["isDeleted"], fallback: false),
@@ -1245,6 +1414,26 @@ private extension FirebaseDataStore {
         )
     }
 
+    func mapInviteCode(_ document: QueryDocumentSnapshot) -> InviteCode? {
+        let data = document.data()
+        let code = stringValue(data["code"], fallback: document.documentID)
+        guard let inviterID = data["inviterID"] as? String,
+              InviteCode.normalizedCode(code) != nil else {
+            return nil
+        }
+
+        return InviteCode(
+            id: document.documentID,
+            code: code,
+            inviterID: inviterID,
+            maxUses: intValue(data["maxUses"], fallback: 5),
+            useCount: intValue(data["useCount"], fallback: 0),
+            isActive: boolValue(data["isActive"], fallback: true),
+            createdAt: dateValue(data["createdAt"], fallback: Date()),
+            expiresAt: optionalDateValue(data["expiresAt"])
+        )
+    }
+
     func stringValue(_ value: Any?, fallback: String) -> String {
         guard let value = value as? String, !value.isEmpty else { return fallback }
         return value
@@ -1416,6 +1605,96 @@ extension FirebaseDataStore {
         #endif
     }
 
+    func loadCreatorEarnings(creatorID: String) async throws -> CreatorEarnings {
+        #if canImport(FirebaseFirestore)
+        let db = Firestore.firestore()
+        async let supportsSnapshot = db.collection("supports")
+            .whereField("recipientID", isEqualTo: creatorID)
+            .order(by: "createdAt", descending: true)
+            .limit(to: 500)
+            .getDocuments()
+        async let membershipsSnapshot = db.collection("creatorMemberships")
+            .whereField("creatorID", isEqualTo: creatorID)
+            .whereField("status", isEqualTo: "active")
+            .getDocuments()
+
+        let supports = try await supportsSnapshot
+        let memberships = try await membershipsSnapshot
+        let supportAmounts = supports.documents.map { intValue($0.data()["amountYen"], fallback: 0) }
+        let membershipMonthlyYen = memberships.documents.reduce(0) { partial, document in
+            partial + intValue(document.data()["monthlyYen"], fallback: 0)
+        }
+
+        return CreatorEarnings(
+            membershipCount: memberships.documents.count,
+            membershipMonthlyYen: membershipMonthlyYen,
+            supportCount: supports.documents.count,
+            supportTotalYen: supportAmounts.reduce(0, +)
+        )
+        #else
+        return .empty
+        #endif
+    }
+
+    func recordCreatorMembership(
+        subscriberID: String,
+        creatorID: String,
+        plan: CreatorMembershipPlan,
+        transactionID: String,
+        productID: String,
+        expirationDate: Date?
+    ) async throws {
+        #if canImport(FirebaseFirestore)
+        var data: [String: Any] = [
+            "subscriberID": subscriberID,
+            "creatorID": creatorID,
+            "plan": plan.rawValue,
+            "monthlyYen": plan.monthlyYen,
+            "productID": productID,
+            "latestTransactionID": transactionID,
+            "status": "active",
+            "updatedAt": FieldValue.serverTimestamp()
+        ]
+        if let expirationDate {
+            data["expiresAt"] = Timestamp(date: expirationDate)
+        }
+        try await Firestore.firestore()
+            .collection("creatorMemberships")
+            .document("\(subscriberID)_\(creatorID)")
+            .setData(data, merge: true)
+        #endif
+    }
+
+    func recordSupportPurchase(
+        senderID: String,
+        recipientID: String,
+        targetType: String,
+        targetID: String?,
+        amount: SupportAmount,
+        transactionID: String,
+        productID: String
+    ) async throws {
+        #if canImport(FirebaseFirestore)
+        var data: [String: Any] = [
+            "senderID": senderID,
+            "recipientID": recipientID,
+            "targetType": targetType,
+            "amount": amount.rawValue,
+            "amountYen": amount.amountYen,
+            "transactionID": transactionID,
+            "productID": productID,
+            "createdAt": FieldValue.serverTimestamp()
+        ]
+        if let targetID {
+            data["targetID"] = targetID
+        }
+        try await Firestore.firestore()
+            .collection("supports")
+            .document(transactionID)
+            .setData(data, merge: false)
+        #endif
+    }
+
     func recordArticleUnlock(userID: String, articleID: String, price: ArticlePrice, transactionID: String) async throws {
         #if canImport(FirebaseFirestore)
         let db = Firestore.firestore()
@@ -1428,9 +1707,6 @@ extension FirebaseDataStore {
             "createdAt": FieldValue.serverTimestamp()
         ]
         try await db.collection("articleUnlocks").document(docID).setData(unlockData, merge: false)
-        try await db.collection("articles").document(articleID).updateData([
-            "purchaseCount": FieldValue.increment(Int64(1))
-        ])
         #endif
     }
 
@@ -1504,10 +1780,12 @@ private extension Post {
             "deleteCount": deleteCount,
             "suspiciousBulkInputCount": suspiciousBulkInputCount,
             "appCheckVerified": appCheckVerified,
+            "aiAssisted": aiAssisted,
             "likeCount": likeCount,
             "commentCount": commentCount,
             "repostCount": repostCount,
             "quoteCount": quoteCount,
+            "reactionCounts": reactionCounts,
             "createdAt": Timestamp(date: createdAt),
             "updatedAt": Timestamp(date: updatedAt),
             "isDeleted": isDeleted,
@@ -1552,6 +1830,24 @@ private extension Comment {
             "isDeleted": isDeleted,
             "moderationStatus": moderationStatus.rawValue
         ]
+    }
+}
+
+private extension InviteCode {
+    var firestoreData: [String: Any] {
+        var data: [String: Any] = [
+            "code": code,
+            "inviterID": inviterID,
+            "maxUses": maxUses,
+            "useCount": useCount,
+            "isActive": isActive,
+            "createdAt": Timestamp(date: createdAt),
+            "updatedAt": Timestamp(date: createdAt)
+        ]
+        if let expiresAt {
+            data["expiresAt"] = Timestamp(date: expiresAt)
+        }
+        return data
     }
 }
 

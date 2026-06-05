@@ -134,10 +134,26 @@ struct PostDetailView: View {
                             }
 
                             if post.shareType != .repost {
+                                let trace = WritingTrace(post: post)
                                 HumanSignalStrip(
                                     title: post.humanBadge.displayText,
-                                    detail: "\(post.inputDurationMs / 1000)秒かけて書かれた投稿です。",
+                                    detail: "\(trace.summaryText)で書かれた投稿です。",
                                     systemImage: post.humanBadge.systemImage
+                                )
+
+                                if post.aiAssisted {
+                                    AIAssistedBadge()
+                                }
+
+                                WritingTraceCard(trace: trace)
+
+                                ReactionBar(
+                                    counts: post.reactionCounts,
+                                    selected: store.reaction(for: post.id),
+                                    onTap: { kind in
+                                        store.toggleReaction(kind, for: post.id)
+                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                    }
                                 )
                             }
 
@@ -202,7 +218,7 @@ struct PostDetailView: View {
                                     )
                                 }
                                 .buttonStyle(ScaleButtonStyle(scale: 0.95))
-                                PaperMetricTile(title: "入力", value: "\(post.inputDurationMs / 1000)秒", systemImage: "keyboard")
+                                PaperMetricTile(title: "入力", value: WritingTrace(post: post).durationText, systemImage: "keyboard")
                             }
                         }
                         .padding(AppSpacing.md)

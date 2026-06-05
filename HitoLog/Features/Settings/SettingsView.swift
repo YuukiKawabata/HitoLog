@@ -36,6 +36,12 @@ struct SettingsView: View {
                     Label("プロフィール編集", systemImage: "person.crop.circle")
                 }
 
+                NavigationLink {
+                    InviteCodeView()
+                } label: {
+                    Label("招待コード", systemImage: "person.badge.plus")
+                }
+
                 Button {
                     isShowingLogoutConfirmation = true
                 } label: {
@@ -391,6 +397,105 @@ private struct FeedbackView: View {
             return "送信権限を確認できませんでした。アカウント状態を同期してから、もう一度お試しください。"
         }
         return message
+    }
+}
+
+private struct InviteCodeView: View {
+    @EnvironmentObject private var store: AppDataStore
+    @EnvironmentObject private var analytics: AnalyticsService
+    @State private var isCreating = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        Form {
+            Section {
+                Button {
+                    Task { await createInviteCode() }
+                } label: {
+                    if isCreating {
+                        HStack(spacing: AppSpacing.sm) {
+                            ProgressView()
+                            Text("作成中")
+                        }
+                    } else {
+                        Label("招待コードを作成", systemImage: "plus.circle")
+                    }
+                }
+                .disabled(isCreating)
+            }
+
+            Section("招待コード") {
+                if store.inviteCodes.isEmpty {
+                    ContentUnavailableView("コードはまだありません", systemImage: "person.badge.plus")
+                        .listRowBackground(Color.clear)
+                } else {
+                    ForEach(store.inviteCodes) { invite in
+                        VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                            HStack(spacing: AppSpacing.sm) {
+                                Text(invite.code)
+                                    .font(.headline.monospaced())
+                                    .foregroundStyle(AppColor.textPrimary)
+
+                                Spacer(minLength: 0)
+
+                                Text("残り\(invite.remainingUses)")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(invite.remainingUses > 0 ? AppColor.accent : AppColor.textSecondary)
+                            }
+
+                            HStack(spacing: AppSpacing.sm) {
+                                ShareLink(item: invite.shareURL, subject: Text("HitoLog 招待"), message: Text(invite.shareText)) {
+                                    Label("共有", systemImage: "square.and.arrow.up")
+                                }
+
+                                Button {
+                                    UIPasteboard.general.string = invite.shareURL.absoluteString
+                                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                                } label: {
+                                    Label("コピー", systemImage: "doc.on.doc")
+                                }
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.subheadline)
+                        }
+                        .padding(.vertical, AppSpacing.xs)
+                    }
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(PaperCanvas())
+        .navigationTitle("招待コード")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            analytics.screen("invite_codes")
+            await store.loadInviteCodes()
+        }
+        .alert("作成できません", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    errorMessage = nil
+                }
+            }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "通信状態を確認して、もう一度お試しください。")
+        }
+    }
+
+    private func createInviteCode() async {
+        isCreating = true
+        defer { isCreating = false }
+
+        do {
+            _ = try await store.createInviteCode()
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        } catch {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            errorMessage = error.localizedDescription
+        }
     }
 }
 

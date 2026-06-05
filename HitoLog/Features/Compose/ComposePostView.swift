@@ -124,7 +124,11 @@ struct ComposePostView: View {
 
                     commentPermissionPanel
 
-                    HumanCheckPanel(metrics: viewModel.metrics, statusText: viewModel.humanCheckText)
+                    HumanCheckPanel(
+                        metrics: viewModel.metrics,
+                        statusText: viewModel.humanCheckText,
+                        aiAssisted: $viewModel.aiAssisted
+                    )
 
                     HStack(spacing: AppSpacing.sm) {
                         PaperMetricTile(title: "入力時間", value: viewModel.metrics.durationText, systemImage: "timer")
@@ -498,14 +502,45 @@ private struct ComposeMediaPreviewTile: View {
 private struct HumanCheckPanel: View {
     let metrics: TypingMetrics
     let statusText: String
+    /// AI併用の開示トグル。投稿画面でのみ渡す（記事など未対応の画面では nil）。
+    var aiAssisted: Binding<Bool>? = nil
+
+    private var isClean: Bool {
+        metrics.suspiciousBulkInputCount == 0
+    }
+
+    /// 一括入力の疑いがあり、かつ開示トグルを扱える画面か。
+    private var showsDisclosure: Bool {
+        aiAssisted != nil && metrics.suspiciousBulkInputCount > 0
+    }
 
     var body: some View {
-        HumanSignalStrip(
-            title: statusText,
-            detail: "入力の速度と編集の揺らぎを、読む人への小さな署名にします。",
-            systemImage: metrics.suspiciousBulkInputCount == 0 ? "checkmark.seal.fill" : "clock.badge.questionmark",
-            tint: metrics.suspiciousBulkInputCount == 0 ? AppColor.accent : AppColor.warning
-        )
+        VStack(alignment: .leading, spacing: AppSpacing.md) {
+            HumanSignalStrip(
+                title: statusText,
+                detail: "入力の速度と編集の揺らぎを、読む人への小さな署名にします。",
+                systemImage: isClean ? "checkmark.seal.fill" : "clock.badge.questionmark",
+                tint: isClean ? AppColor.accent : AppColor.warning
+            )
+
+            if showsDisclosure, let aiAssisted {
+                Divider()
+                    .background(AppColor.border)
+
+                Toggle(isOn: aiAssisted) {
+                    VStack(alignment: .leading, spacing: AppSpacing.xxs) {
+                        Label("AIの助けを借りた", systemImage: "sparkles")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppColor.textPrimary)
+                        Text("正直に開示すれば、投稿に「AI併用」と表示され信頼度は下がりません。隠したまま投稿すると信頼度が下がります。")
+                            .font(.caption)
+                            .foregroundStyle(AppColor.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .tint(AppColor.accent)
+            }
+        }
         .padding(AppSpacing.md)
         .paperSurface()
     }

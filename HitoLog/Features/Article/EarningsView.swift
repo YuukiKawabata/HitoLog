@@ -2,6 +2,12 @@ import SwiftUI
 
 struct EarningsSummaryView: View {
     let articles: [Article]
+    let creatorEarnings: CreatorEarnings
+
+    init(articles: [Article], creatorEarnings: CreatorEarnings = .empty) {
+        self.articles = articles
+        self.creatorEarnings = creatorEarnings
+    }
 
     private var paidArticles: [Article] {
         articles.filter { $0.price.isPaid && $0.status == .published }
@@ -12,6 +18,10 @@ struct EarningsSummaryView: View {
     }
 
     private var totalGrossYen: Int {
+        articleGrossYen + creatorEarnings.supportTotalYen + creatorEarnings.membershipMonthlyYen
+    }
+
+    private var articleGrossYen: Int {
         paidArticles.reduce(0) { $0 + $1.purchaseCount * $1.price.priceInYen }
     }
 
@@ -19,11 +29,15 @@ struct EarningsSummaryView: View {
         Int(Double(totalGrossYen) * 0.7)
     }
 
+    private var hasRevenue: Bool {
+        totalPurchases > 0 || creatorEarnings.membershipMonthlyYen > 0 || creatorEarnings.supportTotalYen > 0
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.md) {
             SectionKicker(text: "Earnings", systemImage: "yensign.circle")
 
-            if paidArticles.isEmpty {
+            if !hasRevenue {
                 Text("有料記事を公開すると、ここに収益が表示されます。")
                     .font(.subheadline)
                     .foregroundStyle(AppColor.textSecondary)
@@ -44,6 +58,24 @@ struct EarningsSummaryView: View {
                         title: "推定受取額",
                         value: "¥\(estimatedNetYen.formatted())",
                         systemImage: "banknote"
+                    )
+                }
+
+                HStack(spacing: AppSpacing.sm) {
+                    EarningsTile(
+                        title: "記事売上",
+                        value: "¥\(articleGrossYen.formatted())",
+                        systemImage: "doc.text"
+                    )
+                    EarningsTile(
+                        title: "サブスク月額",
+                        value: "¥\(creatorEarnings.membershipMonthlyYen.formatted())",
+                        systemImage: "person.crop.circle.badge.checkmark"
+                    )
+                    EarningsTile(
+                        title: "サポート",
+                        value: "¥\(creatorEarnings.supportTotalYen.formatted())",
+                        systemImage: "hands.sparkles"
                     )
                 }
 

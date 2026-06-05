@@ -103,6 +103,63 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function validReaction(data) {
+      return data.keys().hasOnly(['postID', 'userID', 'kind', 'createdAt'])
+        && data.postID is string
+        && data.postID.size() > 0
+        && data.userID is string
+        && data.kind in ['empathy', 'insight', 'cheer']
+        && data.createdAt is timestamp;
+    }
+
+    function validSupport(data) {
+      return data.keys().hasOnly([
+          'senderID',
+          'recipientID',
+          'targetType',
+          'targetID',
+          'amount',
+          'amountYen',
+          'transactionID',
+          'productID',
+          'createdAt'
+        ])
+        && data.senderID is string
+        && data.recipientID is string
+        && data.senderID != data.recipientID
+        && data.targetType in ['profile', 'article', 'post']
+        && (!data.keys().hasAny(['targetID']) || data.targetID is string)
+        && data.amount in ['yen100', 'yen300', 'yen500', 'yen1000']
+        && data.amountYen in [100, 300, 500, 1000]
+        && data.transactionID is string
+        && data.productID is string
+        && data.createdAt is timestamp;
+    }
+
+    function validCreatorMembership(data) {
+      return data.keys().hasOnly([
+          'subscriberID',
+          'creatorID',
+          'plan',
+          'monthlyYen',
+          'productID',
+          'latestTransactionID',
+          'status',
+          'updatedAt',
+          'expiresAt'
+        ])
+        && data.subscriberID is string
+        && data.creatorID is string
+        && data.subscriberID != data.creatorID
+        && data.plan in ['monthly300', 'monthly500', 'monthly1000']
+        && data.monthlyYen in [300, 500, 1000]
+        && data.productID is string
+        && data.latestTransactionID is string
+        && data.status == 'active'
+        && data.updatedAt is timestamp
+        && (!data.keys().hasAny(['expiresAt']) || data.expiresAt is timestamp);
+    }
+
     function validFeedback(data) {
       return data.keys().hasOnly([
           'userID',
@@ -183,6 +240,9 @@ service cloud.firestore {
         'handleLowercase',
         'bio',
         'avatarUrl',
+        'website',
+        'location',
+        'occupation',
         'email',
         'updatedAt',
         'isDeleted',
@@ -212,6 +272,9 @@ service cloud.firestore {
           'handleLowercase',
           'bio',
           'avatarUrl',
+          'website',
+          'location',
+          'occupation',
           'appleUserID',
           'email',
           'humanLevel',
@@ -262,10 +325,12 @@ service cloud.firestore {
           'deleteCount',
           'suspiciousBulkInputCount',
           'appCheckVerified',
+          'aiAssisted',
           'likeCount',
           'commentCount',
           'repostCount',
           'quoteCount',
+          'reactionCounts',
           'createdAt',
           'updatedAt',
           'isDeleted',
@@ -282,7 +347,9 @@ service cloud.firestore {
         && request.resource.data.likeCount == 0
         && request.resource.data.commentCount == 0
         && request.resource.data.repostCount == 0
-        && request.resource.data.quoteCount == 0;
+        && request.resource.data.quoteCount == 0
+        && request.resource.data.reactionCounts is map
+        && request.resource.data.reactionCounts.keys().size() == 0;
       allow update: if isOwner(resource.data.userID)
         && changedOnly(['body', 'topics', 'searchTokens', 'editCount', 'updatedAt', 'isDeleted', 'commentPermission'])
         && validPostTopics(request.resource.data)
@@ -352,6 +419,22 @@ service cloud.firestore {
         && likeID == request.resource.data.postID + '_' + request.resource.data.userID;
       allow delete: if isOwner(resource.data.userID);
       allow update: if false;
+    }
+
+    match /reactions/{reactionID} {
+      allow read: if signedIn();
+      allow create: if isOwner(request.resource.data.userID)
+        && isActiveAccount()
+        && validReaction(request.resource.data)
+        && reactionID == request.resource.data.postID + '_' + request.resource.data.userID;
+      allow update: if isOwner(resource.data.userID)
+        && isOwner(request.resource.data.userID)
+        && isActiveAccount()
+        && validReaction(request.resource.data)
+        && request.resource.data.userID == resource.data.userID
+        && request.resource.data.postID == resource.data.postID
+        && reactionID == request.resource.data.postID + '_' + request.resource.data.userID;
+      allow delete: if isOwner(resource.data.userID);
     }
 
     match /bookmarks/{bookmarkID} {
@@ -480,6 +563,83 @@ service cloud.firestore {
       allow create, delete: if false;
     }
 
+    match /inviteCodes/{code} {
+      allow read: if signedIn()
+        && (resource.data.inviterID == request.auth.uid || isAdmin());
+      allow create: if isOwner(request.resource.data.inviterID)
+        && isActiveAccount()
+        && request.resource.data.keys().hasOnly([
+          'code',
+          'inviterID',
+          'maxUses',
+          'useCount',
+          'isActive',
+          'createdAt',
+          'updatedAt',
+          'expiresAt'
+        ])
+        && code == request.resource.data.code
+        && request.resource.data.code is string
+        && request.resource.data.code.size() >= 6
+        && request.resource.data.code.size() <= 24
+        && request.resource.data.maxUses is int
+        && request.resource.data.maxUses > 0
+        && request.resource.data.maxUses <= 20
+        && request.resource.data.useCount == 0
+        && request.resource.data.isActive == true
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp
+        && (!request.resource.data.keys().hasAny(['expiresAt'])
+          || request.resource.data.expiresAt is timestamp);
+      allow update, delete: if false;
+    }
+
+    match /inviteRedemptions/{redemptionID} {
+      allow read: if signedIn()
+        && (resource.data.inviteeID == request.auth.uid
+          || resource.data.inviterID == request.auth.uid
+          || isAdmin());
+      allow create: if isOwner(request.resource.data.inviteeID)
+        && isActiveAccount()
+        && request.resource.data.keys().hasOnly(['code', 'inviteeID', 'createdAt'])
+        && request.resource.data.code is string
+        && request.resource.data.code.size() >= 6
+        && request.resource.data.code.size() <= 24
+        && redemptionID == request.resource.data.code + '_' + request.resource.data.inviteeID
+        && request.resource.data.createdAt is timestamp;
+      allow update, delete: if false;
+    }
+
+    match /creatorMemberships/{membershipID} {
+      allow read: if signedIn()
+        && (resource.data.subscriberID == request.auth.uid
+          || resource.data.creatorID == request.auth.uid
+          || isAdmin());
+      allow create: if isOwner(request.resource.data.subscriberID)
+        && isActiveAccount()
+        && validCreatorMembership(request.resource.data)
+        && membershipID == request.resource.data.subscriberID + '_' + request.resource.data.creatorID;
+      allow update: if isOwner(resource.data.subscriberID)
+        && isOwner(request.resource.data.subscriberID)
+        && isActiveAccount()
+        && validCreatorMembership(request.resource.data)
+        && request.resource.data.creatorID == resource.data.creatorID
+        && membershipID == request.resource.data.subscriberID + '_' + request.resource.data.creatorID;
+      allow delete: if false;
+    }
+
+    match /supports/{supportID} {
+      allow read: if signedIn()
+        && (resource.data.senderID == request.auth.uid
+          || resource.data.recipientID == request.auth.uid
+          || isAdmin());
+      allow create: if isOwner(request.resource.data.senderID)
+        && isActiveAccount()
+        && validSupport(request.resource.data)
+        && supportID == request.resource.data.transactionID;
+      allow update, delete: if false;
+    }
+
     match /fcmTokens/{userID}/tokens/{tokenID} {
       allow read, write: if isOwner(userID);
     }
@@ -529,7 +689,21 @@ service cloud.firestore {
 
     match /articleUnlocks/{unlockID} {
       allow read: if signedIn() && unlockID.matches(request.auth.uid + '_.*');
-      allow write: if false;
+      allow create: if isOwner(request.resource.data.userID)
+        && isActiveAccount()
+        && request.resource.data.keys().hasOnly([
+          'userID',
+          'articleID',
+          'price',
+          'transactionID',
+          'createdAt'
+        ])
+        && request.resource.data.articleID is string
+        && request.resource.data.price in ['yen100', 'yen300', 'yen500', 'yen800', 'yen1000']
+        && request.resource.data.transactionID is string
+        && unlockID == request.resource.data.userID + '_' + request.resource.data.articleID
+        && request.resource.data.createdAt is timestamp;
+      allow update, delete: if false;
     }
 
     match /articleBookmarks/{bookmarkID} {

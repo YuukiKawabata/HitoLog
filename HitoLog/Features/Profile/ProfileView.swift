@@ -32,6 +32,7 @@ struct ProfileView: View {
     @State private var editingArticle: Article?
     @State private var deletingArticle: Article?
     @State private var profileTab: ProfileTab = .posts
+    @State private var monetizationErrorMessage: String?
 
     init(userID: String? = nil) {
         self.userID = userID
@@ -49,6 +50,19 @@ struct ProfileView: View {
                         )
                         .padding(.horizontal, AppSpacing.md)
                         .padding(.bottom, AppSpacing.md)
+
+                        CreatorMonetizationPanel(
+                            user: user,
+                            isPreview: user.id == store.currentUser.id,
+                            onMembership: { plan in
+                                Task { await purchaseMembership(plan, creator: user) }
+                            },
+                            onSupport: { amount in
+                                Task { await purchaseSupport(amount, recipient: user) }
+                            }
+                        )
+                        .padding(.horizontal, AppSpacing.md)
+                        .padding(.bottom, AppSpacing.sm)
 
                         if let highlight = representativePost(for: user) {
                             RepresentativeWorkCard(post: highlight, author: user)
@@ -144,9 +158,24 @@ struct ProfileView: View {
         } message: {
             Text("削除した投稿はタイムラインに表示されなくなります。")
         }
+        .alert("購入できません", isPresented: Binding(
+            get: { monetizationErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    monetizationErrorMessage = nil
+                }
+            }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(monetizationErrorMessage ?? "通信状態を確認して、もう一度お試しください。")
+        }
         .task {
             if let user = displayedUser {
                 await store.loadUserArticles(userID: user.id)
+                if user.id == store.currentUser.id {
+                    await store.loadCreatorEarnings()
+                }
             }
         }
     }
@@ -202,7 +231,7 @@ struct ProfileView: View {
         } else {
             LazyVStack(spacing: AppSpacing.sm) {
                 if isOwner {
-                    EarningsSummaryView(articles: articles)
+                    EarningsSummaryView(articles: articles, creatorEarnings: store.creatorEarnings)
                         .padding(.horizontal, AppSpacing.md)
                         .padding(.top, AppSpacing.sm)
                 }
@@ -261,6 +290,122 @@ struct ProfileView: View {
             return "プロフィール"
         }
         return displayedUser.displayName
+    }
+
+    @MainActor
+    private func purchaseMembership(_ plan: CreatorMembershipPlan, creator: AppUser) async {
+        do {
+            let purchased = try await store.purchaseCreatorMembership(creatorID: creator.id, plan: plan)
+            if purchased {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            }
+        } catch {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            monetizationErrorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func purchaseSupport(_ amount: SupportAmount, recipient: AppUser) async {
+        do {
+            let purchased = try await store.purchaseSupport(recipientID: recipient.id, amount: amount)
+            if purchased {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            }
+        } catch {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            monetizationErrorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct CreatorMonetizationPanel: View {
+    let user: AppUser
+    let isPreview: Bool
+    let onMembership: (CreatorMembershipPlan) -> Void
+    let onSupport: (SupportAmount) -> Void
+    @State private var showsPreviewNotice = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.sm) {
+            if isPreview {
+                HStack(spacing: AppSpacing.xs) {
+                    SectionKicker(text: "支援導線プレビュー", systemImage: "eye")
+                    Spacer(minLength: 0)
+                    Text("プレビュー")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(AppColor.accent)
+                        .padding(.vertical, AppSpacing.xxs)
+                        .padding(.horizontal, AppSpacing.sm)
+                        .background(AppColor.accentSoft, in: Capsule())
+                }
+
+                Text("ほかのユーザーには、このプロフィールにメンバーシップとサポートの導線が表示されます。")
+                    .font(.caption)
+                    .foregroundStyle(AppColor.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: AppSpacing.sm) {
+                Menu {
+                    ForEach(CreatorMembershipPlan.allCases) { plan in
+                        Button {
+                            handleMembership(plan)
+                        } label: {
+                            Label(plan.displayText, systemImage: "person.crop.circle.badge.checkmark")
+                        }
+                    }
+                } label: {
+                    Label("メンバー", systemImage: "person.crop.circle.badge.plus")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(SecondaryButtonStyle())
+
+                Menu {
+                    ForEach(SupportAmount.allCases) { amount in
+                        Button {
+                            handleSupport(amount)
+                        } label: {
+                            Label(amount.displayText, systemImage: "hands.sparkles")
+                        }
+                    }
+                } label: {
+                    Label("サポート", systemImage: "hands.sparkles")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(SecondaryButtonStyle())
+            }
+        }
+        .padding(AppSpacing.md)
+        .background(AppColor.background)
+        .clipShape(RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                .stroke(AppColor.border, lineWidth: 0.7)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(user.displayName)をサポート")
+        .alert("プレビュー", isPresented: $showsPreviewNotice) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("自分のプロフィールでは購入処理は実行されません。")
+        }
+    }
+
+    private func handleMembership(_ plan: CreatorMembershipPlan) {
+        guard !isPreview else {
+            showsPreviewNotice = true
+            return
+        }
+        onMembership(plan)
+    }
+
+    private func handleSupport(_ amount: SupportAmount) {
+        guard !isPreview else {
+            showsPreviewNotice = true
+            return
+        }
+        onSupport(amount)
     }
 }
 
