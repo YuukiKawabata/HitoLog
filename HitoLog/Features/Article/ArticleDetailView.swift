@@ -20,7 +20,7 @@ struct ArticleDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: AppSpacing.lg) {
                 articleHeader
-                if !isOwner {
+                if MonetizationPolicy.isEnabled && !isOwner {
                     articleSupportPanel
                 }
                 freeContent
@@ -323,6 +323,7 @@ struct ArticleDetailView: View {
 
     @MainActor
     private func purchase() async {
+        guard MonetizationPolicy.isEnabled else { return }
         isPurchasing = true
         defer { isPurchasing = false }
         do {
@@ -342,6 +343,7 @@ struct ArticleDetailView: View {
 
     @MainActor
     private func support(_ amount: SupportAmount) async {
+        guard MonetizationPolicy.isEnabled else { return }
         isPurchasing = true
         defer { isPurchasing = false }
         do {

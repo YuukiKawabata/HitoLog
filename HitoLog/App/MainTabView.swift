@@ -946,7 +946,7 @@ private struct ComposeEntryView: View {
                             Text("記事を書く")
                                 .font(AppFont.button)
                                 .foregroundStyle(AppColor.textPrimary)
-                            Text("長文・Human Check・有料販売")
+                            Text("長文・Human Check・本人入力")
                                 .font(.caption)
                                 .foregroundStyle(AppColor.textSecondary)
                         }

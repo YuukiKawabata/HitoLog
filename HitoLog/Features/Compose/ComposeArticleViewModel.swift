@@ -35,7 +35,7 @@ final class ComposeArticleViewModel: ObservableObject {
     var humanBadge: HumanBadge {
         let input = HumanScoreInput(
             inputDurationMs: metrics.inputDurationMs,
-            characterCount: freePreviewBody.count + paidBody.count,
+            characterCount: freePreviewBody.count + (MonetizationPolicy.isEnabled ? paidBody.count : 0),
             editCount: metrics.editCount,
             deleteCount: metrics.deleteCount,
             suspiciousBulkInputCount: metrics.suspiciousBulkInputCount,
@@ -46,7 +46,7 @@ final class ComposeArticleViewModel: ObservableObject {
         return humanScoreService.badge(for: humanScoreService.calculate(input: input))
     }
 
-    var canSetPaidPrice: Bool { humanBadge == .verified }
+    var canSetPaidPrice: Bool { MonetizationPolicy.isEnabled && humanBadge == .verified }
 
     /// 既存記事を編集用に読み込む。本人入力スコア等の検証値は元記事のものを保持する。
     func load(article: Article, paidBody: String) {
@@ -54,8 +54,8 @@ final class ComposeArticleViewModel: ObservableObject {
         workingArticleID = article.id
         title = article.title
         freePreviewBody = article.freePreviewBody
-        self.paidBody = paidBody
-        price = article.price
+        self.paidBody = MonetizationPolicy.isEnabled ? paidBody : ""
+        price = MonetizationPolicy.isEnabled ? article.price : .free
         commentPermission = article.commentPermission
         metrics = TypingMetrics()
     }
@@ -74,8 +74,8 @@ final class ComposeArticleViewModel: ObservableObject {
               let draft = try? JSONDecoder().decode(ComposeArticleDraft.self, from: data) else { return }
         title = draft.title
         freePreviewBody = draft.freePreviewBody
-        paidBody = draft.paidBody
-        price = draft.price
+        paidBody = MonetizationPolicy.isEnabled ? draft.paidBody : ""
+        price = MonetizationPolicy.isEnabled ? draft.price : .free
         commentPermission = draft.commentPermission
         metrics = draft.metrics
     }
@@ -85,8 +85,8 @@ final class ComposeArticleViewModel: ObservableObject {
         let draft = ComposeArticleDraft(
             title: title,
             freePreviewBody: freePreviewBody,
-            paidBody: paidBody,
-            price: price,
+            paidBody: MonetizationPolicy.isEnabled ? paidBody : "",
+            price: MonetizationPolicy.isEnabled ? price : .free,
             commentPermission: commentPermission,
             metrics: metrics,
             updatedAt: Date()
@@ -111,7 +111,9 @@ final class ComposeArticleViewModel: ObservableObject {
     ) -> (article: Article, paidBody: String) {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedPreview = freePreviewBody.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedPaidBody = paidBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedPaidBody = MonetizationPolicy.isEnabled
+            ? paidBody.trimmingCharacters(in: .whitespacesAndNewlines)
+            : ""
 
         // 既存記事の編集 — 検証値（humanBadge/score/作成日）を保持し、内容のみ更新する。
         if var updated = editingArticle {
@@ -119,7 +121,7 @@ final class ComposeArticleViewModel: ObservableObject {
             updated.title = trimmedTitle
             updated.freePreviewBody = trimmedPreview
             updated.status = status
-            updated.price = updated.humanBadge == .verified ? price : .free
+            updated.price = MonetizationPolicy.isEnabled && updated.humanBadge == .verified ? price : .free
             updated.topics = TopicExtractor.topics(in: combined)
             updated.searchTokens = PostSearchTokenizer.tokens(in: combined, topics: updated.topics)
             updated.commentPermission = commentPermission
@@ -129,7 +131,7 @@ final class ComposeArticleViewModel: ObservableObject {
 
         let input = HumanScoreInput(
             inputDurationMs: metrics.inputDurationMs,
-            characterCount: freePreviewBody.count + paidBody.count,
+            characterCount: freePreviewBody.count + (MonetizationPolicy.isEnabled ? paidBody.count : 0),
             editCount: metrics.editCount,
             deleteCount: metrics.deleteCount,
             suspiciousBulkInputCount: metrics.suspiciousBulkInputCount,
@@ -140,7 +142,7 @@ final class ComposeArticleViewModel: ObservableObject {
         let score = humanScoreService.calculate(input: input)
         let badge = humanScoreService.badge(for: score)
         let now = Date()
-        let effectivePrice: ArticlePrice = badge == .verified ? price : .free
+        let effectivePrice: ArticlePrice = MonetizationPolicy.isEnabled && badge == .verified ? price : .free
 
         let article = Article(
             id: id,
@@ -158,7 +160,7 @@ final class ComposeArticleViewModel: ObservableObject {
             createdAt: now,
             updatedAt: now
         )
-        return (article, paidBody.trimmingCharacters(in: .whitespacesAndNewlines))
+        return (article, trimmedPaidBody)
     }
 }
 

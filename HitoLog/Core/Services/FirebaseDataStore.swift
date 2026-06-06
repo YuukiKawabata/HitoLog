@@ -1608,6 +1608,51 @@ extension FirebaseDataStore {
     func loadCreatorEarnings(creatorID: String) async throws -> CreatorEarnings {
         #if canImport(FirebaseFirestore)
         let db = Firestore.firestore()
+        let revenueSnapshot = try await db.collection("creatorRevenueEvents")
+            .whereField("creatorID", isEqualTo: creatorID)
+            .order(by: "createdAt", descending: true)
+            .limit(to: 1_000)
+            .getDocuments()
+
+        guard !revenueSnapshot.documents.isEmpty else {
+            return try await loadLegacyCreatorEarnings(creatorID: creatorID)
+        }
+
+        return revenueSnapshot.documents.reduce(into: CreatorEarnings.empty) { partial, document in
+            let data = document.data()
+            let sourceType = stringValue(data["sourceType"], fallback: "")
+            let grossYen = intValue(data["grossYen"], fallback: 0)
+            let creatorPayoutYen = intValue(data["creatorPayoutYen"], fallback: 0)
+
+            partial.estimatedAppleFeeYen += intValue(data["estimatedAppleFeeYen"], fallback: 0)
+            partial.platformFeeYen += intValue(data["platformFeeYen"], fallback: 0)
+            partial.creatorPayoutYen += creatorPayoutYen
+
+            switch sourceType {
+            case "article":
+                partial.articleCount += 1
+                partial.articleGrossYen += grossYen
+                partial.articleCreatorPayoutYen += creatorPayoutYen
+            case "membership":
+                partial.membershipCount += 1
+                partial.membershipMonthlyYen += grossYen
+                partial.membershipCreatorPayoutYen += creatorPayoutYen
+            case "support":
+                partial.supportCount += 1
+                partial.supportTotalYen += grossYen
+                partial.supportCreatorPayoutYen += creatorPayoutYen
+            default:
+                break
+            }
+        }
+        #else
+        return .empty
+        #endif
+    }
+
+    private func loadLegacyCreatorEarnings(creatorID: String) async throws -> CreatorEarnings {
+        #if canImport(FirebaseFirestore)
+        let db = Firestore.firestore()
         async let supportsSnapshot = db.collection("supports")
             .whereField("recipientID", isEqualTo: creatorID)
             .order(by: "createdAt", descending: true)
@@ -1620,16 +1665,28 @@ extension FirebaseDataStore {
 
         let supports = try await supportsSnapshot
         let memberships = try await membershipsSnapshot
-        let supportAmounts = supports.documents.map { intValue($0.data()["amountYen"], fallback: 0) }
+        let supportTotalYen = supports.documents.reduce(0) { partial, document in
+            partial + intValue(document.data()["amountYen"], fallback: 0)
+        }
         let membershipMonthlyYen = memberships.documents.reduce(0) { partial, document in
             partial + intValue(document.data()["monthlyYen"], fallback: 0)
         }
+        let supportBreakdown = MonetizationPolicy.breakdown(grossYen: supportTotalYen)
+        let membershipBreakdown = MonetizationPolicy.breakdown(grossYen: membershipMonthlyYen)
 
         return CreatorEarnings(
+            articleCount: 0,
+            articleGrossYen: 0,
+            articleCreatorPayoutYen: 0,
             membershipCount: memberships.documents.count,
             membershipMonthlyYen: membershipMonthlyYen,
+            membershipCreatorPayoutYen: membershipBreakdown.creatorPayoutYen,
             supportCount: supports.documents.count,
-            supportTotalYen: supportAmounts.reduce(0, +)
+            supportTotalYen: supportTotalYen,
+            supportCreatorPayoutYen: supportBreakdown.creatorPayoutYen,
+            estimatedAppleFeeYen: supportBreakdown.estimatedAppleFeeYen + membershipBreakdown.estimatedAppleFeeYen,
+            platformFeeYen: supportBreakdown.platformFeeYen + membershipBreakdown.platformFeeYen,
+            creatorPayoutYen: supportBreakdown.creatorPayoutYen + membershipBreakdown.creatorPayoutYen
         )
         #else
         return .empty
@@ -1695,7 +1752,13 @@ extension FirebaseDataStore {
         #endif
     }
 
-    func recordArticleUnlock(userID: String, articleID: String, price: ArticlePrice, transactionID: String) async throws {
+    func recordArticleUnlock(
+        userID: String,
+        articleID: String,
+        price: ArticlePrice,
+        transactionID: String,
+        productID: String
+    ) async throws {
         #if canImport(FirebaseFirestore)
         let db = Firestore.firestore()
         let docID = "\(userID)_\(articleID)"
@@ -1704,6 +1767,7 @@ extension FirebaseDataStore {
             "articleID": articleID,
             "price": price.rawValue,
             "transactionID": transactionID,
+            "productID": productID,
             "createdAt": FieldValue.serverTimestamp()
         ]
         try await db.collection("articleUnlocks").document(docID).setData(unlockData, merge: false)

@@ -1180,7 +1180,8 @@ final class AppDataStore: ObservableObject {
     }
 
     var isCreatorEligible: Bool {
-        currentUser.accountAgeDays >= 14
+        MonetizationPolicy.isEnabled
+            && currentUser.accountAgeDays >= 14
             && currentUser.humanVerifiedPostRate >= 0.8
     }
 
@@ -1319,6 +1320,7 @@ final class AppDataStore: ObservableObject {
     // Throws PurchaseError or FirestoreError. Returns false if user cancelled.
     @discardableResult
     func purchaseArticle(_ article: Article) async throws -> Bool {
+        guard MonetizationPolicy.isEnabled else { return false }
         guard isRemoteSyncEnabled else { return false }
         guard let result = try await PurchaseService.shared.purchase(price: article.price) else {
             return false
@@ -1327,7 +1329,8 @@ final class AppDataStore: ObservableObject {
             userID: currentUser.id,
             articleID: article.id,
             price: article.price,
-            transactionID: result.transactionID
+            transactionID: result.transactionID,
+            productID: result.productID
         )
         unlockedArticleIDs.insert(article.id)
         if let idx = articles.firstIndex(where: { $0.id == article.id }) {
@@ -1342,6 +1345,10 @@ final class AppDataStore: ObservableObject {
     }
 
     func loadCreatorEarnings() async {
+        guard MonetizationPolicy.isEnabled else {
+            creatorEarnings = .empty
+            return
+        }
         guard isRemoteSyncEnabled else { return }
         do {
             creatorEarnings = try await remoteStore.loadCreatorEarnings(creatorID: currentUser.id)
@@ -1353,6 +1360,7 @@ final class AppDataStore: ObservableObject {
 
     @discardableResult
     func purchaseCreatorMembership(creatorID: String, plan: CreatorMembershipPlan) async throws -> Bool {
+        guard MonetizationPolicy.isEnabled else { return false }
         guard isRemoteSyncEnabled, creatorID != currentUser.id else { return false }
         guard let result = try await PurchaseService.shared.purchase(membershipPlan: plan) else {
             return false
@@ -1380,6 +1388,7 @@ final class AppDataStore: ObservableObject {
         targetID: String? = nil,
         amount: SupportAmount
     ) async throws -> Bool {
+        guard MonetizationPolicy.isEnabled else { return false }
         guard isRemoteSyncEnabled, recipientID != currentUser.id else { return false }
         guard let result = try await PurchaseService.shared.purchase(supportAmount: amount) else {
             return false
@@ -2195,9 +2204,11 @@ final class AppDataStore: ObservableObject {
         articles = uniqueArticles(articles.filter { !$0.id.hasPrefix("demo-") } + seed.articles.map { article in
             article.demoCopy(currentUserID: activeCurrentUserID, seedCurrentUserID: seedCurrentUserID)
         })
-        // 購入済み記事の閲覧画面もスクショできるよう、有料デモ記事を1本解錠しておく
         unlockedArticleIDs = Set(unlockedArticleIDs.filter { !$0.hasPrefix("demo-") })
-        unlockedArticleIDs.insert("demo-article-1")
+        if MonetizationPolicy.isEnabled {
+            // 購入済み記事の閲覧画面もスクショできるよう、有料デモ記事を1本解錠しておく
+            unlockedArticleIDs.insert("demo-article-1")
+        }
         likedPostIDs = Set(likedPostIDs.filter { !$0.hasPrefix("demo-") })
         likedPostIDs.formUnion(seed.likedPostIDs.map { "demo-\($0)" })
         bookmarkedPostIDs = Set(bookmarkedPostIDs.filter { !$0.hasPrefix("demo-") })

@@ -21,6 +21,10 @@ const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const POST_LIMIT_PER_HOUR = 20;
 const COMMENT_LIMIT_PER_HOUR = 80;
 const FOLLOW_LIMIT_PER_HOUR = 120;
+const ESTIMATED_APPLE_COMMISSION_RATE_PERMILLE = 300;
+const PLATFORM_FEE_RATE_PERMILLE = 100;
+const PAYOUT_HOLD_DAYS = 45;
+const MONETIZATION_POLICY_VERSION = "2026-06-v1";
 
 interface PostRecord {
   userID: string;
@@ -84,7 +88,29 @@ interface TopicFollowRecord {
 interface ArticleUnlockRecord {
   userID: string;
   articleID: string;
+  price?: string;
+  transactionID?: string;
+  productID?: string;
   counted?: boolean;
+}
+
+interface CreatorMembershipRecord {
+  subscriberID: string;
+  creatorID: string;
+  monthlyYen?: number;
+  productID?: string;
+  latestTransactionID?: string;
+  status?: string;
+}
+
+interface SupportRecord {
+  senderID: string;
+  recipientID: string;
+  targetType?: string;
+  targetID?: string;
+  amountYen?: number;
+  transactionID?: string;
+  productID?: string;
 }
 
 interface InviteCodeRecord {
@@ -105,6 +131,95 @@ interface PublicPageResponse {
   status(code: number): PublicPageResponse;
   set(field: string, value: string): PublicPageResponse;
   send(body: string): void;
+}
+
+function articlePriceYen(price?: string): number {
+  switch (price) {
+    case "yen100": return 100;
+    case "yen300": return 300;
+    case "yen500": return 500;
+    case "yen800": return 800;
+    case "yen1000": return 1000;
+    default: return 0;
+  }
+}
+
+function monetizationBreakdown(grossYen: number) {
+  const safeGrossYen = Math.max(Math.floor(grossYen), 0);
+  const estimatedAppleFeeYen =
+    Math.floor(safeGrossYen * ESTIMATED_APPLE_COMMISSION_RATE_PERMILLE / 1000);
+  const estimatedAppStoreProceedsYen = Math.max(safeGrossYen - estimatedAppleFeeYen, 0);
+  const platformFeeYen =
+    Math.floor(estimatedAppStoreProceedsYen * PLATFORM_FEE_RATE_PERMILLE / 1000);
+  const creatorPayoutYen = Math.max(estimatedAppStoreProceedsYen - platformFeeYen, 0);
+
+  return {
+    grossYen: safeGrossYen,
+    estimatedAppleFeeYen,
+    estimatedAppStoreProceedsYen,
+    platformFeeYen,
+    creatorPayoutYen
+  };
+}
+
+async function createCreatorRevenueEvent(params: {
+  eventID: string;
+  creatorID: string;
+  payerID: string;
+  sourceType: "article" | "membership" | "support";
+  sourceID: string;
+  transactionID: string;
+  productID?: string;
+  grossYen: number;
+  targetType?: string;
+  targetID?: string;
+}) {
+  if (!params.creatorID || !params.payerID || params.creatorID === params.payerID || !params.transactionID) {
+    return;
+  }
+
+  const breakdown = monetizationBreakdown(params.grossYen);
+  if (breakdown.grossYen <= 0) {
+    return;
+  }
+
+  const payoutEligibleAt = Timestamp.fromMillis(Date.now() + PAYOUT_HOLD_DAYS * 24 * 60 * 60 * 1000);
+  const revenueRef = db.collection("creatorRevenueEvents").doc(params.eventID);
+  const existing = await revenueRef.get();
+  if (existing.exists) {
+    return;
+  }
+
+  const data: DocumentData = {
+    creatorID: params.creatorID,
+    payerID: params.payerID,
+    sourceType: params.sourceType,
+    sourceID: params.sourceID,
+    transactionID: params.transactionID,
+    grossYen: breakdown.grossYen,
+    estimatedAppleCommissionRatePermille: ESTIMATED_APPLE_COMMISSION_RATE_PERMILLE,
+    estimatedAppleFeeYen: breakdown.estimatedAppleFeeYen,
+    estimatedAppStoreProceedsYen: breakdown.estimatedAppStoreProceedsYen,
+    platformFeeRatePermille: PLATFORM_FEE_RATE_PERMILLE,
+    platformFeeYen: breakdown.platformFeeYen,
+    creatorPayoutYen: breakdown.creatorPayoutYen,
+    payoutStatus: "pending",
+    payoutEligibleAt,
+    monetizationPolicyVersion: MONETIZATION_POLICY_VERSION,
+    createdAt: FieldValue.serverTimestamp()
+  };
+
+  if (params.productID) {
+    data.productID = params.productID;
+  }
+  if (params.targetType) {
+    data.targetType = params.targetType;
+  }
+  if (params.targetID) {
+    data.targetID = params.targetID;
+  }
+
+  await revenueRef.set(data, { merge: false });
 }
 
 export const onPostCreated = onDocumentCreated("posts/{postID}", async (event) => {
@@ -374,13 +489,93 @@ export const onArticleUnlockCreated = onDocumentCreated("articleUnlocks/{unlockI
     return;
   }
 
-  await db.collection("articles").doc(unlock.articleID).set({
+  const articleRef = db.collection("articles").doc(unlock.articleID);
+  const articleSnapshot = await articleRef.get();
+  const article = articleSnapshot.data();
+  const creatorID = typeof article?.userID === "string" ? article.userID : "";
+  const grossYen = articlePriceYen(unlock.price);
+
+  await articleRef.set({
     purchaseCount: FieldValue.increment(1),
     updatedAt: FieldValue.serverTimestamp()
   }, { merge: true });
+
+  if (creatorID && unlock.transactionID && grossYen > 0) {
+    await createCreatorRevenueEvent({
+      eventID: `article_${unlock.transactionID}`,
+      creatorID,
+      payerID: unlock.userID,
+      sourceType: "article",
+      sourceID: unlock.articleID,
+      transactionID: unlock.transactionID,
+      productID: unlock.productID,
+      grossYen
+    });
+  }
+
   await db.collection("articleUnlocks").doc(event.params.unlockID).set({
     counted: true
   }, { merge: true });
+});
+
+export const onCreatorMembershipCreated = onDocumentCreated("creatorMemberships/{membershipID}", async (event) => {
+  const membership = event.data?.data() as CreatorMembershipRecord | undefined;
+  if (!membership || membership.status !== "active" || !membership.latestTransactionID) {
+    return;
+  }
+
+  await createCreatorRevenueEvent({
+    eventID: `membership_${membership.latestTransactionID}`,
+    creatorID: membership.creatorID,
+    payerID: membership.subscriberID,
+    sourceType: "membership",
+    sourceID: event.params.membershipID,
+    transactionID: membership.latestTransactionID,
+    productID: membership.productID,
+    grossYen: membership.monthlyYen ?? 0
+  });
+});
+
+export const onCreatorMembershipUpdated = onDocumentUpdated("creatorMemberships/{membershipID}", async (event) => {
+  const before = event.data?.before.data() as CreatorMembershipRecord | undefined;
+  const after = event.data?.after.data() as CreatorMembershipRecord | undefined;
+  if (!after || after.status !== "active" || !after.latestTransactionID) {
+    return;
+  }
+  if (before?.latestTransactionID === after.latestTransactionID) {
+    return;
+  }
+
+  await createCreatorRevenueEvent({
+    eventID: `membership_${after.latestTransactionID}`,
+    creatorID: after.creatorID,
+    payerID: after.subscriberID,
+    sourceType: "membership",
+    sourceID: event.params.membershipID,
+    transactionID: after.latestTransactionID,
+    productID: after.productID,
+    grossYen: after.monthlyYen ?? 0
+  });
+});
+
+export const onSupportCreated = onDocumentCreated("supports/{supportID}", async (event) => {
+  const support = event.data?.data() as SupportRecord | undefined;
+  if (!support || !support.transactionID) {
+    return;
+  }
+
+  await createCreatorRevenueEvent({
+    eventID: `support_${support.transactionID}`,
+    creatorID: support.recipientID,
+    payerID: support.senderID,
+    sourceType: "support",
+    sourceID: event.params.supportID,
+    transactionID: support.transactionID,
+    productID: support.productID,
+    grossYen: support.amountYen ?? 0,
+    targetType: support.targetType,
+    targetID: support.targetID
+  });
 });
 
 export const onInviteRedemptionCreated = onDocumentCreated("inviteRedemptions/{redemptionID}", async (event) => {

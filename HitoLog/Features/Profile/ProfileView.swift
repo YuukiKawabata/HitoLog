@@ -51,18 +51,20 @@ struct ProfileView: View {
                         .padding(.horizontal, AppSpacing.md)
                         .padding(.bottom, AppSpacing.md)
 
-                        CreatorMonetizationPanel(
-                            user: user,
-                            isPreview: user.id == store.currentUser.id,
-                            onMembership: { plan in
-                                Task { await purchaseMembership(plan, creator: user) }
-                            },
-                            onSupport: { amount in
-                                Task { await purchaseSupport(amount, recipient: user) }
-                            }
-                        )
-                        .padding(.horizontal, AppSpacing.md)
-                        .padding(.bottom, AppSpacing.sm)
+                        if MonetizationPolicy.isEnabled {
+                            CreatorMonetizationPanel(
+                                user: user,
+                                isPreview: user.id == store.currentUser.id,
+                                onMembership: { plan in
+                                    Task { await purchaseMembership(plan, creator: user) }
+                                },
+                                onSupport: { amount in
+                                    Task { await purchaseSupport(amount, recipient: user) }
+                                }
+                            )
+                            .padding(.horizontal, AppSpacing.md)
+                            .padding(.bottom, AppSpacing.sm)
+                        }
 
                         if let highlight = representativePost(for: user) {
                             RepresentativeWorkCard(post: highlight, author: user)
@@ -173,7 +175,7 @@ struct ProfileView: View {
         .task {
             if let user = displayedUser {
                 await store.loadUserArticles(userID: user.id)
-                if user.id == store.currentUser.id {
+                if MonetizationPolicy.isEnabled && user.id == store.currentUser.id {
                     await store.loadCreatorEarnings()
                 }
             }
@@ -230,7 +232,7 @@ struct ProfileView: View {
                 .padding(.top, AppSpacing.xl)
         } else {
             LazyVStack(spacing: AppSpacing.sm) {
-                if isOwner {
+                if MonetizationPolicy.isEnabled && isOwner {
                     EarningsSummaryView(articles: articles, creatorEarnings: store.creatorEarnings)
                         .padding(.horizontal, AppSpacing.md)
                         .padding(.top, AppSpacing.sm)

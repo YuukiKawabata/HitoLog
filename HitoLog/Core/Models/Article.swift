@@ -30,7 +30,7 @@ enum ArticlePrice: String, Codable, CaseIterable {
         }
     }
 
-    var isPaid: Bool { self != .free }
+    var isPaid: Bool { MonetizationPolicy.isEnabled && self != .free }
 
     var priceInYen: Int {
         switch self {
@@ -112,17 +112,64 @@ enum SupportAmount: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum MonetizationPolicy {
+    static let isEnabled = false
+    static let version = "2026-06-v1"
+    static let estimatedAppleCommissionRatePermille = 300
+    static let platformFeeRatePermille = 100
+    static let payoutHoldDays = 45
+
+    static func breakdown(grossYen: Int) -> MonetizationBreakdown {
+        let estimatedAppleFeeYen = grossYen * estimatedAppleCommissionRatePermille / 1_000
+        let estimatedAppStoreProceedsYen = max(grossYen - estimatedAppleFeeYen, 0)
+        let platformFeeYen = estimatedAppStoreProceedsYen * platformFeeRatePermille / 1_000
+        let creatorPayoutYen = max(estimatedAppStoreProceedsYen - platformFeeYen, 0)
+
+        return MonetizationBreakdown(
+            grossYen: grossYen,
+            estimatedAppleFeeYen: estimatedAppleFeeYen,
+            estimatedAppStoreProceedsYen: estimatedAppStoreProceedsYen,
+            platformFeeYen: platformFeeYen,
+            creatorPayoutYen: creatorPayoutYen
+        )
+    }
+}
+
+struct MonetizationBreakdown: Equatable {
+    let grossYen: Int
+    let estimatedAppleFeeYen: Int
+    let estimatedAppStoreProceedsYen: Int
+    let platformFeeYen: Int
+    let creatorPayoutYen: Int
+}
+
 struct CreatorEarnings: Equatable {
+    var articleCount: Int
+    var articleGrossYen: Int
+    var articleCreatorPayoutYen: Int
     var membershipCount: Int
     var membershipMonthlyYen: Int
+    var membershipCreatorPayoutYen: Int
     var supportCount: Int
     var supportTotalYen: Int
+    var supportCreatorPayoutYen: Int
+    var estimatedAppleFeeYen: Int
+    var platformFeeYen: Int
+    var creatorPayoutYen: Int
 
     static let empty = CreatorEarnings(
+        articleCount: 0,
+        articleGrossYen: 0,
+        articleCreatorPayoutYen: 0,
         membershipCount: 0,
         membershipMonthlyYen: 0,
+        membershipCreatorPayoutYen: 0,
         supportCount: 0,
-        supportTotalYen: 0
+        supportTotalYen: 0,
+        supportCreatorPayoutYen: 0,
+        estimatedAppleFeeYen: 0,
+        platformFeeYen: 0,
+        creatorPayoutYen: 0
     )
 }
 

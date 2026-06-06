@@ -33,14 +33,14 @@ struct ComposeArticleView: View {
 
         var title: String {
             switch self {
-            case .freePreview: return "無料プレビュー"
+            case .freePreview: return MonetizationPolicy.isEnabled ? "無料プレビュー" : "本文"
             case .paidBody: return "本文"
             }
         }
 
         var placeholder: String {
             switch self {
-            case .freePreview: return "読者に届けたい冒頭の言葉を入力"
+            case .freePreview: return MonetizationPolicy.isEnabled ? "読者に届けたい冒頭の言葉を入力" : "本文を書く"
             case .paidBody: return "本文（省略可）"
             }
         }
@@ -77,8 +77,10 @@ struct ComposeArticleView: View {
 
                     titlePanel
                     freePreviewPanel
-                    paidBodyPanel
-                    pricePanel
+                    if MonetizationPolicy.isEnabled {
+                        paidBodyPanel
+                        pricePanel
+                    }
                     topicRoomPreviewPanel
                     commentPermissionPanel
                     humanCheckPanel
@@ -256,13 +258,18 @@ struct ComposeArticleView: View {
     private var freePreviewPanel: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
             HStack {
-                SectionKicker(text: "無料プレビュー", systemImage: "eye")
+                SectionKicker(
+                    text: MonetizationPolicy.isEnabled ? "無料プレビュー" : "本文",
+                    systemImage: MonetizationPolicy.isEnabled ? "eye" : "doc.text"
+                )
                 Spacer(minLength: AppSpacing.sm)
                 expandButton(for: .freePreview)
                 editorModePicker($freePreviewMode)
             }
 
-            Text("誰でも読める冒頭部分。読者が続きを読みたくなる内容を書きましょう。")
+            Text(MonetizationPolicy.isEnabled
+                 ? "誰でも読める冒頭部分。読者が続きを読みたくなる内容を書きましょう。"
+                 : "初回公開では課金機能を使わず、記事は全文無料で公開されます。")
                 .font(.caption)
                 .foregroundStyle(AppColor.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -271,13 +278,13 @@ struct ComposeArticleView: View {
                 if freePreviewMode == .edit {
                     editorField(
                         text: $viewModel.freePreviewBody,
-                        placeholder: "読者に届けたい冒頭の言葉を入力",
-                        minHeight: 160,
+                        placeholder: MonetizationPolicy.isEnabled ? "読者に届けたい冒頭の言葉を入力" : "本文を書く",
+                        minHeight: MonetizationPolicy.isEnabled ? 160 : 320,
                         inserter: freePreviewInserter,
                         onRequestMedia: { requestMedia(for: .freePreview) }
                     )
                 } else {
-                    markdownPreview(viewModel.freePreviewBody, minHeight: 160)
+                    markdownPreview(viewModel.freePreviewBody, minHeight: MonetizationPolicy.isEnabled ? 160 : 320)
                 }
             }
             .id(freePreviewMode)

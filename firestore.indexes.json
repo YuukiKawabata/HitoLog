@@ -261,6 +261,14 @@
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "expiresAt", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "creatorRevenueEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "creatorID", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
