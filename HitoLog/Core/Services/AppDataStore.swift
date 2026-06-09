@@ -139,17 +139,11 @@ final class AppDataStore: ObservableObject {
     }
 
     var timelinePosts: [Post] {
-        posts.filter { post in
-            isVisiblePost(post)
-            && post.userId != currentUser.id
-            && !blockedUserIDs.contains(post.userId)
-            && !mutedUserIDs.contains(post.userId)
-            && !containsMutedWord(post)
-            && (post.shareType == .original || sourcePost(for: post) != nil)
-        }
-        .sorted {
-            $0.createdAt > $1.createdAt
-        }
+        visibleTimelinePosts(includingCurrentUser: false)
+    }
+
+    var homeTimelinePosts: [Post] {
+        visibleTimelinePosts(includingCurrentUser: true)
     }
 
     var followingTimelinePosts: [Post] {
@@ -1193,13 +1187,12 @@ final class AppDataStore: ObservableObject {
     }
 
     var timelineItems: [TimelineItem] {
-        let postItems = timelinePosts.map { TimelineItem.post($0) }
+        let postItems = homeTimelinePosts.map { TimelineItem.post($0) }
         let articleItems = articles
             .filter { a in
                 a.isPublished
                 && !a.isDeleted
                 && a.moderationStatus == .active
-                && a.userID != currentUser.id
                 && !blockedUserIDs.contains(a.userID)
                 && !mutedUserIDs.contains(a.userID)
             }
@@ -2121,6 +2114,9 @@ final class AppDataStore: ObservableObject {
         let oldestIncomingDate = page.posts.map(\.createdAt).min()
         let retainedPosts = posts.filter { post in
             guard !incomingIDs.contains(post.id) else { return false }
+            if post.userId == currentUser.id {
+                return true
+            }
             if let oldestIncomingDate, post.createdAt >= oldestIncomingDate {
                 return false
             }
@@ -2450,6 +2446,20 @@ final class AppDataStore: ObservableObject {
 
     private func containsMutedWord(_ comment: Comment) -> Bool {
         MutedWordNormalizer.containsMutedWord(in: comment, mutedWords: mutedWords)
+    }
+
+    private func visibleTimelinePosts(includingCurrentUser: Bool) -> [Post] {
+        posts.filter { post in
+            isVisiblePost(post)
+            && (includingCurrentUser || post.userId != currentUser.id)
+            && !blockedUserIDs.contains(post.userId)
+            && !mutedUserIDs.contains(post.userId)
+            && !containsMutedWord(post)
+            && (post.shareType == .original || sourcePost(for: post) != nil)
+        }
+        .sorted {
+            $0.createdAt > $1.createdAt
+        }
     }
 
     private func isVisiblePost(_ post: Post) -> Bool {

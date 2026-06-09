@@ -62,28 +62,18 @@ struct LoginView: View {
                         .clipShape(RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
                         .disabled(isSigningIn)
 
-                        #if DEBUG
                         LocalPreviewButton {
                             authSession.continueWithLocalPreview()
                             onContinue()
                         }
-                        #endif
                     } else {
-                        #if DEBUG
                         LocalPreviewButton {
                             authSession.continueWithLocalPreview()
                             onContinue()
                         }
-                        #else
-                        Label("サインインの準備が完了していません", systemImage: "exclamationmark.triangle")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(AppColor.textSecondary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, AppSpacing.md)
-                        #endif
                     }
 
-                    Text(authSession.isFirebaseAuthAvailable ? "Apple IDでサインインします。開発中はローカルプレビューも使えます。" : "サインイン設定を確認してください。")
+                    Text(authSession.isFirebaseAuthAvailable ? "Apple IDでサインインします。まず見るだけならサンプルデータでも確認できます。" : "サンプルデータで機能を確認できます。")
                         .font(.caption)
                         .foregroundStyle(AppColor.textSecondary)
                         .multilineTextAlignment(.center)
@@ -109,15 +99,13 @@ struct LoginView: View {
     }
 }
 
-#if DEBUG
 private struct LocalPreviewButton: View {
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Label("ローカルプレビューで開始", systemImage: "person.crop.circle.badge.checkmark")
+            Label("サンプルデータで試す", systemImage: "person.crop.circle.badge.checkmark")
         }
         .buttonStyle(SecondaryButtonStyle())
     }
 }
-#endif

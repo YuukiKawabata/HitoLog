@@ -38,7 +38,11 @@ AI,SNS,投稿,日記,文章,言葉,テキスト,コメント,いいね,プロフ
 
 - The current App Store Connect direction is good, but the description should lead with the user value before the feature list.
 - Avoid claims such as "AI投稿を完全に見抜く", "安全を保証", or "本物の人間だけ" because the app shows input-process signals, not absolute identity or authorship proof.
-- Screenshot data should remain fictional and should match real app behavior. The DEBUG-only screenshot demo mode uses local data and does not write demo posts to Firebase.
+- Screenshot and review demo data should remain fictional and should match real app behavior. Demo mode uses local data and does not write demo posts to Firebase.
 - For screenshot capture, launch the DEBUG build with `-HitoLogScreenshotDemo` to enter local preview mode with screenshot demo data already visible.
 - Apple screenshot reference: https://developer.apple.com/help/app-store-connect/manage-app-information/upload-app-previews-and-screenshots
 - Apple review guideline reference: https://developer.apple.com/app-store/review/guidelines/
+
+## App Review Information
+
+Sign in with Apple is supported. To verify other users' posts with preloaded content, tap "サンプルデータで試す" on the login screen, complete onboarding, then open ホーム. The demonstration mode contains fictional users, posts, comments, topic rooms, and profile content, and all demo-mode changes stay local to the device.
