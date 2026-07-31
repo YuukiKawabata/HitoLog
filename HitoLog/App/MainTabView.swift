@@ -5,6 +5,7 @@ struct MainTabView: View {
     @EnvironmentObject private var analytics: AnalyticsService
     @State private var selectedTab: MainTab = .home
     @State private var lastContentTab: MainTab = .home
+    @State private var homeNavigationPath = NavigationPath()
     @State private var isShowingCompose = false
     @State private var isShowingPostToast = false
     @State private var celebrationToken = 0
@@ -12,28 +13,26 @@ struct MainTabView: View {
     @State private var toastSystemImage = "checkmark.circle.fill"
     @State private var toastShowsCelebration = true
 
-    init() {
-        let scene = ScreenshotScene.current
-        let initialTab: MainTab = scene == .profile ? .profile : .home
-        _selectedTab = State(initialValue: initialTab)
-        _lastContentTab = State(initialValue: initialTab)
-        _isShowingCompose = State(initialValue: scene == .compose)
-    }
-
     var body: some View {
         TabView(selection: $selectedTab) {
-            NavigationStack {
+            NavigationStack(path: $homeNavigationPath) {
                 TimelineView {
                     showCompose(source: "daily_prompt")
                 }
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarTrailing) {
-                        NavigationLink(destination: UserSearchView()) {
+                        Button {
+                            homeNavigationPath.append(HomeDestination.search)
+                        } label: {
                             Image(systemName: "magnifyingglass")
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
                         }
                         .accessibilityLabel("検索")
 
-                        NavigationLink(destination: NotificationsView()) {
+                        Button {
+                            homeNavigationPath.append(HomeDestination.notifications)
+                        } label: {
                             ZStack(alignment: .topTrailing) {
                                 Image(systemName: "bell")
 
@@ -41,11 +40,21 @@ struct MainTabView: View {
                                     Circle()
                                         .fill(AppColor.stamp)
                                         .frame(width: 7, height: 7)
-                                        .offset(x: 2, y: -2)
+                                    .offset(x: 2, y: -2)
                                 }
                             }
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                         }
                         .accessibilityLabel("通知")
+                    }
+                }
+                .navigationDestination(for: HomeDestination.self) { destination in
+                    switch destination {
+                    case .search:
+                        UserSearchView()
+                    case .notifications:
+                        NotificationsView()
                     }
                 }
             }
@@ -129,23 +138,9 @@ struct MainTabView: View {
     }
 }
 
-private enum ScreenshotScene: String {
-    case home
-    case compose
-    case profile
-
-    static var current: ScreenshotScene? {
-        #if DEBUG
-        let arguments = ProcessInfo.processInfo.arguments
-        guard let index = arguments.firstIndex(of: "-HitoLogScreenshotScene"),
-              arguments.indices.contains(index + 1) else {
-            return nil
-        }
-        return ScreenshotScene(rawValue: arguments[index + 1])
-        #else
-        return nil
-        #endif
-    }
+private enum HomeDestination: Hashable {
+    case search
+    case notifications
 }
 
 private enum MainTab: String {
@@ -296,26 +291,6 @@ private struct UserSearchView: View {
                         }
                     }
                 }
-            } else if scope == .articles && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Section("記事検索") {
-                    ContentUnavailableView("キーワードで記事を検索できます", systemImage: "doc.text.magnifyingglass")
-                        .listRowBackground(Color.clear)
-                }
-            } else if scope == .articles {
-                Section("記事検索") {
-                    if store.articleSearchResults.isEmpty {
-                        ContentUnavailableView("記事が見つかりません", systemImage: "doc.text.magnifyingglass")
-                            .listRowBackground(Color.clear)
-                    } else {
-                        ForEach(store.articleSearchResults) { article in
-                            if let author = store.user(for: article.userID) {
-                                ArticleCardView(article: article, author: author)
-                                    .listRowInsets(EdgeInsets())
-                                    .listRowBackground(Color.clear)
-                            }
-                        }
-                    }
-                }
             } else if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Section("投稿検索") {
                     ContentUnavailableView("キーワードで投稿を検索できます", systemImage: "text.magnifyingglass")
@@ -403,8 +378,6 @@ private struct UserSearchView: View {
             await store.searchTopicRooms(query: value)
         case .posts:
             await store.searchPosts(query: value)
-        case .articles:
-            await store.searchArticles(query: value)
         }
     }
 }
@@ -414,7 +387,6 @@ private enum SearchScope: String, CaseIterable, Identifiable {
     case topics
     case rooms
     case posts
-    case articles
 
     var id: String { rawValue }
 
@@ -424,7 +396,6 @@ private enum SearchScope: String, CaseIterable, Identifiable {
         case .topics: return "話題".localized
         case .rooms: return "ルーム".localized
         case .posts: return "投稿".localized
-        case .articles: return "記事".localized
         }
     }
 
@@ -434,7 +405,6 @@ private enum SearchScope: String, CaseIterable, Identifiable {
         case .topics: return "number"
         case .rooms: return "number.square"
         case .posts: return "text.magnifyingglass"
-        case .articles: return "doc.text.magnifyingglass"
         }
     }
 
@@ -444,7 +414,6 @@ private enum SearchScope: String, CaseIterable, Identifiable {
         case .topics: return "#健康 など".localized
         case .rooms: return "ルーム名または#topic".localized
         case .posts: return "投稿本文を検索".localized
-        case .articles: return "記事タイトルを検索".localized
         }
     }
 }
@@ -516,23 +485,14 @@ private struct TopicRoomSearchRow: View {
     }
 }
 
-private enum TopicRoomTab: String, CaseIterable, Identifiable {
-    case posts, articles
-    var id: String { rawValue }
-    var title: String { self == .posts ? "投稿".localized : "記事".localized }
-    var systemImage: String { self == .posts ? "text.bubble" : "doc.text" }
-}
-
 struct TopicRoomView: View {
     @EnvironmentObject private var store: AppDataStore
     let topic: String
     @State private var sort: TopicRoomPostSort = .latest
-    @State private var roomTab: TopicRoomTab = .posts
 
     var body: some View {
         let room = store.topicRoom(for: topic)
         let posts = store.topicRoomPosts(for: topic, sort: sort)
-        let roomArticles = store.topicRoomArticles(for: topic)
 
         List {
             Section {
@@ -622,94 +582,54 @@ struct TopicRoomView: View {
             }
             .listRowBackground(Color.clear)
 
-            Section {
-                Picker("コンテンツ", selection: $roomTab) {
-                    ForEach(TopicRoomTab.allCases) { tab in
-                        Label(tab.title, systemImage: tab.systemImage).tag(tab)
+            Section("投稿") {
+                Picker("並び順", selection: $sort) {
+                    ForEach(TopicRoomPostSort.allCases) { sort in
+                        Text(sort.title).tag(sort)
                     }
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
+                .frame(maxWidth: .infinity, alignment: .trailing)
                 .listRowBackground(Color.clear)
 
-                if roomTab == .posts {
-                    Picker("並び順", selection: $sort) {
-                        ForEach(TopicRoomPostSort.allCases) { sort in
-                            Text(sort.title).tag(sort)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .listRowBackground(Color.clear)
-
-                    if posts.isEmpty {
-                        ContentUnavailableView("このルームの投稿はまだありません", systemImage: "number.square")
-                            .listRowBackground(Color.clear)
-                    } else {
-                        ForEach(posts) { post in
-                            if let author = store.user(for: post.userId) {
-                                PostRowView(
-                                    post: post,
-                                    author: author,
-                                    isLiked: store.likedPostIDs.contains(post.id),
-                                    isBookmarked: store.isBookmarked(post.id),
-                                    onLike: {
-                                        store.toggleLike(for: post.id)
-                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                    },
-                                    onBookmark: {
-                                        store.toggleBookmark(for: post.id)
-                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                    },
-                                    commentDestination: AnyView(PostDetailView(postID: post.id)),
-                                    authorDestination: AnyView(ProfileView(userID: author.id)),
-                                    showsOwnerActions: false,
-                                    onReport: {
-                                        store.addReport(
-                                            targetType: .post,
-                                            targetID: post.id,
-                                            targetOwnerID: post.userId,
-                                            targetDescription: L10n.format("投稿: %@", String(post.body.prefix(40))),
-                                            reason: "不適切な投稿"
-                                        )
-                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                    }
-                                )
-                                .listRowInsets(EdgeInsets())
-                                .listRowBackground(Color.clear)
-                            }
-                        }
-                    }
+                if posts.isEmpty {
+                    ContentUnavailableView("このルームの投稿はまだありません", systemImage: "number.square")
+                        .listRowBackground(Color.clear)
                 } else {
-                    if roomArticles.isEmpty {
-                        ContentUnavailableView("このルームの記事はまだありません", systemImage: "doc.text")
+                    ForEach(posts) { post in
+                        if let author = store.user(for: post.userId) {
+                            PostRowView(
+                                post: post,
+                                author: author,
+                                isLiked: store.likedPostIDs.contains(post.id),
+                                isBookmarked: store.isBookmarked(post.id),
+                                onLike: {
+                                    store.toggleLike(for: post.id)
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                },
+                                onBookmark: {
+                                    store.toggleBookmark(for: post.id)
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                },
+                                commentDestination: AnyView(PostDetailView(postID: post.id)),
+                                authorDestination: AnyView(ProfileView(userID: author.id)),
+                                showsOwnerActions: false,
+                                onReport: {
+                                    store.addReport(
+                                        targetType: .post,
+                                        targetID: post.id,
+                                        targetOwnerID: post.userId,
+                                        targetDescription: L10n.format("投稿: %@", String(post.body.prefix(40))),
+                                        reason: "不適切な投稿"
+                                    )
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                }
+                            )
+                            .listRowInsets(EdgeInsets())
                             .listRowBackground(Color.clear)
-                    } else {
-                        ForEach(roomArticles) { article in
-                            if let author = store.user(for: article.userID) {
-                                ArticleCardView(
-                                    article: article,
-                                    author: author,
-                                    showsOwnerActions: article.userID == store.currentUser.id,
-                                    onReport: {
-                                        guard article.userID != store.currentUser.id else { return }
-                                        store.addReport(
-                                            targetType: .article,
-                                            targetID: article.id,
-                                            targetOwnerID: article.userID,
-                                            targetDescription: L10n.format("記事: %@", String(article.title.prefix(40))),
-                                            reason: "不適切な記事"
-                                        )
-                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                    }
-                                )
-                                .listRowInsets(EdgeInsets())
-                                .listRowBackground(Color.clear)
-                            }
                         }
                     }
                 }
-            } header: {
-                Text(roomTab == .posts ? "投稿" : "記事")
             }
         }
         .scrollContentBackground(.hidden)
@@ -717,14 +637,10 @@ struct TopicRoomView: View {
         .navigationTitle(room.displayTitle)
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            async let posts: () = store.loadTopicRoomPosts(topic: topic)
-            async let articles: () = store.loadTopicRoomArticles(topic: topic)
-            _ = await (posts, articles)
+            await store.loadTopicRoomPosts(topic: topic)
         }
         .refreshable {
-            async let posts: () = store.loadTopicRoomPosts(topic: topic)
-            async let articles: () = store.loadTopicRoomArticles(topic: topic)
-            _ = await (posts, articles)
+            await store.loadTopicRoomPosts(topic: topic)
         }
     }
 }
@@ -904,97 +820,5 @@ private struct PostSubmittedToast: View {
                 .stroke(AppColor.border, lineWidth: 0.7)
         }
         .shadow(color: AppColor.shadow, radius: 12, y: 6)
-    }
-}
-
-private struct ComposeEntryView: View {
-    let onComposeTap: () -> Void
-    let onArticleTap: () -> Void
-
-    var body: some View {
-        VStack(spacing: AppSpacing.lg) {
-            VStack(spacing: AppSpacing.md) {
-                BrandIconView(size: 78)
-
-                SectionKicker(text: "投稿".localized, systemImage: "pencil.line")
-
-                Text("いま、あなたの言葉で。")
-                    .font(AppFont.title)
-                    .foregroundStyle(AppColor.textPrimary)
-
-                Text("一息ぶんの沈黙も、書き直した跡も、あなたの言葉の一部として残ります。")
-                    .font(.subheadline)
-                    .foregroundStyle(AppColor.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                InkDivider()
-            }
-            .padding(AppSpacing.lg)
-            .paperSurface()
-
-            VStack(spacing: AppSpacing.md) {
-                Button(action: onComposeTap) {
-                    HStack(spacing: AppSpacing.md) {
-                        Image(systemName: "pencil")
-                            .font(.title3)
-                            .frame(width: 36, height: 36)
-                            .background(AppColor.accentSoft, in: RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
-                            .foregroundStyle(AppColor.accent)
-
-                        VStack(alignment: .leading, spacing: AppSpacing.xxs) {
-                            Text("投稿を書く")
-                                .font(AppFont.button)
-                                .foregroundStyle(AppColor.textPrimary)
-                            Text("短文・いいね・リポスト")
-                                .font(.caption)
-                                .foregroundStyle(AppColor.textSecondary)
-                        }
-
-                        Spacer(minLength: 0)
-
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(AppColor.textSecondary)
-                    }
-                    .padding(AppSpacing.md)
-                    .paperSurface()
-                }
-                .buttonStyle(ScaleButtonStyle(scale: 0.97))
-
-                Button(action: onArticleTap) {
-                    HStack(spacing: AppSpacing.md) {
-                        Image(systemName: "doc.text")
-                            .font(.title3)
-                            .frame(width: 36, height: 36)
-                            .background(AppColor.accentSoft, in: RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
-                            .foregroundStyle(AppColor.accent)
-
-                        VStack(alignment: .leading, spacing: AppSpacing.xxs) {
-                            Text("記事を書く")
-                                .font(AppFont.button)
-                                .foregroundStyle(AppColor.textPrimary)
-                            Text("長文・Human Check・本人入力")
-                                .font(.caption)
-                                .foregroundStyle(AppColor.textSecondary)
-                        }
-
-                        Spacer(minLength: 0)
-
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(AppColor.textSecondary)
-                    }
-                    .padding(AppSpacing.md)
-                    .paperSurface()
-                }
-                .buttonStyle(ScaleButtonStyle(scale: 0.97))
-            }
-        }
-        .padding(AppSpacing.lg)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(PaperCanvas())
-        .navigationTitle("投稿")
-        .navigationBarTitleDisplayMode(.inline)
     }
 }

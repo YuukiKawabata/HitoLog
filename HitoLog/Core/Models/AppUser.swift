@@ -52,7 +52,7 @@ struct AppUser: Identifiable, Codable, Equatable {
     }
 
     var accountAgeDays: Int {
-        Calendar.current.dateComponents([.day], from: createdAt, to: Date()).day ?? 0
+        max(Calendar.current.dateComponents([.day], from: createdAt, to: Date()).day ?? 0, 0)
     }
 }
 

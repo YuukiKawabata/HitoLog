@@ -38,7 +38,7 @@ The initial project follows the Obsidian spec:
 
 ## Backend Policy
 
-The app uses Firebase Auth, Cloud Firestore, App Check with App Attest, Firebase Cloud Messaging, Cloud Functions, and PostHog. Local seed and screenshot demo data are development-only aids and are not written to Firebase. Set `POSTHOG_PROJECT_TOKEN` in the Xcode build settings to enable PostHog event delivery.
+The app uses Firebase Auth, Cloud Firestore, App Check with App Attest, Firebase Cloud Messaging, Cloud Functions, and PostHog. Runtime content is loaded from the authenticated user's production Firebase data. Set `POSTHOG_PROJECT_TOKEN` in the Xcode build settings to enable PostHog event delivery.
 
 ## Build
 

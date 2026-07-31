@@ -150,27 +150,6 @@ struct SettingsView: View {
             }
 
             Section("アプリ") {
-                #if DEBUG
-                Toggle(isOn: Binding(
-                    get: { store.isDemoDataVisible },
-                    set: { isEnabled in
-                        if isEnabled {
-                            store.showScreenshotDemoData()
-                        } else {
-                            Task {
-                                await store.hideScreenshotDemoData()
-                            }
-                        }
-                    }
-                )) {
-                    Label("スクリーンショット用デモデータ", systemImage: "sparkles")
-                }
-
-                Text("オンにすると他ユーザー、投稿、コメントを端末内だけに表示します。Firebaseには保存しません。")
-                    .font(.footnote)
-                    .foregroundStyle(AppColor.textSecondary)
-                #endif
-
                 NavigationLink {
                     LegalDocumentView(title: "利用規約".localized, bodyText: legalTermsText)
                 } label: {
@@ -206,7 +185,7 @@ struct SettingsView: View {
             Button("キャンセル", role: .cancel) {}
             Button("ログアウト", role: .destructive) {
                 authSession.signOut()
-                store.deactivateRemoteUser()
+                store.clearLocalSession()
                 hasCompletedInitialExperience = false
             }
         } message: {
@@ -221,7 +200,7 @@ struct SettingsView: View {
                         let didDelete = await authSession.deleteAccount()
                         if didDelete {
                             await MainActor.run {
-                                store.resetLocalAccount()
+                                store.clearLocalSession(removePendingInvite: true)
                                 hasCompletedInitialExperience = false
                             }
                         } else {

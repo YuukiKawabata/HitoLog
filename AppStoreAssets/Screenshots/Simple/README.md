@@ -12,11 +12,5 @@
 - `iPad/`: 2048 × 2732 px
 - `raw/`: シミュレータから撮影した元画面
 
-再生成:
-
-```sh
-./docs/capture-screenshots.sh
-```
-
-アプリのデモデータ、iPhone/iPadの撮影、App Storeパネル生成までをまとめて実行します。
+再撮影時は、本番のレビュー用アカウントでサインインし、実際のFirebaseデータを使用します。
 従来版のスクリーンショットは `AppStoreAssets/Screenshots/` 直下に残しています。

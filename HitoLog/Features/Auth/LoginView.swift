@@ -66,21 +66,11 @@ struct LoginView: View {
                         .frame(height: 52)
                         .clipShape(RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
                         .disabled(isSigningIn)
-
-                        LocalPreviewButton {
-                            analytics.capture("sample_mode_started")
-                            authSession.continueWithLocalPreview()
-                            onContinue()
-                        }
-                    } else {
-                        LocalPreviewButton {
-                            analytics.capture("sample_mode_started")
-                            authSession.continueWithLocalPreview()
-                            onContinue()
-                        }
                     }
 
-                    Text(authSession.isFirebaseAuthAvailable ? "Apple IDでサインインします。まず見るだけならサンプルデータでも確認できます。" : "サンプルデータで機能を確認できます。")
+                    Text(authSession.isFirebaseAuthAvailable
+                        ? "Apple IDでサインインしてください。"
+                        : "現在サインインを利用できません。しばらくしてからもう一度お試しください。")
                         .font(.caption)
                         .foregroundStyle(AppColor.textSecondary)
                         .multilineTextAlignment(.center)
@@ -104,16 +94,5 @@ struct LoginView: View {
         } message: {
             Text(authSession.errorMessage ?? "")
         }
-    }
-}
-
-private struct LocalPreviewButton: View {
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Label("サンプルデータで試す", systemImage: "person.crop.circle.badge.checkmark")
-        }
-        .buttonStyle(SecondaryButtonStyle())
     }
 }

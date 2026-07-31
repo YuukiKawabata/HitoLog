@@ -203,27 +203,6 @@ final class FutureReflectionService: ObservableObject {
         persist()
     }
 
-    func showScreenshotDemoData() {
-        guard ProcessInfo.processInfo.arguments.contains("-HitoLogScreenshotDemo") else { return }
-        let now = Date()
-        reflections = [
-            FutureReflection(
-                id: "demo-delivered-reflection",
-                postID: "demo-post-2",
-                body: "焦らなくていい。今日できた小さなことを、ちゃんと覚えておこう。",
-                createdAt: Calendar.current.date(byAdding: .month, value: -1, to: now) ?? now,
-                deliveryDate: Calendar.current.date(byAdding: .day, value: -1, to: now) ?? now
-            ),
-            FutureReflection(
-                id: "demo-upcoming-reflection",
-                postID: "demo-post-6",
-                body: "今の気持ちを、未来の自分はどう読むだろう。",
-                createdAt: now,
-                deliveryDate: Calendar.current.date(byAdding: .month, value: 1, to: now) ?? now
-            )
-        ]
-    }
-
     private func persist() {
         guard let data = try? JSONEncoder().encode(reflections) else { return }
         UserDefaults.standard.set(data, forKey: storageKey)

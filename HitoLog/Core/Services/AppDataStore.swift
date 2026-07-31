@@ -96,7 +96,6 @@ final class AppDataStore: ObservableObject {
     @Published private(set) var hasMoreTimelinePosts = true
     @Published private(set) var isLoadingTimelinePage = false
     @Published private(set) var isRemoteSyncEnabled = false
-    @Published private(set) var isDemoDataVisible = false
     @Published private(set) var lastSyncErrorMessage: String?
     @Published private(set) var articles: [Article] = []
     @Published private(set) var articleSearchResults: [Article] = []
@@ -106,23 +105,7 @@ final class AppDataStore: ObservableObject {
     @Published private(set) var creatorEarnings: CreatorEarnings = .empty
 
     private let remoteStore: FirebaseDataStore
-    private let initialCurrentUser: AppUser
-    private let initialUsers: [AppUser]
-    private let initialPosts: [Post]
-    private let initialComments: [Comment]
-    private let initialLikedPostIDs: Set<String>
-    private let initialBookmarkedPostIDs: Set<String>
-    private let initialMutedWords: [MutedWord]
-    private let initialTopicRooms: [TopicRoom]
-    private let initialFollowedTopicIDs: Set<String>
-    private let initialFeedControls: [FeedControl]
-    private let initialFollowingUserIDs: Set<String>
-    private let initialFollowerCountsByUserID: [String: Int]
-    private let initialFollowingCountsByUserID: [String: Int]
-    private let initialFollowersByUserID: [String: Set<String>]
-    private let initialFollowingByUserID: [String: Set<String>]
     private var remoteUserID: String?
-    private var currentUserBeforeDemoData: AppUser?
     private var remoteListenerRegistrations: [RemoteListenerRegistration] = []
     private static let pendingInviteCodeKey = "pendingInviteCode"
 
@@ -271,54 +254,67 @@ final class AppDataStore: ObservableObject {
     }
 
     init(remoteStore: FirebaseDataStore = FirebaseDataStore()) {
-        let seed = MockDataStore()
+        let placeholderUser = Self.makePlaceholderUser()
         self.remoteStore = remoteStore
-        self.initialCurrentUser = seed.currentUser
-        self.initialUsers = seed.users
-        self.initialPosts = seed.posts
-        self.initialComments = seed.comments
-        self.initialLikedPostIDs = seed.likedPostIDs
-        self.initialBookmarkedPostIDs = seed.likedPostIDs
-        self.initialMutedWords = []
-        self.initialTopicRooms = Self.topicRooms(from: seed.posts)
-        self.initialFollowedTopicIDs = Set(StarterPackCategory.allCases.prefix(2).map(\.topic))
-        self.initialFeedControls = []
-        self.initialFollowingUserIDs = seed.followingUserIDs
-        self.initialFollowerCountsByUserID = seed.followerCountsByUserID
-        self.initialFollowingCountsByUserID = seed.followingCountsByUserID
-        self.initialFollowersByUserID = seed.followersByUserID
-        self.initialFollowingByUserID = seed.followingByUserID
-        self.currentUser = seed.currentUser
-        self.users = seed.users
-        self.posts = seed.posts
-        self.comments = seed.comments
-        self.likedPostIDs = seed.likedPostIDs
-        self.bookmarkedPostIDs = seed.likedPostIDs
-        self.blockedUserIDs = seed.blockedUserIDs
-        self.mutedUserIDs = seed.mutedUserIDs
+        self.currentUser = placeholderUser
+        self.users = [placeholderUser]
+        self.posts = []
+        self.comments = []
+        self.likedPostIDs = []
+        self.bookmarkedPostIDs = []
+        self.blockedUserIDs = []
+        self.mutedUserIDs = []
         self.mutedWords = []
-        self.topicRooms = initialTopicRooms
-        self.followedTopicIDs = initialFollowedTopicIDs
-        self.feedControls = initialFeedControls
-        self.followingUserIDs = seed.followingUserIDs
-        self.followerCountsByUserID = seed.followerCountsByUserID
-        self.followingCountsByUserID = seed.followingCountsByUserID
-        self.followersByUserID = seed.followersByUserID
-        self.followingByUserID = seed.followingByUserID
-        self.reportHistory = seed.reportHistory
+        self.topicRooms = []
+        self.followedTopicIDs = []
+        self.feedControls = []
+        self.followingUserIDs = []
+        self.followerCountsByUserID = [:]
+        self.followingCountsByUserID = [:]
+        self.followersByUserID = [:]
+        self.followingByUserID = [:]
+        self.reportHistory = []
+    }
+
+    private static func makePlaceholderUser() -> AppUser {
+        let now = Date()
+        return AppUser(
+            id: "local-placeholder",
+            displayName: "",
+            handle: "local_user",
+            bio: "",
+            avatarUrl: nil,
+            appleUserId: nil,
+            humanLevel: 1,
+            humanVerifiedPostRate: 0,
+            createdAt: now,
+            updatedAt: now,
+            isDeleted: false
+        )
     }
 
     func activateRemoteUser(uid: String?, appleUserID: String?, displayName: String?, email: String?) async {
+        let previousRemoteUserID = remoteUserID
         stopRemoteListeners()
         remoteUserID = uid
 
-        guard let uid, remoteStore.isAvailable else {
+        guard let uid else {
+            clearLocalSession()
+            return
+        }
+
+        guard remoteStore.isAvailable else {
             isRemoteSyncEnabled = false
             return
         }
 
         isRemoteSyncEnabled = true
         lastSyncErrorMessage = nil
+
+        if previousRemoteUserID != uid || currentUser.id != uid {
+            adoptSignedInUser(uid: uid, appleUserID: appleUserID, displayName: displayName)
+            clearSessionDataForRemoteActivation()
+        }
 
         do {
             if let remoteUser = try await remoteStore.loadUser(userID: uid), !remoteUser.isDeleted {
@@ -343,9 +339,26 @@ final class AppDataStore: ObservableObject {
         lastSyncErrorMessage = nil
     }
 
+    func clearLocalSession(removePendingInvite: Bool = false) {
+        deactivateRemoteUser()
+        currentUser = Self.makePlaceholderUser()
+        clearSessionDataForRemoteActivation()
+
+        if removePendingInvite {
+            pendingInviteCode = nil
+            UserDefaults.standard.removeObject(forKey: Self.pendingInviteCodeKey)
+        }
+    }
+
     func user(for id: String) -> AppUser? {
         users.first { $0.id == id }
     }
+
+    #if DEBUG
+    func installUsersForTesting(_ additionalUsers: [AppUser]) {
+        users = mergeCurrentUser(into: additionalUsers)
+    }
+    #endif
 
     func post(for id: String) -> Post? {
         posts.first {
@@ -439,7 +452,6 @@ final class AppDataStore: ObservableObject {
             "character_count": trimmedBody.count
         ])
 
-        guard !postID.hasPrefix("demo-") else { return }
         runRemoteWrite {
             try await self.remoteStore.updatePostBody(postID: postID, body: trimmedBody)
         }
@@ -463,7 +475,6 @@ final class AppDataStore: ObservableObject {
             "share_type": deletedPost.shareType.rawValue
         ])
 
-        guard !postID.hasPrefix("demo-") else { return }
         runRemoteWrite {
             try await self.remoteStore.deletePost(postID: postID)
         }
@@ -520,7 +531,6 @@ final class AppDataStore: ObservableObject {
             "author_id": sourcePost.userId
         ])
 
-        guard !sourcePost.id.hasPrefix("demo-") else { return }
         runRemoteWrite {
             try await self.remoteStore.savePost(repost)
         }
@@ -583,7 +593,6 @@ final class AppDataStore: ObservableObject {
             "human_score": score
         ])
 
-        guard !sourcePost.id.hasPrefix("demo-") else { return }
         runRemoteWrite {
             try await self.remoteStore.savePost(quote)
         }
@@ -596,37 +605,48 @@ final class AppDataStore: ObservableObject {
         avatarUrl: String? = nil,
         website: String? = nil,
         location: String? = nil,
-        occupation: String? = nil
+        occupation: String? = nil,
+        persistenceOverride: ((AppUser) async throws -> Void)? = nil
     ) async throws {
         func normalized(_ value: String?) -> String? {
             let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
             return (trimmed?.isEmpty ?? true) ? nil : trimmed
         }
 
-        currentUser.displayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        currentUser.handle = handle.trimmingCharacters(in: .whitespacesAndNewlines)
-        currentUser.bio = bio.trimmingCharacters(in: .whitespacesAndNewlines)
-        currentUser.avatarUrl = avatarUrl
-        currentUser.website = normalized(website)
-        currentUser.location = normalized(location)
-        currentUser.occupation = normalized(occupation)
-        currentUser.updatedAt = Date()
+        var updatedUser = currentUser
+        updatedUser.displayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        updatedUser.handle = handle.trimmingCharacters(in: .whitespacesAndNewlines)
+        updatedUser.bio = bio.trimmingCharacters(in: .whitespacesAndNewlines)
+        updatedUser.avatarUrl = avatarUrl
+        updatedUser.website = normalized(website)
+        updatedUser.location = normalized(location)
+        updatedUser.occupation = normalized(occupation)
+        updatedUser.updatedAt = Date()
 
-        if let index = users.firstIndex(where: { $0.id == currentUser.id }) {
-            users[index] = currentUser
-        } else {
-            users.insert(currentUser, at: 0)
+        if let persistenceOverride {
+            do {
+                try await persistenceOverride(updatedUser)
+                lastSyncErrorMessage = nil
+            } catch {
+                recordRemoteError(error)
+                throw error
+            }
+        } else if isRemoteSyncEnabled {
+            do {
+                // 通信成功が確認できるまで、画面が参照するローカル状態は変更しない。
+                try await remoteStore.upsertUser(updatedUser, email: nil)
+                lastSyncErrorMessage = nil
+            } catch {
+                recordRemoteError(error)
+                throw error
+            }
         }
 
-        let user = currentUser
-        guard isRemoteSyncEnabled else { return }
-
-        do {
-            try await remoteStore.upsertUser(user, email: nil)
-            lastSyncErrorMessage = nil
-        } catch {
-            recordRemoteError(error)
-            throw error
+        currentUser = updatedUser
+        if let index = users.firstIndex(where: { $0.id == updatedUser.id }) {
+            users[index] = updatedUser
+        } else {
+            users.insert(updatedUser, at: 0)
         }
     }
 
@@ -652,7 +672,6 @@ final class AppDataStore: ObservableObject {
             AppReviewService.shared.recordPositiveMoment(.postLiked)
         }
 
-        guard !postID.hasPrefix("demo-") else { return }
         let userID = currentUser.id
         runRemoteWrite {
             try await self.remoteStore.setLike(postID: postID, userID: userID, isLiked: isLiked)
@@ -694,7 +713,6 @@ final class AppDataStore: ObservableObject {
             AppReviewService.shared.recordPositiveMoment(.postLiked)
         }
 
-        guard !postID.hasPrefix("demo-") else { return }
         let userID = currentUser.id
         runRemoteWrite {
             try await self.remoteStore.setReaction(postID: postID, userID: userID, kind: resolved)
@@ -726,7 +744,6 @@ final class AppDataStore: ObservableObject {
             AppReviewService.shared.recordPositiveMoment(.postBookmarked)
         }
 
-        guard !postID.hasPrefix("demo-") else { return }
         let userID = currentUser.id
         runRemoteWrite {
             try await self.remoteStore.setBookmark(postID: postID, userID: userID, isBookmarked: isBookmarked)
@@ -774,7 +791,6 @@ final class AppDataStore: ObservableObject {
         ])
         AppReviewService.shared.recordPositiveMoment(.commentCreated)
 
-        guard !postID.hasPrefix("demo-") else { return }
         runRemoteWrite {
             try await self.remoteStore.addComment(comment)
         }
@@ -794,7 +810,6 @@ final class AppDataStore: ObservableObject {
             "comment_id": commentID
         ])
 
-        guard !commentID.hasPrefix("demo-") else { return }
         runRemoteWrite {
             try await self.remoteStore.deleteComment(commentID: commentID)
         }
@@ -818,7 +833,6 @@ final class AppDataStore: ObservableObject {
             "comment_id": commentID
         ])
 
-        guard !commentID.hasPrefix("demo-") else { return }
         runRemoteWrite {
             try await self.remoteStore.hideComment(commentID: commentID, reason: "post_owner_hidden")
         }
@@ -833,11 +847,17 @@ final class AppDataStore: ObservableObject {
     }
 
     func followerCount(for userID: String) -> Int {
-        followerCountsByUserID[userID] ?? user(for: userID)?.followerCount ?? 0
+        if userID == currentUser.id {
+            return followersByUserID[userID, default: []].count
+        }
+        return followersByUserID[userID]?.count ?? user(for: userID)?.followerCount ?? 0
     }
 
     func followingCount(for userID: String) -> Int {
-        followingCountsByUserID[userID] ?? user(for: userID)?.followingCount ?? 0
+        if userID == currentUser.id {
+            return followingByUserID[userID, default: []].count
+        }
+        return followingByUserID[userID]?.count ?? user(for: userID)?.followingCount ?? 0
     }
 
     func followers(for userID: String) -> [AppUser] {
@@ -870,7 +890,6 @@ final class AppDataStore: ObservableObject {
             AppReviewService.shared.recordPositiveMoment(.userFollowed)
         }
 
-        guard !shouldSkipRemoteFollowWrite(for: userID) else { return }
         let currentUserID = currentUser.id
         runRemoteWrite {
             try await self.remoteStore.setFollow(
@@ -1550,7 +1569,7 @@ final class AppDataStore: ObservableObject {
     }
 
     func loadComments(for postID: String) async {
-        guard isRemoteSyncEnabled, !postID.hasPrefix("demo-") else { return }
+        guard isRemoteSyncEnabled else { return }
 
         do {
             let remoteComments = try await remoteStore.loadComments(postID: postID)
@@ -1900,44 +1919,6 @@ final class AppDataStore: ObservableObject {
         }
     }
 
-    func resetLocalAccount() {
-        currentUser = initialCurrentUser
-        users = initialUsers
-        posts = initialPosts
-        comments = initialComments
-        likedPostIDs = initialLikedPostIDs
-        bookmarkedPostIDs = initialBookmarkedPostIDs
-        reactionByPostID = [:]
-        blockedUserIDs = []
-        mutedUserIDs = []
-        mutedWords = initialMutedWords
-        topicRooms = initialTopicRooms
-        followedTopicIDs = initialFollowedTopicIDs
-        feedControls = initialFeedControls
-        followingUserIDs = initialFollowingUserIDs
-        followerCountsByUserID = initialFollowerCountsByUserID
-        followingCountsByUserID = initialFollowingCountsByUserID
-        followersByUserID = initialFollowersByUserID
-        followingByUserID = initialFollowingByUserID
-        reportHistory = []
-        feedbackHistory = []
-        notifications = []
-        adminReports = []
-        searchResults = []
-        topicSearchResults = []
-        topicRoomSearchResults = []
-        postSearchResults = []
-        inviteCodes = []
-        pendingInviteCode = nil
-        creatorEarnings = .empty
-        UserDefaults.standard.removeObject(forKey: Self.pendingInviteCodeKey)
-        hasMoreTimelinePosts = true
-        isLoadingTimelinePage = false
-        isDemoDataVisible = false
-        currentUserBeforeDemoData = nil
-        deactivateRemoteUser()
-    }
-
     func deleteCurrentAccountData() async throws {
         let userID = currentUser.id
 
@@ -1971,7 +1952,7 @@ final class AppDataStore: ObservableObject {
         blockedUserIDs.removeAll()
         mutedUserIDs.removeAll()
         mutedWords.removeAll()
-        topicRooms = initialTopicRooms
+        topicRooms.removeAll()
         followedTopicIDs.removeAll()
         feedControls.removeAll()
         followingUserIDs.removeAll()
@@ -1988,58 +1969,6 @@ final class AppDataStore: ObservableObject {
         postSearchResults.removeAll()
         hasMoreTimelinePosts = false
         isLoadingTimelinePage = false
-    }
-
-    func showScreenshotDemoData() {
-        if !isDemoDataVisible {
-            currentUserBeforeDemoData = currentUser
-        }
-        isDemoDataVisible = true
-        applyScreenshotDemoData()
-    }
-
-    func hideScreenshotDemoData() async {
-        isDemoDataVisible = false
-        restoreCurrentUserAfterDemoData()
-
-        if isRemoteSyncEnabled {
-            do {
-                try await reloadRemoteSnapshot()
-            } catch {
-                removeLocalDemoData()
-                recordRemoteError(error)
-            }
-        } else {
-            currentUser = initialCurrentUser
-            users = initialUsers
-            posts = initialPosts
-            comments = initialComments
-            articles = articles.filter { !$0.id.hasPrefix("demo-") }
-            unlockedArticleIDs = unlockedArticleIDs.filter { !$0.hasPrefix("demo-") }
-            likedPostIDs = initialLikedPostIDs
-            bookmarkedPostIDs = initialBookmarkedPostIDs
-            blockedUserIDs = []
-            mutedUserIDs = []
-            mutedWords = initialMutedWords
-            topicRooms = initialTopicRooms
-            followedTopicIDs = initialFollowedTopicIDs
-            feedControls = initialFeedControls
-            followingUserIDs = initialFollowingUserIDs
-            followerCountsByUserID = initialFollowerCountsByUserID
-            followingCountsByUserID = initialFollowingCountsByUserID
-            followersByUserID = initialFollowersByUserID
-            followingByUserID = initialFollowingByUserID
-            reportHistory = []
-            feedbackHistory = []
-            notifications = []
-            adminReports = []
-            searchResults = []
-            topicSearchResults = []
-            topicRoomSearchResults = []
-            postSearchResults = []
-            hasMoreTimelinePosts = true
-            isLoadingTimelinePage = false
-        }
     }
 
     func refresh() async {
@@ -2137,9 +2066,6 @@ final class AppDataStore: ObservableObject {
         hasMoreTimelinePosts = page.hasMore
         refilterSearchResults()
         lastSyncErrorMessage = nil
-        if isDemoDataVisible {
-            applyScreenshotDemoData()
-        }
     }
 
     private func reloadRemoteSnapshot() async throws {
@@ -2176,72 +2102,8 @@ final class AppDataStore: ObservableObject {
         } else {
             adminReports = []
         }
-        if isDemoDataVisible {
-            applyScreenshotDemoData()
-        }
         lastSyncErrorMessage = nil
         Task { await loadUnlockedArticles() }
-    }
-
-    private func applyScreenshotDemoData() {
-        let seed = MockDataStore()
-        let seedCurrentUserID = seed.currentUser.id
-        let activeCurrentUserID = currentUser.id
-        let seedPostIDs = Set(seed.posts.map(\.id))
-        let seedCommentIDs = Set(seed.comments.map(\.id))
-        let seedArticleIDs = Set(seed.articles.map(\.id))
-        let demoUsers = seed.users
-            .filter { $0.id != seedCurrentUserID && $0.id != currentUser.id }
-
-        currentUser = seed.currentUser.demoProfileCopy(
-            currentUserID: activeCurrentUserID,
-            appleUserID: currentUser.appleUserId
-        )
-        users = mergeCurrentUser(into: uniqueUsers(users + demoUsers))
-        posts = uniquePosts(posts.filter { !$0.id.hasPrefix("demo-") && !seedPostIDs.contains($0.id) } + seed.posts.map { post in
-            post.demoCopy(currentUserID: activeCurrentUserID, seedCurrentUserID: seedCurrentUserID)
-        })
-        comments = uniqueComments(comments.filter { !$0.id.hasPrefix("demo-") && !seedCommentIDs.contains($0.id) } + seed.comments.map { comment in
-            comment.demoCopy(currentUserID: activeCurrentUserID, seedCurrentUserID: seedCurrentUserID)
-        })
-        articles = uniqueArticles(articles.filter { !$0.id.hasPrefix("demo-") && !seedArticleIDs.contains($0.id) } + seed.articles.map { article in
-            article.demoCopy(currentUserID: activeCurrentUserID, seedCurrentUserID: seedCurrentUserID)
-        })
-        unlockedArticleIDs = Set(unlockedArticleIDs.filter { !$0.hasPrefix("demo-") })
-        if MonetizationPolicy.isEnabled {
-            // 購入済み記事の閲覧画面もスクショできるよう、有料デモ記事を1本解錠しておく
-            unlockedArticleIDs.insert("demo-article-1")
-        }
-        likedPostIDs = Set(likedPostIDs.filter { !$0.hasPrefix("demo-") })
-        likedPostIDs.formUnion(seed.likedPostIDs.map { "demo-\($0)" })
-        bookmarkedPostIDs = Set(bookmarkedPostIDs.filter { !$0.hasPrefix("demo-") })
-        bookmarkedPostIDs.formUnion(seed.likedPostIDs.map { "demo-\($0)" })
-        blockedUserIDs.subtract(demoUsers.map(\.id))
-        mutedUserIDs.subtract(demoUsers.map(\.id))
-        mergeDemoFollows(from: seed, activeCurrentUserID: activeCurrentUserID, seedCurrentUserID: seedCurrentUserID)
-        refreshLocalTopicRoomsFromPosts()
-    }
-
-    private func restoreCurrentUserAfterDemoData() {
-        if let currentUserBeforeDemoData {
-            currentUser = currentUserBeforeDemoData
-            self.currentUserBeforeDemoData = nil
-        }
-    }
-
-    private func removeLocalDemoData() {
-        let demoUserIDs = Set(MockDataStore().users.map(\.id))
-        users = mergeCurrentUser(into: users.filter { !demoUserIDs.contains($0.id) })
-        posts = posts.filter { !$0.id.hasPrefix("demo-") }
-        comments = comments.filter { !$0.id.hasPrefix("demo-") }
-        articles = articles.filter { !$0.id.hasPrefix("demo-") }
-        unlockedArticleIDs = unlockedArticleIDs.filter { !$0.hasPrefix("demo-") }
-        likedPostIDs = Set(likedPostIDs.filter { !$0.hasPrefix("demo-") })
-        bookmarkedPostIDs = Set(bookmarkedPostIDs.filter { !$0.hasPrefix("demo-") })
-        blockedUserIDs.subtract(demoUserIDs)
-        mutedUserIDs.subtract(demoUserIDs)
-        removeFollows(involving: demoUserIDs)
-        refreshLocalTopicRoomsFromPosts()
     }
 
     private func ensureTopicRoomExists(topic: String) {
@@ -2366,12 +2228,6 @@ final class AppDataStore: ObservableObject {
     private func removeFollowLocally(followerID: String, followeeID: String) {
         followingByUserID[followerID]?.remove(followeeID)
         followersByUserID[followeeID]?.remove(followerID)
-        if followingByUserID[followerID]?.isEmpty == true {
-            followingByUserID[followerID] = nil
-        }
-        if followersByUserID[followeeID]?.isEmpty == true {
-            followersByUserID[followeeID] = nil
-        }
         if followerID == currentUser.id {
             followingUserIDs.remove(followeeID)
         }
@@ -2423,24 +2279,6 @@ final class AppDataStore: ObservableObject {
     private func adjustCommentCount(postID: String, amount: Int) {
         guard let index = posts.firstIndex(where: { $0.id == postID }) else { return }
         posts[index].commentCount = max(posts[index].commentCount + amount, 0)
-    }
-
-    private func mergeDemoFollows(from seed: MockDataStore, activeCurrentUserID: String, seedCurrentUserID: String) {
-        let knownUserIDs = Set(users.map(\.id))
-        for (followerID, followeeIDs) in seed.followingByUserID {
-            let mappedFollowerID = followerID == seedCurrentUserID ? activeCurrentUserID : followerID
-            guard knownUserIDs.contains(mappedFollowerID) else { continue }
-
-            for followeeID in followeeIDs {
-                let mappedFolloweeID = followeeID == seedCurrentUserID ? activeCurrentUserID : followeeID
-                guard knownUserIDs.contains(mappedFolloweeID) else { continue }
-                addFollowLocally(followerID: mappedFollowerID, followeeID: mappedFolloweeID)
-            }
-        }
-    }
-
-    private func shouldSkipRemoteFollowWrite(for userID: String) -> Bool {
-        isDemoDataVisible && MockDataStore().users.contains { $0.id == userID }
     }
 
     private var canCurrentUserCreateContent: Bool {
@@ -2607,8 +2445,12 @@ final class AppDataStore: ObservableObject {
 
     private func applyUserCountsFromFollowState(userID: String) {
         guard let index = users.firstIndex(where: { $0.id == userID }) else { return }
-        users[index].followerCount = followerCountsByUserID[userID, default: users[index].followerCount]
-        users[index].followingCount = followingCountsByUserID[userID, default: users[index].followingCount]
+        if userID == currentUser.id || followersByUserID[userID] != nil {
+            users[index].followerCount = followersByUserID[userID, default: []].count
+        }
+        if userID == currentUser.id || followingByUserID[userID] != nil {
+            users[index].followingCount = followingByUserID[userID, default: []].count
+        }
         if currentUser.id == userID {
             currentUser = users[index]
         }
@@ -2665,25 +2507,58 @@ final class AppDataStore: ObservableObject {
     }
 
     private func adoptSignedInUser(uid: String, appleUserID: String?, displayName: String?) {
-        guard currentUser.id != uid else { return }
-
         let now = Date()
-        let name = nonEmpty(displayName) ?? currentUser.displayName
-        let handle = ValidationUtil.isValidHandle(currentUser.handle) ? currentUser.handle : handleCandidate(from: name, fallback: uid)
+        let name = nonEmpty(displayName) ?? "新しいユーザー".localized
+        let handle = handleCandidate(from: name, fallback: uid)
         currentUser = AppUser(
             id: uid,
             displayName: name,
             handle: handle,
-            bio: currentUser.bio,
-            avatarUrl: currentUser.avatarUrl,
+            bio: "",
+            avatarUrl: nil,
             appleUserId: appleUserID,
-            humanLevel: currentUser.humanLevel,
-            humanVerifiedPostRate: currentUser.humanVerifiedPostRate,
+            humanLevel: 1,
+            humanVerifiedPostRate: 0,
             createdAt: now,
             updatedAt: now,
             isDeleted: false
         )
-        users = mergeCurrentUser(into: users.filter { $0.id != initialCurrentUser.id })
+        users = [currentUser]
+    }
+
+    private func clearSessionDataForRemoteActivation() {
+        users = [currentUser]
+        posts = []
+        comments = []
+        likedPostIDs = []
+        bookmarkedPostIDs = []
+        reactionByPostID = [:]
+        blockedUserIDs = []
+        mutedUserIDs = []
+        mutedWords = []
+        topicRooms = []
+        followedTopicIDs = []
+        feedControls = []
+        followingUserIDs = []
+        followerCountsByUserID = [:]
+        followingCountsByUserID = [:]
+        followersByUserID = [:]
+        followingByUserID = [:]
+        reportHistory = []
+        feedbackHistory = []
+        notifications = []
+        adminReports = []
+        searchResults = []
+        topicSearchResults = []
+        topicRoomSearchResults = []
+        postSearchResults = []
+        articles = []
+        articleSearchResults = []
+        unlockedArticleIDs = []
+        inviteCodes = []
+        creatorEarnings = .empty
+        hasMoreTimelinePosts = true
+        isLoadingTimelinePage = false
     }
 
     private func adoptRemoteUser(_ remoteUser: AppUser, appleUserID: String?) {
@@ -2693,7 +2568,7 @@ final class AppDataStore: ObservableObject {
             currentUser.appleUserId = appleUserID
         }
 
-        users = mergeCurrentUser(into: users.filter { $0.id != initialCurrentUser.id })
+        users = [currentUser]
     }
 
     private func mergeCurrentUser(into remoteUsers: [AppUser]) -> [AppUser] {
@@ -2745,31 +2620,6 @@ final class AppDataStore: ObservableObject {
     }
 }
 
-private extension AppUser {
-    func demoProfileCopy(currentUserID: String, appleUserID: String?) -> AppUser {
-        AppUser(
-            id: currentUserID,
-            displayName: displayName,
-            handle: handle,
-            bio: bio,
-            avatarUrl: avatarUrl,
-            appleUserId: appleUserID,
-            humanLevel: humanLevel,
-            humanVerifiedPostRate: humanVerifiedPostRate,
-            createdAt: createdAt,
-            updatedAt: updatedAt,
-            isDeleted: isDeleted,
-            isAdmin: isAdmin,
-            isSuspended: isSuspended,
-            followerCount: followerCount,
-            followingCount: followingCount,
-            website: website,
-            location: location,
-            occupation: occupation
-        )
-    }
-}
-
 private extension Post {
     func replacingBody(_ body: String) -> Post {
         Post(
@@ -2797,87 +2647,6 @@ private extension Post {
             quoteCount: quoteCount,
             createdAt: createdAt,
             updatedAt: Date(),
-            isDeleted: isDeleted,
-            moderationStatus: moderationStatus,
-            hiddenReason: hiddenReason,
-            hiddenAt: hiddenAt
-        )
-    }
-
-    func demoCopy(currentUserID: String, seedCurrentUserID: String) -> Post {
-        Post(
-            id: "demo-\(id)",
-            userId: userId == seedCurrentUserID ? currentUserID : userId,
-            body: body,
-            topics: topics,
-            searchTokens: searchTokens,
-            mediaItems: mediaItems,
-            shareType: shareType,
-            sourcePostID: sourcePostID.map { "demo-\($0)" },
-            sourceUserID: sourceUserID == seedCurrentUserID ? currentUserID : sourceUserID,
-            commentPermission: commentPermission,
-            humanScore: humanScore,
-            humanBadge: humanBadge,
-            inputDurationMs: inputDurationMs,
-            characterCount: characterCount,
-            editCount: editCount,
-            deleteCount: deleteCount,
-            suspiciousBulkInputCount: suspiciousBulkInputCount,
-            appCheckVerified: appCheckVerified,
-            likeCount: likeCount,
-            commentCount: commentCount,
-            repostCount: repostCount,
-            quoteCount: quoteCount,
-            createdAt: createdAt,
-            updatedAt: updatedAt,
-            isDeleted: isDeleted,
-            moderationStatus: moderationStatus,
-            hiddenReason: hiddenReason,
-            hiddenAt: hiddenAt
-        )
-    }
-}
-
-private extension Article {
-    func demoCopy(currentUserID: String, seedCurrentUserID: String) -> Article {
-        Article(
-            id: "demo-\(id)",
-            userID: userID == seedCurrentUserID ? currentUserID : userID,
-            title: title,
-            freePreviewBody: freePreviewBody,
-            status: status,
-            price: price,
-            topics: topics,
-            searchTokens: searchTokens,
-            commentPermission: commentPermission,
-            humanBadge: humanBadge,
-            humanScore: humanScore,
-            inputDurationMs: inputDurationMs,
-            editCount: editCount,
-            deleteCount: deleteCount,
-            commentCount: commentCount,
-            purchaseCount: purchaseCount,
-            bookmarkCount: bookmarkCount,
-            createdAt: createdAt,
-            updatedAt: updatedAt,
-            isDeleted: isDeleted,
-            moderationStatus: moderationStatus,
-            hiddenReason: hiddenReason,
-            hiddenAt: hiddenAt
-        )
-    }
-}
-
-private extension Comment {
-    func demoCopy(currentUserID: String, seedCurrentUserID: String) -> Comment {
-        Comment(
-            id: "demo-\(id)",
-            postId: "demo-\(postId)",
-            userId: userId == seedCurrentUserID ? currentUserID : userId,
-            body: body,
-            humanScore: humanScore,
-            createdAt: createdAt,
-            updatedAt: updatedAt,
             isDeleted: isDeleted,
             moderationStatus: moderationStatus,
             hiddenReason: hiddenReason,

@@ -68,14 +68,6 @@ final class AuthSessionStore: NSObject, ObservableObject {
         }
     }
 
-    func continueWithLocalPreview() {
-        currentUserID = "user-nagi"
-        appleUserID = nil
-        displayName = "Nagi"
-        email = nil
-        state = .ready
-    }
-
     func signOut() {
         #if canImport(FirebaseAuth)
         if FirebaseBootstrap.isConfigured {

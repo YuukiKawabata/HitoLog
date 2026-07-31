@@ -28,38 +28,28 @@ struct HitoLogApp: App {
                 .environmentObject(analytics)
                 .environmentObject(appReviewService)
                 .task {
-                    let isScreenshotDemoMode = isScreenshotDemoLaunch
-                    if isScreenshotDemoMode {
-                        hasCompletedInitialExperience = true
-                        authSession.continueWithLocalPreview()
-                    } else {
-                        authSession.start()
-                    }
-
+                    authSession.start()
                     appDelegate.installFirebaseMessagingDelegate()
                     await store.activateRemoteUser(
-                        uid: isScreenshotDemoMode ? nil : authSession.currentUserID,
-                        appleUserID: isScreenshotDemoMode ? nil : authSession.appleUserID,
+                        uid: authSession.currentUserID,
+                        appleUserID: authSession.appleUserID,
                         displayName: authSession.displayName,
-                        email: isScreenshotDemoMode ? nil : authSession.email
+                        email: authSession.email
                     )
                     futureReflectionService.activate(userID: store.currentUser.id)
-                    if isScreenshotDemoMode {
-                        store.showScreenshotDemoData()
-                        futureReflectionService.showScreenshotDemoData()
-                    }
-                    await pushService.configure(userID: isScreenshotDemoMode ? nil : authSession.currentUserID)
-                    if !isScreenshotDemoMode {
-                        appReviewService.recordSession()
+                    await pushService.configure(userID: authSession.currentUserID)
+                    appReviewService.recordSession()
+                    if authSession.currentUserID != nil {
                         analytics.identify(user: store.currentUser, email: authSession.email)
-                        analytics.capture("app_ready", properties: [
-                            "remote_sync_enabled": store.isRemoteSyncEnabled
-                        ])
+                    } else {
+                        analytics.resetIdentity()
                     }
+                    analytics.capture("app_ready", properties: [
+                        "remote_sync_enabled": store.isRemoteSyncEnabled
+                    ])
                 }
                 .onChange(of: authSession.currentUserID) { _, userID in
                     Task {
-                        guard !isScreenshotDemoLaunch else { return }
                         await store.activateRemoteUser(
                             uid: userID,
                             appleUserID: authSession.appleUserID,
@@ -85,13 +75,6 @@ struct HitoLogApp: App {
         }
     }
 
-    private var isScreenshotDemoLaunch: Bool {
-        #if DEBUG
-        ProcessInfo.processInfo.arguments.contains("-HitoLogScreenshotDemo")
-        #else
-        false
-        #endif
-    }
 }
 
 private struct RootView: View {

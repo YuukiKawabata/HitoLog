@@ -15,6 +15,14 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 
 ## iOS
 
+### ios latest_build
+
+```sh
+[bundle exec] fastlane ios latest_build
+```
+
+Show the latest TestFlight build number for version 1.2
+
 ### ios beta
 
 ```sh
@@ -30,14 +38,6 @@ Build and upload HitoLog to TestFlight
 ```
 
 Upload the prepared App Store screenshots for version 1.2
-
-### ios release_export_compliance
-
-```sh
-[bundle exec] fastlane ios release_export_compliance
-```
-
-Mark App Store build 8 as not using non-exempt encryption
 
 ----
 

@@ -6,8 +6,6 @@ HitoLog is a social posting app focused on writing text directly in the app. The
 ## Sign-In
 Use Sign in with Apple. Firebase Auth stores the authenticated user ID and profile document.
 
-If the reviewer needs preloaded content to verify other users' posts, tap "Try sample data" / "サンプルデータで試す" on the login screen. This starts a local demonstration mode with fictional users, posts, comments, topic rooms, and profile content. Demo-mode changes stay on the device and are not written to Firebase.
-
 ## Firebase Data
 - `users/{uid}`: profile, Apple user ID, notification preference.
 - `posts/{postID}`: post body, author ID, human score signals, like/comment counts.
@@ -21,7 +19,7 @@ If the reviewer needs preloaded content to verify other users' posts, tap "Try s
 The app asks for notification permission from Settings. Cloud Functions send FCM notifications for comments and likes. Notifications are skipped for self-actions, notification-off recipients, and blocked or muted actor relationships.
 
 ## Reviewer Path
-1. Sign in with Apple, or tap "Try sample data" / "サンプルデータで試す" to verify the full posting and timeline flow with preloaded fictional content.
+1. Sign in with Apple using the production review account.
 2. Complete onboarding.
 3. Create a post from the Post / 投稿 tab.
 4. Open a post and add a comment.
