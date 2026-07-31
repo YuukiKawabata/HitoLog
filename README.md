@@ -8,7 +8,7 @@ HitoLog is an iOS native SNS focused on posts that are typed in the app instead 
 
 The initial project follows the Obsidian spec:
 
-`個人/開発/Mobile/Hitolog/hitolog_spec_design_v3.md`
+`個人/開発/モバイル/HitoLog/hitolog_spec_design_v3.md`
 
 ## Stack
 
@@ -54,6 +54,6 @@ GitHub Pages files live in `docs/`.
 
 Recommended App Store Connect URLs after enabling GitHub Pages from the `docs` folder:
 
-- Support URL: `https://<github-user>.github.io/<repo-name>/support/`
-- Privacy Policy URL: `https://<github-user>.github.io/<repo-name>/privacy/`
-- Terms URL: `https://<github-user>.github.io/<repo-name>/terms/`
+- Support URL: `https://yuukikawabata.github.io/HitoLog/support/`
+- Privacy Policy URL: `https://yuukikawabata.github.io/HitoLog/privacy/`
+- Terms URL: `https://yuukikawabata.github.io/HitoLog/terms/`

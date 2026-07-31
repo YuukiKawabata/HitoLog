@@ -1,74 +1,79 @@
 import SwiftUI
 
 struct OnboardingView: View {
-    @EnvironmentObject private var store: AppDataStore
+    @EnvironmentObject private var analytics: AnalyticsService
     let onFinish: () -> Void
-    @State private var selection = 0
-    @State private var selectedTopics = Set(StarterPackCategory.allCases.map(\.topic).prefix(2))
+    @State private var didTrackAppearance = false
 
     init(onFinish: @escaping () -> Void = {}) {
         self.onFinish = onFinish
     }
 
     var body: some View {
-        VStack(spacing: AppSpacing.lg) {
-            TabView(selection: $selection) {
-                OnboardingPage(
-                    icon: nil,
-                    kicker: "First Note",
-                    title: "自分の言葉で書く",
-                    text: "HitoLogでは、投稿欄で入力した言葉を大切にします。",
-                    detail: "貼り付けではなく、その場で考えながら書く体験を中心にします。"
-                )
-                .tag(0)
+        VStack(spacing: AppSpacing.xl) {
+            Spacer()
 
-                OnboardingPage(
-                    icon: "doc.on.clipboard",
-                    kicker: "No Paste",
-                    title: "ペーストできない投稿欄",
-                    text: "投稿作成ではコピー＆ペーストを使えません。",
-                    detail: "音声入力や通常の編集は残しつつ、量産投稿を入りにくくします。"
-                )
-                .tag(1)
+            BrandIconView(size: 84, showsShadow: false)
 
-                OnboardingPage(
-                    icon: "checkmark.seal",
-                    kicker: "Human Check",
-                    title: "本人入力バッジ",
-                    text: "入力時間、編集、削除の流れからHuman Checkを行います。",
-                    detail: "点数で人を評価するのではなく、読む人に小さな信頼感を渡します。"
-                )
-                .tag(2)
+            VStack(spacing: AppSpacing.sm) {
+                Text("1日1つ、自分の言葉を残す。")
+                    .font(AppFont.title)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(AppColor.textPrimary)
 
-                OnboardingTopicPage(selectedTopics: $selectedTopics)
-                    .tag(3)
+                Text("日記ほど構えず、SNSほど飾らず。\n今日のことを、そのまま書ける場所です。")
+                    .font(.body)
+                    .foregroundStyle(AppColor.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .tabViewStyle(.page(indexDisplayMode: .always))
 
-            Button(action: next) {
-                Label(selection == 3 ? "はじめる" : "次へ", systemImage: selection == 3 ? "arrow.right.circle.fill" : "arrow.right")
+            VStack(alignment: .leading, spacing: AppSpacing.md) {
+                OnboardingValueRow(systemImage: "pencil", text: "今日のことを、1〜500文字で書く")
+                OnboardingValueRow(systemImage: "checkmark.seal", text: "自分で入力した印を、小さく添える")
+                OnboardingValueRow(systemImage: "bubble.right", text: "誰かの言葉を読み、静かに反応する")
+            }
+            .padding(AppSpacing.lg)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(AppColor.elevatedSurface, in: RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
+
+            Spacer()
+
+            Button(action: finish) {
+                Label("今日の言葉を見にいく", systemImage: "arrow.right")
             }
             .buttonStyle(PrimaryButtonStyle())
-            .padding(.horizontal, AppSpacing.lg)
-            .padding(.bottom, AppSpacing.lg)
         }
+        .padding(AppSpacing.lg)
         .background(PaperCanvas())
         .navigationTitle("HitoLog")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            guard !didTrackAppearance else { return }
+            didTrackAppearance = true
+            analytics.capture("onboarding_started")
+        }
     }
 
-    private func next() {
-        if selection < 3 {
-            withAnimation(.snappy) {
-                selection += 1
-            }
-        } else {
-            for topic in selectedTopics {
-                if !store.isFollowingTopic(topic) {
-                    store.toggleTopicFollow(topic: topic)
-                }
-            }
-            onFinish()
+    private func finish() {
+        analytics.capture("onboarding_completed")
+        onFinish()
+    }
+}
+
+private struct OnboardingValueRow: View {
+    let systemImage: String
+    let text: String
+
+    var body: some View {
+        Label {
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(AppColor.textPrimary)
+        } icon: {
+            Image(systemName: systemImage)
+                .foregroundStyle(AppColor.accent)
+                .frame(width: 24)
         }
     }
 }
@@ -144,7 +149,7 @@ private struct OnboardingTopicPage: View {
                 }
 
             VStack(spacing: AppSpacing.md) {
-                SectionKicker(text: "Topic Rooms", systemImage: "person.3")
+                SectionKicker(text: "ルーム".localized, systemImage: "person.3")
 
                 Text("興味の小部屋を選ぶ")
                     .font(AppFont.title)

@@ -21,7 +21,7 @@ struct TypingMetrics: Equatable, Codable {
 
     var durationText: String {
         let seconds = inputDurationMs / 1000
-        return "\(seconds)秒"
+        return L10n.format("%lld秒", Int64(seconds))
     }
 
     mutating func recordChange(from oldText: String, to newText: String, at date: Date) {

@@ -238,27 +238,27 @@ enum MediaUploadError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .tooManyItems:
-            return "写真と動画は最大\(AppConstants.maxPostMediaItems)件まで添付できます。"
+            return L10n.format("写真と動画は最大%lld件まで添付できます。", Int64(AppConstants.maxPostMediaItems))
         case .unsupportedMedia:
-            return "このメディア形式は投稿できません。"
+            return "このメディア形式は投稿できません。".localized
         case .invalidImage:
-            return "画像を読み込めませんでした。別の写真を選んでください。"
+            return "画像を読み込めませんでした。別の写真を選んでください。".localized
         case .videoTooLarge:
-            return "動画は100MB以下にしてください。"
+            return "動画は100MB以下にしてください。".localized
         case .videoTooLong:
-            return "動画は60秒以内にしてください。"
+            return "動画は60秒以内にしてください。".localized
         case .storageUnavailable:
-            return "メディア保存の準備ができていません。Firebase Storageの設定を確認してください。"
+            return "メディア保存の準備ができていません。Firebase Storageの設定を確認してください。".localized
         case .storageBucketNotReady:
-            return "Firebase Storageがまだセットアップされていません。Storageを有効化してからもう一度お試しください。"
+            return "Firebase Storageがまだセットアップされていません。Storageを有効化してからもう一度お試しください。".localized
         case .storageUnauthenticated:
-            return "ログイン状態を確認できなかったため、写真/動画をアップロードできませんでした。再ログインしてください。"
+            return "ログイン状態を確認できなかったため、写真/動画をアップロードできませんでした。再ログインしてください。".localized
         case .storagePermissionDenied:
-            return "写真/動画を保存する権限がありません。Firebase StorageルールまたはApp Check設定を確認してください。"
+            return "写真/動画を保存する権限がありません。Firebase StorageルールまたはApp Check設定を確認してください。".localized
         case .storageQuotaExceeded:
-            return "Firebase Storageの容量または課金上限に達したため、写真/動画をアップロードできませんでした。"
+            return "Firebase Storageの容量または課金上限に達したため、写真/動画をアップロードできませんでした。".localized
         case .uploadFailed:
-            return "写真/動画のアップロードに失敗しました。通信状態を確認してもう一度お試しください。"
+            return "写真/動画のアップロードに失敗しました。通信状態を確認してもう一度お試しください。".localized
         }
     }
 }

@@ -102,6 +102,147 @@ final class PushNotificationService: NSObject, ObservableObject {
     }
 }
 
+struct FutureReflection: Identifiable, Codable, Equatable {
+    let id: String
+    let postID: String
+    let body: String
+    let createdAt: Date
+    let deliveryDate: Date
+}
+
+@MainActor
+final class FutureReflectionService: ObservableObject {
+    static let shared = FutureReflectionService()
+
+    @Published private(set) var reflections: [FutureReflection]
+
+    private static let storageKeyPrefix = "futureReflections"
+    private static let notificationPrefix = "future-reflection-"
+    private let notificationCenter = UNUserNotificationCenter.current()
+    private var activeUserID = "local"
+
+    private init() {
+        reflections = []
+        load()
+    }
+
+    var deliveredReflections: [FutureReflection] {
+        reflections
+            .filter { $0.deliveryDate <= Date() }
+            .sorted { $0.deliveryDate > $1.deliveryDate }
+    }
+
+    var upcomingReflections: [FutureReflection] {
+        reflections
+            .filter { $0.deliveryDate > Date() }
+            .sorted { $0.deliveryDate < $1.deliveryDate }
+    }
+
+    func activate(userID: String?) {
+        let normalizedUserID = userID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        activeUserID = normalizedUserID.isEmpty ? "local" : normalizedUserID
+        load()
+    }
+
+    @discardableResult
+    func schedule(post: Post, calendar: Calendar = .current) async -> FutureReflection {
+        let deliveryDate = calendar.date(byAdding: .month, value: 1, to: post.createdAt)
+            ?? post.createdAt.addingTimeInterval(30 * 24 * 60 * 60)
+        let reflection = FutureReflection(
+            id: UUID().uuidString,
+            postID: post.id,
+            body: post.body,
+            createdAt: post.createdAt,
+            deliveryDate: deliveryDate
+        )
+
+        reflections.append(reflection)
+        reflections.sort { $0.deliveryDate < $1.deliveryDate }
+        persist()
+
+        let settings = await notificationCenter.notificationSettings()
+        let isAuthorized: Bool
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            isAuthorized = true
+        case .notDetermined:
+            isAuthorized = (try? await notificationCenter.requestAuthorization(options: [.alert, .sound])) ?? false
+        case .denied:
+            isAuthorized = false
+        @unknown default:
+            isAuthorized = false
+        }
+
+        if isAuthorized {
+            let content = UNMutableNotificationContent()
+            content.title = "1か月前の自分から".localized
+            content.body = String(post.body.prefix(90))
+            content.sound = .default
+            content.userInfo = [
+                "hitolog_kind": "future_reflection",
+                "post_id": post.id
+            ]
+
+            let interval = max(deliveryDate.timeIntervalSinceNow, 1)
+            let request = UNNotificationRequest(
+                identifier: Self.notificationPrefix + reflection.id,
+                content: content,
+                trigger: UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
+            )
+            try? await notificationCenter.add(request)
+        }
+
+        return reflection
+    }
+
+    func remove(_ reflection: FutureReflection) {
+        reflections.removeAll { $0.id == reflection.id }
+        notificationCenter.removePendingNotificationRequests(
+            withIdentifiers: [Self.notificationPrefix + reflection.id]
+        )
+        persist()
+    }
+
+    func showScreenshotDemoData() {
+        guard ProcessInfo.processInfo.arguments.contains("-HitoLogScreenshotDemo") else { return }
+        let now = Date()
+        reflections = [
+            FutureReflection(
+                id: "demo-delivered-reflection",
+                postID: "demo-post-2",
+                body: "焦らなくていい。今日できた小さなことを、ちゃんと覚えておこう。",
+                createdAt: Calendar.current.date(byAdding: .month, value: -1, to: now) ?? now,
+                deliveryDate: Calendar.current.date(byAdding: .day, value: -1, to: now) ?? now
+            ),
+            FutureReflection(
+                id: "demo-upcoming-reflection",
+                postID: "demo-post-6",
+                body: "今の気持ちを、未来の自分はどう読むだろう。",
+                createdAt: now,
+                deliveryDate: Calendar.current.date(byAdding: .month, value: 1, to: now) ?? now
+            )
+        ]
+    }
+
+    private func persist() {
+        guard let data = try? JSONEncoder().encode(reflections) else { return }
+        UserDefaults.standard.set(data, forKey: storageKey)
+    }
+
+    private func load() {
+        guard let data = UserDefaults.standard.data(forKey: storageKey),
+              let stored = try? JSONDecoder().decode([FutureReflection].self, from: data) else {
+            reflections = []
+            return
+        }
+        reflections = stored.sorted { $0.deliveryDate < $1.deliveryDate }
+    }
+
+    private var storageKey: String {
+        Self.storageKeyPrefix + "." + activeUserID
+    }
+}
+
 private extension UNAuthorizationStatus {
     var allowsDelivery: Bool {
         switch self {

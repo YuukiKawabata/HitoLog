@@ -61,7 +61,7 @@ struct EarningsSummaryView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.md) {
-            SectionKicker(text: "Earnings", systemImage: "yensign.circle")
+            SectionKicker(text: "収益".localized, systemImage: "yensign.circle")
 
             if !hasRevenue {
                 Text("有料記事を公開すると、ここに収益が表示されます。")
@@ -71,17 +71,17 @@ struct EarningsSummaryView: View {
             } else {
                 HStack(spacing: AppSpacing.sm) {
                     EarningsTile(
-                        title: "購入/支援",
-                        value: "\(totalRevenueEvents)件",
+                        title: "購入/支援".localized,
+                        value: L10n.format("%lld件", Int64(totalRevenueEvents)),
                         systemImage: "cart"
                     )
                     EarningsTile(
-                        title: "売上（税込）",
+                        title: "売上（税込）".localized,
                         value: "¥\(totalGrossYen.formatted())",
                         systemImage: "yensign"
                     )
                     EarningsTile(
-                        title: "振込予定額",
+                        title: "振込予定額".localized,
                         value: "¥\(creatorPayoutYen.formatted())",
                         systemImage: "banknote"
                     )
@@ -89,41 +89,45 @@ struct EarningsSummaryView: View {
 
                 HStack(spacing: AppSpacing.sm) {
                     EarningsTile(
-                        title: "Apple控除",
+                        title: "Apple控除".localized,
                         value: "¥\(estimatedAppleFeeYen.formatted())",
                         systemImage: "apple.logo"
                     )
                     EarningsTile(
-                        title: "HitoLog手数料",
+                        title: "HitoLog手数料".localized,
                         value: "¥\(platformFeeYen.formatted())",
                         systemImage: "building.columns"
                     )
                     EarningsTile(
-                        title: "保留期間",
-                        value: "\(MonetizationPolicy.payoutHoldDays)日",
+                        title: "保留期間".localized,
+                        value: L10n.format("%lld日", Int64(MonetizationPolicy.payoutHoldDays)),
                         systemImage: "calendar.badge.clock"
                     )
                 }
 
                 HStack(spacing: AppSpacing.sm) {
                     EarningsTile(
-                        title: "記事売上",
+                        title: "記事売上".localized,
                         value: "¥\(articleGrossYen.formatted())",
                         systemImage: "doc.text"
                     )
                     EarningsTile(
-                        title: "サブスク月額",
+                        title: "サブスク月額".localized,
                         value: "¥\(creatorEarnings.membershipMonthlyYen.formatted())",
                         systemImage: "person.crop.circle.badge.checkmark"
                     )
                     EarningsTile(
-                        title: "サポート",
+                        title: "サポート".localized,
                         value: "¥\(creatorEarnings.supportTotalYen.formatted())",
                         systemImage: "hands.sparkles"
                     )
                 }
 
-                Text("振込予定額は App Store 控除（推定\(MonetizationPolicy.estimatedAppleCommissionRatePermille / 10)%）後の金額から HitoLog 手数料（\(MonetizationPolicy.platformFeeRatePermille / 10)%）を差し引いた目安です。返金・税・Appleの精算により実際の金額は変動します。")
+                Text(L10n.format(
+                    "振込予定額は App Store 控除（推定%lld%%）後の金額から HitoLog 手数料（%lld%%）を差し引いた目安です。返金・税・Appleの精算により実際の金額は変動します。",
+                    Int64(MonetizationPolicy.estimatedAppleCommissionRatePermille / 10),
+                    Int64(MonetizationPolicy.platformFeeRatePermille / 10)
+                ))
                     .font(.caption2)
                     .foregroundStyle(AppColor.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -144,10 +148,10 @@ struct EarningsSummaryView: View {
                             }
                             Spacer(minLength: 0)
                             VStack(alignment: .trailing, spacing: AppSpacing.xxs) {
-                                Text("\(article.purchaseCount)件")
+                                Text(L10n.format("%lld件", Int64(article.purchaseCount)))
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(AppColor.textPrimary)
-                                Text("¥\((article.purchaseCount * article.price.priceInYen).formatted())")
+                                Text(L10n.format("¥%@", (article.purchaseCount * article.price.priceInYen).formatted()))
                                     .font(.caption2)
                                     .foregroundStyle(AppColor.textSecondary)
                             }

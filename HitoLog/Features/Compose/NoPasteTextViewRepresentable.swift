@@ -159,18 +159,18 @@ private final class FormattingAccessoryView: UIView {
 
     init(textView: NoPasteTextView, showsMedia: Bool) {
         var buttons: [FormatButton] = [
-            FormatButton(symbol: "textformat.size", action: #selector(NoPasteTextView.mdToggleHeading), label: "見出し"),
-            FormatButton(symbol: "bold", action: #selector(NoPasteTextView.mdBold), label: "太字"),
-            FormatButton(symbol: "italic", action: #selector(NoPasteTextView.mdItalic), label: "斜体"),
-            FormatButton(symbol: "chevron.left.forwardslash.chevron.right", action: #selector(NoPasteTextView.mdCode), label: "コード"),
-            FormatButton(symbol: "text.quote", action: #selector(NoPasteTextView.mdToggleQuote), label: "引用"),
-            FormatButton(symbol: "list.bullet", action: #selector(NoPasteTextView.mdToggleBullet), label: "箇条書き"),
-            FormatButton(symbol: "list.number", action: #selector(NoPasteTextView.mdToggleOrdered), label: "番号付きリスト"),
-            FormatButton(symbol: "link", action: #selector(NoPasteTextView.mdInsertLink), label: "リンク"),
-            FormatButton(symbol: "minus", action: #selector(NoPasteTextView.mdInsertRule), label: "区切り線")
+            FormatButton(symbol: "textformat.size", action: #selector(NoPasteTextView.mdToggleHeading), label: "見出し".localized),
+            FormatButton(symbol: "bold", action: #selector(NoPasteTextView.mdBold), label: "太字".localized),
+            FormatButton(symbol: "italic", action: #selector(NoPasteTextView.mdItalic), label: "斜体".localized),
+            FormatButton(symbol: "chevron.left.forwardslash.chevron.right", action: #selector(NoPasteTextView.mdCode), label: "コード".localized),
+            FormatButton(symbol: "text.quote", action: #selector(NoPasteTextView.mdToggleQuote), label: "引用".localized),
+            FormatButton(symbol: "list.bullet", action: #selector(NoPasteTextView.mdToggleBullet), label: "箇条書き".localized),
+            FormatButton(symbol: "list.number", action: #selector(NoPasteTextView.mdToggleOrdered), label: "番号付きリスト".localized),
+            FormatButton(symbol: "link", action: #selector(NoPasteTextView.mdInsertLink), label: "リンク".localized),
+            FormatButton(symbol: "minus", action: #selector(NoPasteTextView.mdInsertRule), label: "区切り線".localized)
         ]
         if showsMedia {
-            buttons.append(FormatButton(symbol: "photo.badge.plus", action: #selector(NoPasteTextView.mdInsertMedia), label: "写真・動画"))
+            buttons.append(FormatButton(symbol: "photo.badge.plus", action: #selector(NoPasteTextView.mdInsertMedia), label: "写真・動画".localized))
         }
 
         super.init(frame: CGRect(x: 0, y: 0, width: 0, height: 48))
@@ -185,7 +185,7 @@ private final class FormattingAccessoryView: UIView {
         addSubview(topBorder)
 
         let doneButton = UIButton(type: .system)
-        doneButton.setTitle("完了", for: .normal)
+        doneButton.setTitle("完了".localized, for: .normal)
         doneButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
         doneButton.tintColor = accent
         doneButton.setTitleColor(accent, for: .normal)
@@ -259,4 +259,3 @@ private final class FormattingAccessoryView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 }
-

@@ -33,15 +33,15 @@ struct ComposeArticleView: View {
 
         var title: String {
             switch self {
-            case .freePreview: return MonetizationPolicy.isEnabled ? "無料プレビュー" : "本文"
-            case .paidBody: return "本文"
+            case .freePreview: return MonetizationPolicy.isEnabled ? "無料プレビュー".localized : "本文".localized
+            case .paidBody: return "本文".localized
             }
         }
 
         var placeholder: String {
             switch self {
-            case .freePreview: return MonetizationPolicy.isEnabled ? "読者に届けたい冒頭の言葉を入力" : "本文を書く"
-            case .paidBody: return "本文（省略可）"
+            case .freePreview: return MonetizationPolicy.isEnabled ? "読者に届けたい冒頭の言葉を入力".localized : "本文を書く".localized
+            case .paidBody: return "本文（省略可）".localized
             }
         }
     }
@@ -90,7 +90,7 @@ struct ComposeArticleView: View {
             }
             .background(PaperCanvas())
             .scrollDismissesKeyboard(.interactively)
-            .navigationTitle(viewModel.isEditing ? "記事を編集" : "記事")
+            .navigationTitle(viewModel.isEditing ? "記事を編集".localized : "記事".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -217,7 +217,7 @@ struct ComposeArticleView: View {
 
     private var headerPanel: some View {
         VStack(alignment: .leading, spacing: AppSpacing.md) {
-            SectionKicker(text: "Article Desk", systemImage: "doc.text")
+            SectionKicker(text: "記事を書く".localized, systemImage: "doc.text")
 
             Text("時間をかけて書いた言葉を残す")
                 .font(AppFont.title)
@@ -236,7 +236,7 @@ struct ComposeArticleView: View {
 
     private var titlePanel: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
-            SectionKicker(text: "Title", systemImage: "textformat")
+            SectionKicker(text: "記事のタイトル".localized, systemImage: "textformat")
 
             TextField("記事のタイトル", text: $viewModel.title, axis: .vertical)
                 .font(AppFont.sectionTitle)
@@ -259,7 +259,7 @@ struct ComposeArticleView: View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
             HStack {
                 SectionKicker(
-                    text: MonetizationPolicy.isEnabled ? "無料プレビュー" : "本文",
+                    text: MonetizationPolicy.isEnabled ? "無料プレビュー".localized : "本文".localized,
                     systemImage: MonetizationPolicy.isEnabled ? "eye" : "doc.text"
                 )
                 Spacer(minLength: AppSpacing.sm)
@@ -268,8 +268,8 @@ struct ComposeArticleView: View {
             }
 
             Text(MonetizationPolicy.isEnabled
-                 ? "誰でも読める冒頭部分。読者が続きを読みたくなる内容を書きましょう。"
-                 : "初回公開では課金機能を使わず、記事は全文無料で公開されます。")
+                 ? "誰でも読める冒頭部分。読者が続きを読みたくなる内容を書きましょう。".localized
+                 : "初回公開では課金機能を使わず、記事は全文無料で公開されます。".localized)
                 .font(.caption)
                 .foregroundStyle(AppColor.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -278,7 +278,7 @@ struct ComposeArticleView: View {
                 if freePreviewMode == .edit {
                     editorField(
                         text: $viewModel.freePreviewBody,
-                        placeholder: MonetizationPolicy.isEnabled ? "読者に届けたい冒頭の言葉を入力" : "本文を書く",
+                        placeholder: MonetizationPolicy.isEnabled ? "読者に届けたい冒頭の言葉を入力".localized : "本文を書く".localized,
                         minHeight: MonetizationPolicy.isEnabled ? 160 : 320,
                         inserter: freePreviewInserter,
                         onRequestMedia: { requestMedia(for: .freePreview) }
@@ -302,7 +302,7 @@ struct ComposeArticleView: View {
     private var paidBodyPanel: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
             HStack {
-                SectionKicker(text: "有料本文", systemImage: "lock.doc")
+                SectionKicker(text: "有料本文".localized, systemImage: "lock.doc")
                 Spacer(minLength: AppSpacing.sm)
                 expandButton(for: .paidBody)
                 editorModePicker($paidBodyMode)
@@ -317,7 +317,7 @@ struct ComposeArticleView: View {
                 if paidBodyMode == .edit {
                     editorField(
                         text: $viewModel.paidBody,
-                        placeholder: "本文（省略可）",
+                        placeholder: "本文（省略可）".localized,
                         minHeight: 240,
                         inserter: paidBodyInserter,
                         onRequestMedia: { requestMedia(for: .paidBody) }
@@ -350,7 +350,7 @@ struct ComposeArticleView: View {
                 .frame(width: 32, height: 32)
                 .contentShape(Rectangle())
         }
-        .accessibilityLabel("\(field.title)を全画面で書く")
+        .accessibilityLabel(Text(L10n.format("%@を全画面で書く", field.title)))
     }
 
     private func editorModePicker(_ mode: Binding<EditorMode>) -> some View {
@@ -448,7 +448,7 @@ struct ComposeArticleView: View {
         let canSetPaid = store.isCreatorEligible && viewModel.canSetPaidPrice
 
         return VStack(alignment: .leading, spacing: AppSpacing.md) {
-            SectionKicker(text: "価格", systemImage: "yensign.circle")
+            SectionKicker(text: "価格".localized, systemImage: "yensign.circle")
 
             if !canSetPaid {
                 VStack(alignment: .leading, spacing: AppSpacing.xs) {
@@ -463,7 +463,7 @@ struct ComposeArticleView: View {
                     }
 
                     Label(
-                        viewModel.canSetPaidPrice ? "この記事のHuman Check: 本人入力 ✓" : "この記事のHuman Check: 本人入力が必要です",
+                        viewModel.canSetPaidPrice ? "この記事のHuman Check: 本人入力 ✓".localized : "この記事のHuman Check: 本人入力が必要です".localized,
                         systemImage: viewModel.canSetPaidPrice ? "checkmark.circle.fill" : "xmark.circle"
                     )
                     .font(.caption)
@@ -484,8 +484,8 @@ struct ComposeArticleView: View {
             .opacity(canSetPaid ? 1 : 0.5)
 
             Text(viewModel.price == .free
-                 ? "全文を無料で公開します。"
-                 : "プレビュー部分を無料公開し、本文は\(viewModel.price.displayText)で販売します。App Store 手数料（30%）が差し引かれます。")
+                 ? "全文を無料で公開します。".localized
+                 : L10n.format("プレビュー部分を無料公開し、本文は%@で販売します。App Store 手数料（30%%）が差し引かれます。", viewModel.price.displayText))
                 .font(.caption)
                 .foregroundStyle(AppColor.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -499,7 +499,7 @@ struct ComposeArticleView: View {
         let topics = TopicExtractor.topics(in: "\(viewModel.title) \(viewModel.freePreviewBody)")
         if !topics.isEmpty {
             VStack(alignment: .leading, spacing: AppSpacing.md) {
-                SectionKicker(text: "Topic Rooms", systemImage: "number.square")
+                SectionKicker(text: "ルーム".localized, systemImage: "number.square")
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: AppSpacing.xs) {
@@ -521,7 +521,7 @@ struct ComposeArticleView: View {
 
     private var commentPermissionPanel: some View {
         VStack(alignment: .leading, spacing: AppSpacing.md) {
-            SectionKicker(text: "Comments", systemImage: "bubble.right")
+            SectionKicker(text: "コメント".localized, systemImage: "bubble.right")
 
             Picker("コメント", selection: $viewModel.commentPermission) {
                 ForEach(CommentPermission.allCases) { permission in
@@ -542,7 +542,7 @@ struct ComposeArticleView: View {
     private var humanCheckPanel: some View {
         HumanSignalStrip(
             title: viewModel.humanCheckText,
-            detail: "入力の速度と編集の揺らぎを、読む人への小さな署名にします。",
+            detail: "入力の速度と編集の揺らぎを、読む人への小さな署名にします。".localized,
             systemImage: viewModel.metrics.suspiciousBulkInputCount == 0 ? "checkmark.seal.fill" : "clock.badge.questionmark",
             tint: viewModel.metrics.suspiciousBulkInputCount == 0 ? AppColor.accent : AppColor.warning
         )
@@ -552,9 +552,9 @@ struct ComposeArticleView: View {
 
     private var metricsPanel: some View {
         HStack(spacing: AppSpacing.sm) {
-            PaperMetricTile(title: "入力時間", value: viewModel.metrics.durationText, systemImage: "timer")
-            PaperMetricTile(title: "編集", value: "\(viewModel.metrics.editCount)", systemImage: "pencil")
-            PaperMetricTile(title: "削除", value: "\(viewModel.metrics.deleteCount)", systemImage: "delete.left")
+            PaperMetricTile(title: "入力時間".localized, value: viewModel.metrics.durationText, systemImage: "timer")
+            PaperMetricTile(title: "編集".localized, value: "\(viewModel.metrics.editCount)", systemImage: "pencil")
+            PaperMetricTile(title: "削除".localized, value: "\(viewModel.metrics.deleteCount)", systemImage: "delete.left")
         }
     }
 

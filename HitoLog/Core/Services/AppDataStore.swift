@@ -17,13 +17,13 @@ enum StarterPackCategory: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .writers:
-            return "言葉を書く人"
+            return "言葉を書く人".localized
         case .daily:
-            return "日常ログ"
+            return "日常ログ".localized
         case .creative:
-            return "創作"
+            return "創作".localized
         case .learning:
-            return "学び"
+            return "学び".localized
         }
     }
 
@@ -60,7 +60,7 @@ enum AppFeedbackError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidMessage:
-            return "フィードバックは5文字以上、\(AppConstants.maxFeedbackLength)文字以内で入力してください。"
+            return L10n.format("フィードバックは5文字以上、%lld文字以内で入力してください。", Int64(AppConstants.maxFeedbackLength))
         }
     }
 }
@@ -379,7 +379,7 @@ final class AppDataStore: ObservableObject {
 
     func commentPermissionStatus(for post: Post) -> CommentPermissionState {
         guard canCurrentUserCreateContent else {
-            return CommentPermissionState(canComment: false, message: "このアカウントは現在コメントできません。")
+            return CommentPermissionState(canComment: false, message: "このアカウントは現在コメントできません。".localized)
         }
 
         switch post.commentPermission {
@@ -389,15 +389,15 @@ final class AppDataStore: ObservableObject {
             if post.userId == currentUser.id || followingByUserID[post.userId, default: []].contains(currentUser.id) {
                 return CommentPermissionState(canComment: true, message: nil)
             }
-            return CommentPermissionState(canComment: false, message: "この投稿は、投稿者がフォローしているユーザーだけコメントできます。")
+            return CommentPermissionState(canComment: false, message: "この投稿は、投稿者がフォローしているユーザーだけコメントできます。".localized)
         case .closed:
-            return CommentPermissionState(canComment: false, message: "この投稿へのコメントは閉じられています。")
+            return CommentPermissionState(canComment: false, message: "この投稿へのコメントは閉じられています。".localized)
         }
     }
 
     func commentPermissionStatus(for postID: String) -> CommentPermissionState {
         guard let post = post(for: postID) else {
-            return CommentPermissionState(canComment: false, message: "投稿が見つかりません。")
+            return CommentPermissionState(canComment: false, message: "投稿が見つかりません。".localized)
         }
         return commentPermissionStatus(for: post)
     }
@@ -989,34 +989,38 @@ final class AppDataStore: ObservableObject {
         let engagement = post.likeCount + post.commentCount * 2 + post.repostCount * 3 + post.quoteCount * 4
 
         if !boostedTopics.isEmpty {
-            reasons.append("増やす設定の \(boostedTopics.map { "#\($0)" }.joined(separator: "、")) が含まれています。")
+            let topics = ListFormatter.localizedString(byJoining: boostedTopics.map { "#\($0)" })
+            reasons.append(L10n.format("増やす設定の %@ が含まれています。", topics))
         }
         if !reducedTopics.isEmpty {
-            reasons.append("減らす設定の \(reducedTopics.map { "#\($0)" }.joined(separator: "、")) が含まれているため順位を下げています。")
+            let topics = ListFormatter.localizedString(byJoining: reducedTopics.map { "#\($0)" })
+            reasons.append(L10n.format("減らす設定の %@ が含まれているため順位を下げています。", topics))
         }
         if !followedMatches.isEmpty {
-            reasons.append("フォロー中のルーム \(followedMatches.map { "#\($0)" }.joined(separator: "、")) に一致しています。")
+            let topics = ListFormatter.localizedString(byJoining: followedMatches.map { "#\($0)" })
+            reasons.append(L10n.format("フォロー中のルーム %@ に一致しています。", topics))
         } else if !preferredMatches.isEmpty {
-            reasons.append("あなたの投稿やフォロー中ユーザーと近い話題 \(preferredMatches.map { "#\($0)" }.joined(separator: "、")) に一致しています。")
+            let topics = ListFormatter.localizedString(byJoining: preferredMatches.map { "#\($0)" })
+            reasons.append(L10n.format("あなたの投稿やフォロー中ユーザーと近い話題 %@ に一致しています。", topics))
         }
         if let author = user(for: post.userId), author.humanVerifiedPostRate >= 0.75 {
-            reasons.append("投稿者の本人入力率が高めです。")
+            reasons.append("投稿者の本人入力率が高めです。".localized)
         }
         if let author = user(for: post.userId), author.humanLevel >= 3 {
-            reasons.append("投稿者のHuman Levelを加味しています。")
+            reasons.append("投稿者のHuman Levelを加味しています。".localized)
         }
         if engagement > 0 {
-            reasons.append("いいね、コメント、リポストなどの反応があります。")
+            reasons.append("いいね、コメント、リポストなどの反応があります。".localized)
         }
         if post.humanBadge == .verified {
-            reasons.append("この投稿はHuman Checkで本人入力として扱われています。")
+            reasons.append("この投稿はHuman Checkで本人入力として扱われています。".localized)
         }
         if Date().timeIntervalSince(post.createdAt) <= 24 * 3600 {
-            reasons.append("新しい投稿です。")
+            reasons.append("新しい投稿です。".localized)
         }
 
         if reasons.isEmpty {
-            return "新しさ、本人入力率、反応数をもとに表示しています。"
+            return "新しさ、本人入力率、反応数をもとに表示しています。".localized
         }
         return reasons.joined(separator: "\n")
     }
@@ -1181,8 +1185,8 @@ final class AppDataStore: ObservableObject {
 
     var creatorEligibilityDetail: [(label: String, met: Bool)] {
         [
-            ("アカウント開設14日以上 (\(currentUser.accountAgeDays)日)", currentUser.accountAgeDays >= 14),
-            ("本人入力率80%以上 (\(Int(currentUser.humanVerifiedPostRate * 100))%)", currentUser.humanVerifiedPostRate >= 0.8),
+            (L10n.format("アカウント開設14日以上 (%lld日)", Int64(currentUser.accountAgeDays)), currentUser.accountAgeDays >= 14),
+            (L10n.format("本人入力率80%以上 (%lld%%)", Int64(currentUser.humanVerifiedPostRate * 100)), currentUser.humanVerifiedPostRate >= 0.8),
         ]
     }
 
@@ -2183,6 +2187,9 @@ final class AppDataStore: ObservableObject {
         let seed = MockDataStore()
         let seedCurrentUserID = seed.currentUser.id
         let activeCurrentUserID = currentUser.id
+        let seedPostIDs = Set(seed.posts.map(\.id))
+        let seedCommentIDs = Set(seed.comments.map(\.id))
+        let seedArticleIDs = Set(seed.articles.map(\.id))
         let demoUsers = seed.users
             .filter { $0.id != seedCurrentUserID && $0.id != currentUser.id }
 
@@ -2191,13 +2198,13 @@ final class AppDataStore: ObservableObject {
             appleUserID: currentUser.appleUserId
         )
         users = mergeCurrentUser(into: uniqueUsers(users + demoUsers))
-        posts = uniquePosts(posts.filter { !$0.id.hasPrefix("demo-") } + seed.posts.map { post in
+        posts = uniquePosts(posts.filter { !$0.id.hasPrefix("demo-") && !seedPostIDs.contains($0.id) } + seed.posts.map { post in
             post.demoCopy(currentUserID: activeCurrentUserID, seedCurrentUserID: seedCurrentUserID)
         })
-        comments = uniqueComments(comments.filter { !$0.id.hasPrefix("demo-") } + seed.comments.map { comment in
+        comments = uniqueComments(comments.filter { !$0.id.hasPrefix("demo-") && !seedCommentIDs.contains($0.id) } + seed.comments.map { comment in
             comment.demoCopy(currentUserID: activeCurrentUserID, seedCurrentUserID: seedCurrentUserID)
         })
-        articles = uniqueArticles(articles.filter { !$0.id.hasPrefix("demo-") } + seed.articles.map { article in
+        articles = uniqueArticles(articles.filter { !$0.id.hasPrefix("demo-") && !seedArticleIDs.contains($0.id) } + seed.articles.map { article in
             article.demoCopy(currentUserID: activeCurrentUserID, seedCurrentUserID: seedCurrentUserID)
         })
         unlockedArticleIDs = Set(unlockedArticleIDs.filter { !$0.hasPrefix("demo-") })

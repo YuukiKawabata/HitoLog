@@ -9,9 +9,9 @@ private enum ProfileTab: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .posts: return "投稿"
-        case .articles: return "記事"
-        case .saved: return "保存"
+        case .posts: return "投稿".localized
+        case .articles: return "記事".localized
+        case .saved: return "保存".localized
         }
     }
 
@@ -26,6 +26,8 @@ private enum ProfileTab: String, CaseIterable, Identifiable {
 
 struct ProfileView: View {
     @EnvironmentObject private var store: AppDataStore
+    @EnvironmentObject private var futureReflectionService: FutureReflectionService
+    @EnvironmentObject private var analytics: AnalyticsService
     let userID: String?
     @State private var editingPost: Post?
     @State private var deletingPost: Post?
@@ -33,6 +35,8 @@ struct ProfileView: View {
     @State private var deletingArticle: Article?
     @State private var profileTab: ProfileTab = .posts
     @State private var monetizationErrorMessage: String?
+    @State private var isShowingWeeklyReflection = false
+    @State private var isShowingFutureReflections = false
 
     init(userID: String? = nil) {
         self.userID = userID
@@ -51,50 +55,31 @@ struct ProfileView: View {
                         .padding(.horizontal, AppSpacing.md)
                         .padding(.bottom, AppSpacing.md)
 
-                        if MonetizationPolicy.isEnabled {
-                            CreatorMonetizationPanel(
-                                user: user,
-                                isPreview: user.id == store.currentUser.id,
-                                onMembership: { plan in
-                                    Task { await purchaseMembership(plan, creator: user) }
+                        if user.id == store.currentUser.id {
+                            ReflectionHighlightsView(
+                                posts: store.visibleProfilePosts(for: user.id).filter { $0.shareType == .original },
+                                reflections: futureReflectionService.reflections,
+                                onOpenWeekly: {
+                                    analytics.capture("weekly_reflection_opened")
+                                    isShowingWeeklyReflection = true
                                 },
-                                onSupport: { amount in
-                                    Task { await purchaseSupport(amount, recipient: user) }
+                                onOpenFuture: {
+                                    analytics.capture("future_reflections_opened")
+                                    isShowingFutureReflections = true
                                 }
                             )
                             .padding(.horizontal, AppSpacing.md)
-                            .padding(.bottom, AppSpacing.sm)
+                            .padding(.bottom, AppSpacing.md)
                         }
 
-                        if let highlight = representativePost(for: user) {
-                            RepresentativeWorkCard(post: highlight, author: user)
-                                .padding(.horizontal, AppSpacing.md)
-                                .padding(.bottom, AppSpacing.sm)
-                        }
+                        Text("これまでの言葉")
+                            .font(.headline)
+                            .foregroundStyle(AppColor.textPrimary)
+                            .padding(.horizontal, AppSpacing.md)
+                            .padding(.vertical, AppSpacing.sm)
 
-                        Picker("表示", selection: $profileTab) {
-                            ForEach(ProfileTab.allCases) { tab in
-                                Label(tab.title, systemImage: tab.systemImage).tag(tab)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .padding(.horizontal, AppSpacing.md)
-                        .padding(.vertical, AppSpacing.sm)
-
-                        Group {
-                            switch profileTab {
-                            case .posts:
-                                postsSection(for: user)
-                            case .articles:
-                                articlesSection(for: user)
-                            case .saved:
-                                savedSection
-                            }
-                        }
-                        .id(profileTab)
-                        .transition(.opacity)
+                        postsSection(for: user)
                     }
-                    .animation(.easeInOut(duration: 0.2), value: profileTab)
                 }
             } else {
                 ContentUnavailableView("ユーザーが見つかりません", systemImage: "person.crop.circle.badge.questionmark")
@@ -121,6 +106,18 @@ struct ProfileView: View {
         .sheet(item: $editingArticle) { article in
             ComposeArticleView(editingArticle: article)
                 .environmentObject(store)
+        }
+        .sheet(isPresented: $isShowingWeeklyReflection) {
+            WeeklyReflectionView(
+                summary: WeeklyReflectionSummary(
+                    posts: store.visibleProfilePosts(for: store.currentUser.id)
+                        .filter { $0.shareType == .original }
+                )
+            )
+        }
+        .sheet(isPresented: $isShowingFutureReflections) {
+            FutureReflectionsView()
+                .environmentObject(futureReflectionService)
         }
         .confirmationDialog(
             "記事を削除しますか？",
@@ -172,19 +169,11 @@ struct ProfileView: View {
         } message: {
             Text(monetizationErrorMessage ?? "通信状態を確認して、もう一度お試しください。")
         }
-        .task {
-            if let user = displayedUser {
-                await store.loadUserArticles(userID: user.id)
-                if MonetizationPolicy.isEnabled && user.id == store.currentUser.id {
-                    await store.loadCreatorEarnings()
-                }
-            }
-        }
     }
 
     @ViewBuilder
     private func postsSection(for user: AppUser) -> some View {
-        let posts = store.visibleProfilePosts(for: user.id)
+        let posts = store.visibleProfilePosts(for: user.id).filter { $0.shareType == .original }
         if posts.isEmpty {
             ContentUnavailableView("投稿がありません", systemImage: "text.bubble")
                 .padding(.top, AppSpacing.xl)
@@ -209,13 +198,13 @@ struct ProfileView: View {
                     onEdit: { editingPost = post },
                     onDelete: { deletingPost = post },
                     onReport: {
-                        store.addReport(
-                            targetType: .post,
-                            targetID: post.id,
-                            targetOwnerID: post.userId,
-                            targetDescription: "投稿: \(post.body.prefix(40))",
-                            reason: "不適切な投稿"
-                        )
+                            store.addReport(
+                                targetType: .post,
+                                targetID: post.id,
+                                targetOwnerID: post.userId,
+                                targetDescription: L10n.format("投稿: %@", String(post.body.prefix(40))),
+                                reason: "不適切な投稿"
+                            )
                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     }
                 )
@@ -246,13 +235,13 @@ struct ProfileView: View {
                         onDelete: { deletingArticle = article },
                         onReport: {
                             guard !isOwner else { return }
-                            store.addReport(
-                                targetType: .article,
-                                targetID: article.id,
-                                targetOwnerID: article.userID,
-                                targetDescription: "記事: \(article.title.prefix(40))",
-                                reason: "不適切な記事"
-                            )
+                                store.addReport(
+                                    targetType: .article,
+                                    targetID: article.id,
+                                    targetOwnerID: article.userID,
+                                    targetDescription: L10n.format("記事: %@", String(article.title.prefix(40))),
+                                    reason: "不適切な記事"
+                                )
                             UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         }
                     )
@@ -289,7 +278,7 @@ struct ProfileView: View {
 
     private var navigationTitle: String {
         guard let displayedUser, displayedUser.id != store.currentUser.id else {
-            return "プロフィール"
+            return "プロフィール".localized
         }
         return displayedUser.displayName
     }
@@ -332,7 +321,7 @@ private struct CreatorMonetizationPanel: View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
             if isPreview {
                 HStack(spacing: AppSpacing.xs) {
-                    SectionKicker(text: "支援導線プレビュー", systemImage: "eye")
+                    SectionKicker(text: "支援導線プレビュー".localized, systemImage: "eye")
                     Spacer(minLength: 0)
                     Text("プレビュー")
                         .font(.caption2.weight(.bold))
@@ -386,7 +375,7 @@ private struct CreatorMonetizationPanel: View {
                 .stroke(AppColor.border, lineWidth: 0.7)
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(user.displayName)をサポート")
+        .accessibilityLabel(Text(L10n.format("%@をサポート", user.displayName)))
         .alert("プレビュー", isPresented: $showsPreviewNotice) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -449,17 +438,7 @@ private struct ProfileHeaderView: View {
 
                 detailInfoRow
 
-                writingStory
-
                 countsRow
-
-                trustCard
-
-                if !stats.topTopics.isEmpty {
-                    topicsRow
-                }
-
-                followedTopicsRow
             }
             .padding(AppSpacing.md)
         }
@@ -467,21 +446,12 @@ private struct ProfileHeaderView: View {
         .clipShape(RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                .stroke(AppColor.border, lineWidth: 0.7)
+                .stroke(AppColor.border.opacity(0.6), lineWidth: 0.5)
         }
-        .shadow(color: AppColor.shadow, radius: 14, x: 0, y: 8)
     }
 
     private var coverBanner: some View {
-        LinearGradient(
-            colors: [AppColor.accentSoft, AppColor.surface, AppColor.subBackground],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .overlay {
-            CoverRulePattern()
-                .opacity(0.5)
-        }
+        AppColor.accentSoft
         .frame(height: coverHeight)
         .frame(maxWidth: .infinity)
         .clipped()
@@ -495,7 +465,7 @@ private struct ProfileHeaderView: View {
     private var identityRow: some View {
         HStack(alignment: .top, spacing: AppSpacing.md) {
             VStack(alignment: .leading, spacing: AppSpacing.xs) {
-                SectionKicker(text: "Profile")
+                SectionKicker(text: "プロフィール".localized)
 
                 Text(user.displayName)
                     .font(AppFont.title)
@@ -524,7 +494,7 @@ private struct ProfileHeaderView: View {
                 .font(.caption2.weight(.semibold))
             Text(joinedText)
             Text("·")
-            Text("開設\(user.accountAgeDays)日")
+            Text(L10n.format("開設%lld日", Int64(user.accountAgeDays)))
         }
         .font(.caption)
         .foregroundStyle(AppColor.textSecondary)
@@ -532,19 +502,19 @@ private struct ProfileHeaderView: View {
 
     private var countsRow: some View {
         HStack(spacing: AppSpacing.sm) {
-            ProfileCount(title: "投稿", value: "\(postCount)")
+            ProfileCount(title: "投稿".localized, value: "\(postCount)")
 
             NavigationLink {
                 FollowListView(user: user, mode: .following)
             } label: {
-                ProfileCount(title: "フォロー", value: "\(store.followingCount(for: user.id))")
+                ProfileCount(title: "フォロー".localized, value: "\(store.followingCount(for: user.id))")
             }
             .buttonStyle(.plain)
 
             NavigationLink {
                 FollowListView(user: user, mode: .followers)
             } label: {
-                ProfileCount(title: "フォロワー", value: "\(store.followerCount(for: user.id))")
+                ProfileCount(title: "フォロワー".localized, value: "\(store.followerCount(for: user.id))")
             }
             .buttonStyle(.plain)
         }
@@ -553,12 +523,12 @@ private struct ProfileHeaderView: View {
     private var trustCard: some View {
         VStack(alignment: .leading, spacing: AppSpacing.md) {
             HStack {
-                SectionKicker(text: "執筆の記録", systemImage: "signature")
+                SectionKicker(text: "執筆の記録".localized, systemImage: "signature")
                 Spacer(minLength: 0)
                 HStack(spacing: AppSpacing.xxs) {
                     Image(systemName: "chart.bar.fill")
                         .font(.caption2.weight(.bold))
-                    Text("Lv.\(user.humanLevel)")
+                    Text(L10n.format("Lv.%lld", Int64(user.humanLevel)))
                         .font(.caption.weight(.bold))
                 }
                 .foregroundStyle(AppColor.accent)
@@ -569,40 +539,40 @@ private struct ProfileHeaderView: View {
 
             HStack(spacing: AppSpacing.sm) {
                 ProfileFigureTile(
-                    title: "つづった文字",
+                    title: "つづった文字".localized,
                     value: stats.totalCharacters.formatted(.number.grouping(.automatic)),
-                    unit: "字",
+                    unit: "字".localized,
                     systemImage: "character.cursor.ibeam"
                 )
                 ProfileFigureTile(
-                    title: "公開記事",
+                    title: "公開記事".localized,
                     value: "\(stats.publishedArticleCount)",
-                    unit: "本",
+                    unit: "本".localized,
                     systemImage: "doc.text"
                 )
                 ProfileFigureTile(
-                    title: "連続記録",
+                    title: "連続記録".localized,
                     value: "\(stats.streakDays)",
-                    unit: "日",
+                    unit: "日".localized,
                     systemImage: "flame"
                 )
             }
 
             HStack(spacing: AppSpacing.sm) {
                 ProfileFigureTile(
-                    title: "受け取ったいいね",
+                    title: "受け取ったいいね".localized,
                     value: stats.likesReceived.formatted(.number.grouping(.automatic)),
-                    unit: "件",
+                    unit: "件".localized,
                     systemImage: "heart"
                 )
                 ProfileFigureTile(
-                    title: "受け取ったコメント",
+                    title: "受け取ったコメント".localized,
                     value: stats.commentsReceived.formatted(.number.grouping(.automatic)),
-                    unit: "件",
+                    unit: "件".localized,
                     systemImage: "bubble.right"
                 )
                 ProfileFigureTile(
-                    title: "綴った時間",
+                    title: "綴った時間".localized,
                     value: stats.writingTimeValue,
                     unit: stats.writingTimeUnit,
                     systemImage: "timer"
@@ -610,7 +580,7 @@ private struct ProfileHeaderView: View {
             }
 
             ProfileGauge(
-                title: "本人入力投稿率",
+                title: "本人入力投稿率".localized,
                 systemImage: "checkmark.seal.fill",
                 progress: user.humanVerifiedPostRate
             )
@@ -667,7 +637,7 @@ private struct ProfileHeaderView: View {
         let topics = store.followedTopicIDs.sorted()
         if user.id == store.currentUser.id && !topics.isEmpty {
             VStack(alignment: .leading, spacing: AppSpacing.sm) {
-                SectionKicker(text: "フォロー中の話題", systemImage: "bell.badge")
+                SectionKicker(text: "フォロー中の話題".localized, systemImage: "bell.badge")
                 FlowChips(topics: Array(topics.prefix(10)))
             }
         }
@@ -675,16 +645,16 @@ private struct ProfileHeaderView: View {
 
     private var topicsRow: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
-            SectionKicker(text: "よく綴る話題", systemImage: "number")
+            SectionKicker(text: "よく綴る話題".localized, systemImage: "number")
             FlowChips(topics: stats.topTopics)
         }
     }
 
     private var joinedText: String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateFormat = "yyyy年M月"
-        return "\(formatter.string(from: user.createdAt))から綴っています"
+        formatter.locale = .current
+        formatter.setLocalizedDateFormatFromTemplate("yMMMM")
+        return L10n.format("%@から綴っています", formatter.string(from: user.createdAt))
     }
 
     private var followButton: some View {
@@ -728,7 +698,7 @@ private struct ProfileHeaderView: View {
                     targetType: .user,
                     targetID: user.id,
                     targetOwnerID: user.id,
-                    targetDescription: "ユーザー: @\(user.handle)",
+                    targetDescription: L10n.format("ユーザー: %@", "@\(user.handle)"),
                     reason: "不適切なユーザー"
                 )
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -990,7 +960,7 @@ private struct ProfileStats {
     }
 
     var writingTimeUnit: String {
-        writingMinutes >= 60 ? "時間" : "分"
+        writingMinutes >= 60 ? "時間".localized : "分".localized
     }
 }
 
@@ -1003,7 +973,7 @@ private struct RepresentativeWorkCard: View {
             PostDetailView(postID: post.id)
         } label: {
             VStack(alignment: .leading, spacing: AppSpacing.sm) {
-                SectionKicker(text: "代表する言葉", systemImage: "quote.opening")
+                SectionKicker(text: "代表する言葉".localized, systemImage: "quote.opening")
 
                 Text(post.body)
                     .font(AppFont.body)
@@ -1081,7 +1051,7 @@ private struct BookmarkedPostsView: View {
                                     targetType: .post,
                                     targetID: post.id,
                                     targetOwnerID: post.userId,
-                                    targetDescription: "投稿: \(post.body.prefix(40))",
+                                    targetDescription: L10n.format("投稿: %@", String(post.body.prefix(40))),
                                     reason: "不適切な投稿"
                                 )
                                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -1116,18 +1086,18 @@ private enum FollowListMode {
     var title: String {
         switch self {
         case .following:
-            return "フォロー"
+            return "フォロー".localized
         case .followers:
-            return "フォロワー"
+            return "フォロワー".localized
         }
     }
 
     var emptyText: String {
         switch self {
         case .following:
-            return "フォロー中のユーザーはいません"
+            return "フォロー中のユーザーはいません".localized
         case .followers:
-            return "フォロワーはまだいません"
+            return "フォロワーはまだいません".localized
         }
     }
 }
@@ -1195,5 +1165,292 @@ private struct FollowUserRow: View {
             }
         }
         .padding(.vertical, AppSpacing.xs)
+    }
+}
+
+private struct ReflectionHighlightsView: View {
+    let posts: [Post]
+    let reflections: [FutureReflection]
+    let onOpenWeekly: () -> Void
+    let onOpenFuture: () -> Void
+
+    private var summary: WeeklyReflectionSummary {
+        WeeklyReflectionSummary(posts: posts)
+    }
+
+    private var deliveredReflection: FutureReflection? {
+        reflections
+            .filter { $0.deliveryDate <= Date() }
+            .max { $0.deliveryDate < $1.deliveryDate }
+    }
+
+    private var upcomingReflection: FutureReflection? {
+        reflections
+            .filter { $0.deliveryDate > Date() }
+            .min { $0.deliveryDate < $1.deliveryDate }
+    }
+
+    var body: some View {
+        VStack(spacing: AppSpacing.sm) {
+            Button(action: onOpenFuture) {
+                HStack(alignment: .top, spacing: AppSpacing.md) {
+                    Image(systemName: deliveredReflection == nil ? "envelope.badge.clock" : "envelope.open")
+                        .font(.title3)
+                        .foregroundStyle(AppColor.accent)
+                        .frame(width: 30)
+
+                    VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                        Text(deliveredReflection == nil ? "未来の自分へ" : "1か月前の自分から")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppColor.textPrimary)
+
+                        if let deliveredReflection {
+                            Text(deliveredReflection.body)
+                                .font(.caption)
+                                .foregroundStyle(AppColor.textSecondary)
+                                .lineLimit(2)
+                        } else if let upcomingReflection {
+                            Text("\(DateFormatterUtil.relativeString(from: upcomingReflection.deliveryDate))に届きます")
+                                .font(.caption)
+                                .foregroundStyle(AppColor.textSecondary)
+                        } else {
+                            Text("投稿した言葉を、1か月後の自分へ届けられます。")
+                                .font(.caption)
+                                .foregroundStyle(AppColor.textSecondary)
+                        }
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColor.textTertiary)
+                }
+                .padding(AppSpacing.md)
+                .paperSurface(shadow: false)
+            }
+            .buttonStyle(.plain)
+
+            Button(action: onOpenWeekly) {
+                VStack(alignment: .leading, spacing: AppSpacing.md) {
+                    HStack {
+                        Label("週刊「今週の自分」", systemImage: "calendar")
+                            .font(.subheadline.weight(.semibold))
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppColor.textTertiary)
+                    }
+
+                    HStack(spacing: AppSpacing.sm) {
+                        PaperMetricTile(
+                            title: "書いた日",
+                            value: "\(summary.writingDays)日",
+                            systemImage: "pencil.line"
+                        )
+                        PaperMetricTile(
+                            title: "残した言葉",
+                            value: "\(summary.postCount)",
+                            systemImage: "text.bubble"
+                        )
+                        PaperMetricTile(
+                            title: "届いた反応",
+                            value: "\(summary.reactionCount)",
+                            systemImage: "heart"
+                        )
+                    }
+
+                    Text(summary.previewText)
+                        .font(.caption)
+                        .foregroundStyle(AppColor.textSecondary)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(AppSpacing.md)
+                .paperSurface(shadow: false)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+private struct WeeklyReflectionSummary {
+    let posts: [Post]
+    let writingDays: Int
+    let postCount: Int
+    let reactionCount: Int
+    let excerpts: [String]
+
+    init(posts: [Post], now: Date = Date(), calendar: Calendar = .current) {
+        let interval = calendar.dateInterval(of: .weekOfYear, for: now)
+        let weeklyPosts = posts
+            .filter { post in
+                guard let interval else { return true }
+                return interval.contains(post.createdAt)
+            }
+            .sorted { $0.createdAt > $1.createdAt }
+
+        self.posts = weeklyPosts
+        writingDays = Set(weeklyPosts.map { calendar.startOfDay(for: $0.createdAt) }).count
+        postCount = weeklyPosts.count
+        reactionCount = weeklyPosts.reduce(0) { $0 + $1.likeCount + $1.commentCount }
+        excerpts = weeklyPosts.prefix(3).map { post in
+            let plain = post.body
+                .replacingOccurrences(of: "\n", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return plain.count > 34 ? String(plain.prefix(34)) + "…" : plain
+        }
+    }
+
+    var previewText: String {
+        excerpts.first ?? "今週の言葉は、書いた日から少しずつ育ちます。"
+    }
+}
+
+private struct WeeklyReflectionView: View {
+    @Environment(\.dismiss) private var dismiss
+    let summary: WeeklyReflectionSummary
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: AppSpacing.lg) {
+                    VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                        SectionKicker(text: "WEEKLY NOTE", systemImage: "calendar")
+                        Text("今週の自分")
+                            .font(.largeTitle.weight(.bold))
+                            .foregroundStyle(AppColor.textPrimary)
+                        Text("評価ではなく、残した言葉を静かに振り返ります。")
+                            .font(.subheadline)
+                            .foregroundStyle(AppColor.textSecondary)
+                    }
+
+                    HStack(spacing: AppSpacing.sm) {
+                        PaperMetricTile(title: "書いた日", value: "\(summary.writingDays)日", systemImage: "pencil.line")
+                        PaperMetricTile(title: "残した言葉", value: "\(summary.postCount)", systemImage: "text.bubble")
+                        PaperMetricTile(title: "届いた反応", value: "\(summary.reactionCount)", systemImage: "heart")
+                    }
+
+                    VStack(alignment: .leading, spacing: AppSpacing.md) {
+                        Text("今週の言葉")
+                            .font(.headline)
+
+                        if summary.excerpts.isEmpty {
+                            Text("まだ言葉はありません。今日のことを、一言だけ残してみましょう。")
+                                .foregroundStyle(AppColor.textSecondary)
+                        } else {
+                            ForEach(Array(summary.excerpts.enumerated()), id: \.offset) { index, excerpt in
+                                HStack(alignment: .top, spacing: AppSpacing.sm) {
+                                    Text("\(index + 1)")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(AppColor.accent)
+                                        .frame(width: 22, height: 22)
+                                        .background(AppColor.accentSoft, in: Circle())
+                                    Text(excerpt)
+                                        .font(.body)
+                                        .foregroundStyle(AppColor.textPrimary)
+                                }
+                            }
+                        }
+                    }
+                    .padding(AppSpacing.md)
+                    .paperSurface(shadow: false)
+
+                    VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                        Text("来週の自分へ")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppColor.accent)
+                        Text("来週、大切にしたいことは？")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(AppColor.textPrimary)
+                    }
+                    .padding(AppSpacing.md)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(AppColor.accentSoft, in: RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
+                }
+                .padding(AppSpacing.md)
+            }
+            .background(PaperCanvas())
+            .navigationTitle("週刊「今週の自分」")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("閉じる") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+private struct FutureReflectionsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var service: FutureReflectionService
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if !service.deliveredReflections.isEmpty {
+                    Section("届いた言葉") {
+                        ForEach(service.deliveredReflections) { reflection in
+                            reflectionRow(reflection, isDelivered: true)
+                        }
+                        .onDelete { offsets in
+                            remove(offsets, from: service.deliveredReflections)
+                        }
+                    }
+                }
+
+                if !service.upcomingReflections.isEmpty {
+                    Section("未来へ預けた言葉") {
+                        ForEach(service.upcomingReflections) { reflection in
+                            reflectionRow(reflection, isDelivered: false)
+                        }
+                        .onDelete { offsets in
+                            remove(offsets, from: service.upcomingReflections)
+                        }
+                    }
+                }
+
+                if service.reflections.isEmpty {
+                    ContentUnavailableView(
+                        "未来への言葉はまだありません",
+                        systemImage: "envelope.badge.clock",
+                        description: Text("投稿するときに、1か月後にも届けることができます。")
+                    )
+                    .listRowBackground(Color.clear)
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(PaperCanvas())
+            .navigationTitle("未来の自分へ")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("閉じる") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func reflectionRow(_ reflection: FutureReflection, isDelivered: Bool) -> some View {
+        VStack(alignment: .leading, spacing: AppSpacing.xs) {
+            Text(reflection.body)
+                .font(.body)
+                .foregroundStyle(AppColor.textPrimary)
+            Text(
+                isDelivered
+                    ? "\(DateFormatterUtil.relativeString(from: reflection.createdAt))の自分から"
+                    : "\(DateFormatterUtil.relativeString(from: reflection.deliveryDate))に届きます"
+            )
+            .font(.caption)
+            .foregroundStyle(AppColor.textSecondary)
+        }
+        .padding(.vertical, AppSpacing.xs)
+    }
+
+    private func remove(_ offsets: IndexSet, from reflections: [FutureReflection]) {
+        for offset in offsets where reflections.indices.contains(offset) {
+            service.remove(reflections[offset])
+        }
     }
 }

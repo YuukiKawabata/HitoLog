@@ -41,7 +41,7 @@ struct ArticleDetailView: View {
         .alert("購入エラー", isPresented: $showsPurchaseError) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(purchaseError ?? "不明なエラーが発生しました")
+            Text(purchaseError ?? "不明なエラーが発生しました".localized)
         }
         .confirmationDialog("この記事を通報しますか？", isPresented: $showsReportConfirmation, titleVisibility: .visible) {
             Button("通報する", role: .destructive) {
@@ -49,7 +49,7 @@ struct ArticleDetailView: View {
                     targetType: .article,
                     targetID: article.id,
                     targetOwnerID: article.userID,
-                    targetDescription: "記事: \(article.title.prefix(40))",
+                    targetDescription: L10n.format("記事: %@", String(article.title.prefix(40))),
                     reason: "不適切な記事"
                 )
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -91,7 +91,7 @@ struct ArticleDetailView: View {
 
     private var articleHeader: some View {
         VStack(alignment: .leading, spacing: AppSpacing.md) {
-            SectionKicker(text: "Article", systemImage: "doc.text")
+            SectionKicker(text: "記事".localized, systemImage: "doc.text")
 
             Text(article.title)
                 .font(AppFont.title)
@@ -119,10 +119,10 @@ struct ArticleDetailView: View {
             }
 
             HStack(spacing: AppSpacing.md) {
-                Label(article.durationText + "かけて書かれた記事", systemImage: "timer")
+                Label(L10n.format("%@かけて書かれた記事", article.durationText), systemImage: "timer")
                     .font(.caption)
                     .foregroundStyle(AppColor.textSecondary)
-                Label("\(article.editCount)回編集", systemImage: "pencil")
+                Label(L10n.format("%lld回編集", Int64(article.editCount)), systemImage: "pencil")
                     .font(.caption)
                     .foregroundStyle(AppColor.textSecondary)
             }
@@ -227,7 +227,7 @@ struct ArticleDetailView: View {
                         .stroke(AppColor.accent.opacity(0.18), lineWidth: 1)
                 }
 
-            Text("続きは\(article.price.displayText)で読めます")
+            Text(L10n.format("続きは%@で読めます", article.price.displayText))
                 .font(AppFont.sectionTitle)
                 .foregroundStyle(AppColor.textPrimary)
 
@@ -246,14 +246,14 @@ struct ArticleDetailView: View {
                         Text("購入処理中")
                     }
                 } else {
-                    Label("続きを購入（\(article.price.displayText)）", systemImage: "cart")
+                    Label(L10n.format("続きを購入（%@）", article.price.displayText), systemImage: "cart")
                 }
             }
             .buttonStyle(PrimaryButtonStyle())
             .disabled(isPurchasing || store.currentUser.isSuspended)
 
             if article.purchaseCount > 0 {
-                Label("\(article.purchaseCount)人が購入済み", systemImage: "person.2")
+                Label(L10n.format("%lld人が購入済み", Int64(article.purchaseCount)), systemImage: "person.2")
                     .font(.caption)
                     .foregroundStyle(AppColor.textSecondary)
             }

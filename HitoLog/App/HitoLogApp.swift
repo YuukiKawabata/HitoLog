@@ -8,6 +8,7 @@ struct HitoLogApp: App {
     @StateObject private var authSession = AuthSessionStore()
     @StateObject private var store = AppDataStore()
     @StateObject private var pushService = PushNotificationService.shared
+    @StateObject private var futureReflectionService = FutureReflectionService.shared
     @StateObject private var analytics = AnalyticsService.shared
     @StateObject private var appReviewService = AppReviewService.shared
     @AppStorage("hasCompletedInitialExperience") private var hasCompletedInitialExperience = false
@@ -23,6 +24,7 @@ struct HitoLogApp: App {
                 .environmentObject(store)
                 .environmentObject(authSession)
                 .environmentObject(pushService)
+                .environmentObject(futureReflectionService)
                 .environmentObject(analytics)
                 .environmentObject(appReviewService)
                 .task {
@@ -41,8 +43,10 @@ struct HitoLogApp: App {
                         displayName: authSession.displayName,
                         email: isScreenshotDemoMode ? nil : authSession.email
                     )
+                    futureReflectionService.activate(userID: store.currentUser.id)
                     if isScreenshotDemoMode {
                         store.showScreenshotDemoData()
+                        futureReflectionService.showScreenshotDemoData()
                     }
                     await pushService.configure(userID: isScreenshotDemoMode ? nil : authSession.currentUserID)
                     if !isScreenshotDemoMode {
@@ -62,6 +66,7 @@ struct HitoLogApp: App {
                             displayName: authSession.displayName,
                             email: authSession.email
                         )
+                        futureReflectionService.activate(userID: store.currentUser.id)
                         await pushService.configure(userID: userID)
                         if userID == nil {
                             analytics.resetIdentity()

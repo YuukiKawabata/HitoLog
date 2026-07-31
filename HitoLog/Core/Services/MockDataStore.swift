@@ -69,12 +69,21 @@ final class MockDataStore: ObservableObject {
         func daysAgo(_ days: Int) -> Date {
             calendar.date(byAdding: .day, value: -days, to: now) ?? now
         }
+        let isEnglishDemo = L10n.prefersEnglish
+        let topicWords = isEnglishDemo ? "words" : "言葉"
+        let topicDaily = isEnglishDemo ? "daily-log" : "日常ログ"
+        let topicCreative = isEnglishDemo ? "creative" : "創作"
+        let topicLearning = isEnglishDemo ? "learning" : "学び"
+        let topicCoffee = isEnglishDemo ? "coffee" : "コーヒー"
+        let topicReading = isEnglishDemo ? "reading" : "読書"
 
         let currentUser = AppUser(
             id: "user-nagi",
             displayName: "Nagi",
             handle: "nagi_words",
-            bio: "AI時代に、自分で考えて入力した言葉を残しています。短くても、その日の自分の温度を。",
+            bio: isEnglishDemo
+                ? "Saving words I thought through and typed myself in the AI era. Even short notes can keep the temperature of the day."
+                : "AI時代に、自分で考えて入力した言葉を残しています。短くても、その日の自分の温度を。",
             avatarUrl: nil,
             appleUserId: nil,
             humanLevel: 4,
@@ -85,15 +94,17 @@ final class MockDataStore: ObservableObject {
             followerCount: 0,
             followingCount: 0,
             website: "nagi-words.example.com",
-            location: "京都",
-            occupation: "言葉を書く人 / エッセイ"
+            location: isEnglishDemo ? "Kyoto" : "京都",
+            occupation: isEnglishDemo ? "Writer / essayist" : "言葉を書く人 / エッセイ"
         )
 
         let secondUser = AppUser(
             id: "user-aoi",
             displayName: "Aoi",
             handle: "aoi_note",
-            bio: "夜に少しだけ、考えたことを書き残します。エッセイと、読んだ本のこと。",
+            bio: isEnglishDemo
+                ? "Writing down a few thoughts at night. Mostly essays and books I have read."
+                : "夜に少しだけ、考えたことを書き残します。エッセイと、読んだ本のこと。",
             avatarUrl: nil,
             appleUserId: nil,
             humanLevel: 5,
@@ -104,15 +115,17 @@ final class MockDataStore: ObservableObject {
             followerCount: 0,
             followingCount: 0,
             website: "aoi-essay.example.com",
-            location: "東京",
-            occupation: "エッセイスト"
+            location: isEnglishDemo ? "Tokyo" : "東京",
+            occupation: isEnglishDemo ? "Essayist" : "エッセイスト"
         )
 
         let thirdUser = AppUser(
             id: "user-ren",
             displayName: "Ren",
             handle: "ren_thinks",
-            bio: "速さより、自分で考えた言葉を大事にしています。本づくりの仕事をしています。",
+            bio: isEnglishDemo
+                ? "I care more about words I thought through myself than speed. I work in book editing."
+                : "速さより、自分で考えた言葉を大事にしています。本づくりの仕事をしています。",
             avatarUrl: nil,
             appleUserId: nil,
             humanLevel: 4,
@@ -123,15 +136,17 @@ final class MockDataStore: ObservableObject {
             followerCount: 0,
             followingCount: 0,
             website: nil,
-            location: "福岡",
-            occupation: "編集者"
+            location: isEnglishDemo ? "Fukuoka" : "福岡",
+            occupation: isEnglishDemo ? "Editor" : "編集者"
         )
 
         let fourthUser = AppUser(
             id: "user-mio",
             displayName: "Mio",
             handle: "mio_daily",
-            bio: "日々の小さな違和感や発見を短く書きます。",
+            bio: isEnglishDemo
+                ? "Short notes about the small frictions and discoveries of everyday life."
+                : "日々の小さな違和感や発見を短く書きます。",
             avatarUrl: nil,
             appleUserId: nil,
             humanLevel: 3,
@@ -142,15 +157,17 @@ final class MockDataStore: ObservableObject {
             followerCount: 0,
             followingCount: 0,
             website: nil,
-            location: "札幌",
-            occupation: "会社員 / 日記"
+            location: isEnglishDemo ? "Sapporo" : "札幌",
+            occupation: isEnglishDemo ? "Office worker / journaling" : "会社員 / 日記"
         )
 
         let fifthUser = AppUser(
             id: "user-haru",
             displayName: "Haru",
             handle: "haru_log",
-            bio: "SNSをゆっくり使いたい人です。大学で言語学を勉強中。",
+            bio: isEnglishDemo
+                ? "I want social apps to feel slower. Studying linguistics at university."
+                : "SNSをゆっくり使いたい人です。大学で言語学を勉強中。",
             avatarUrl: nil,
             appleUserId: nil,
             humanLevel: 3,
@@ -161,15 +178,17 @@ final class MockDataStore: ObservableObject {
             followerCount: 0,
             followingCount: 0,
             website: nil,
-            location: "名古屋",
-            occupation: "大学生"
+            location: isEnglishDemo ? "Nagoya" : "名古屋",
+            occupation: isEnglishDemo ? "University student" : "大学生"
         )
 
         let sixthUser = AppUser(
             id: "user-sora",
             displayName: "Sora",
             handle: "sora_draws",
-            bio: "絵と言葉のあいだを行き来しています。ラフのような文章が好き。",
+            bio: isEnglishDemo
+                ? "Moving between pictures and words. I like writing that still feels like a rough sketch."
+                : "絵と言葉のあいだを行き来しています。ラフのような文章が好き。",
             avatarUrl: nil,
             appleUserId: nil,
             humanLevel: 4,
@@ -180,15 +199,17 @@ final class MockDataStore: ObservableObject {
             followerCount: 0,
             followingCount: 0,
             website: "sora-art.example.com",
-            location: "大阪",
-            occupation: "イラストレーター"
+            location: isEnglishDemo ? "Osaka" : "大阪",
+            occupation: isEnglishDemo ? "Illustrator" : "イラストレーター"
         )
 
         let seventhUser = AppUser(
             id: "user-yuki",
             displayName: "Yuki",
             handle: "yuki_coffee",
-            bio: "小さな珈琲店をやっています。開店前の十五分だけ書く人。",
+            bio: isEnglishDemo
+                ? "I run a small coffee shop. I write for fifteen minutes before opening."
+                : "小さな珈琲店をやっています。開店前の十五分だけ書く人。",
             avatarUrl: nil,
             appleUserId: nil,
             humanLevel: 5,
@@ -199,8 +220,8 @@ final class MockDataStore: ObservableObject {
             followerCount: 0,
             followingCount: 0,
             website: nil,
-            location: "神戸",
-            occupation: "珈琲店主"
+            location: isEnglishDemo ? "Kobe" : "神戸",
+            occupation: isEnglishDemo ? "Coffee shop owner" : "珈琲店主"
         )
 
         let users = [
@@ -209,17 +230,39 @@ final class MockDataStore: ObservableObject {
         ]
 
         // 本文末尾のハッシュタグから topics が自動抽出され、話題ルームに集計される
-        let post1Body = "AIが文章をすぐ作れる時代だからこそ、少し迷いながら自分で入力した言葉を残しておきたい。今日はその一文だけで十分。 #言葉"
-        let post2Body = "貼り付けではなく、その場で考えながら打った言葉には、その人の温度が残る気がする。HitoLogはその小さな跡を大切にしたい。 #言葉 #創作"
-        let post3Body = "速く投稿するより、自分の言葉になるまで少し待つ。AIのきれいな文章より、今の自分にしか書けない違和感を残したい。 #学び"
-        let post4Body = "今日はうまく言えない気持ちを、そのまま書いた。整っていない文章でも、自分で入力した跡があると少し安心する。 #日常ログ"
-        let post5Body = "SNSを開くたびに急かされる感じが苦手だった。ここでは短くても、自分で打った言葉だけをゆっくり読めるのがいい。 #日常ログ"
-        let post6Body = "コメントも短くていい。読んだ人が、自分の言葉で返してくれるだけで十分うれしい。 #言葉"
-        let post7Body = "ラフを描くみたいに、まず下手でもいいから書いてみる。あとで整える前の言葉が、いちばん自分らしいと思う。 #創作 #言葉"
-        let post8Body = "朝、店を開ける前の十五分だけ、その日の一杯について書く。淹れた数だけ、言葉も静かに増えていく。 #日常ログ #コーヒー"
-        let post9Body = "読み終えた本のことを、要約ではなく自分の感想で残す。誰かの言葉の借り物にはしたくないから。 #読書 #学び"
-        let post10Body = "編集をしていると、整いすぎた文章の奥にある『その人の癖』が恋しくなる。ここではそれが読める気がする。 #言葉"
-        let quote12Body = "これ、すごく分かる。整えるほど消えていくものがあるんだよな。 #創作"
+        let post1Body = isEnglishDemo
+            ? "Because AI can produce sentences so quickly now, I want to keep the words I typed while hesitating a little. One sentence is enough for today. #\(topicWords)"
+            : "AIが文章をすぐ作れる時代だからこそ、少し迷いながら自分で入力した言葉を残しておきたい。今日はその一文だけで十分。 #言葉"
+        let post2Body = isEnglishDemo
+            ? "Words typed while thinking in the moment seem to keep a person’s temperature. HitoLog wants to care for those small traces. #\(topicWords) #\(topicCreative)"
+            : "貼り付けではなく、その場で考えながら打った言葉には、その人の温度が残る気がする。HitoLogはその小さな跡を大切にしたい。 #言葉 #創作"
+        let post3Body = isEnglishDemo
+            ? "Instead of posting quickly, I want to wait until the words feel like mine. More than polished AI text, I want to keep the discomfort only I can write today. #\(topicLearning)"
+            : "速く投稿するより、自分の言葉になるまで少し待つ。AIのきれいな文章より、今の自分にしか書けない違和感を残したい。 #学び"
+        let post4Body = isEnglishDemo
+            ? "Today I wrote down a feeling I could not explain well. Even if the sentence is untidy, seeing the trace of my own typing makes me feel a little calmer. #\(topicDaily)"
+            : "今日はうまく言えない気持ちを、そのまま書いた。整っていない文章でも、自分で入力した跡があると少し安心する。 #日常ログ"
+        let post5Body = isEnglishDemo
+            ? "I never liked feeling rushed every time I opened a social app. Here, even short posts feel nice because I can slowly read words people typed themselves. #\(topicDaily)"
+            : "SNSを開くたびに急かされる感じが苦手だった。ここでは短くても、自分で打った言葉だけをゆっくり読めるのがいい。 #日常ログ"
+        let post6Body = isEnglishDemo
+            ? "Comments can be short too. It is enough when someone replies in their own words after reading. #\(topicWords)"
+            : "コメントも短くていい。読んだ人が、自分の言葉で返してくれるだけで十分うれしい。 #言葉"
+        let post7Body = isEnglishDemo
+            ? "Like sketching a rough draft, I want to write badly first. The words before I clean them up often feel the most like me. #\(topicCreative) #\(topicWords)"
+            : "ラフを描くみたいに、まず下手でもいいから書いてみる。あとで整える前の言葉が、いちばん自分らしいと思う。 #創作 #言葉"
+        let post8Body = isEnglishDemo
+            ? "Before opening the shop, I write for fifteen minutes about the first cup of the day. With each cup brewed, the words quietly increase too. #\(topicDaily) #\(topicCoffee)"
+            : "朝、店を開ける前の十五分だけ、その日の一杯について書く。淹れた数だけ、言葉も静かに増えていく。 #日常ログ #コーヒー"
+        let post9Body = isEnglishDemo
+            ? "After finishing a book, I want to keep my own response, not just a summary. I do not want my record to be borrowed words. #\(topicReading) #\(topicLearning)"
+            : "読み終えた本のことを、要約ではなく自分の感想で残す。誰かの言葉の借り物にはしたくないから。 #読書 #学び"
+        let post10Body = isEnglishDemo
+            ? "When I edit, I start missing the habits hidden behind overly polished writing. I feel like I can read those habits here. #\(topicWords)"
+            : "編集をしていると、整いすぎた文章の奥にある『その人の癖』が恋しくなる。ここではそれが読める気がする。 #言葉"
+        let quote12Body = isEnglishDemo
+            ? "I understand this so much. Some things disappear the more neatly we shape the words. #\(topicCreative)"
+            : "これ、すごく分かる。整えるほど消えていくものがあるんだよな。 #創作"
 
         let posts = [
             Post(
@@ -409,7 +452,7 @@ final class MockDataStore: ObservableObject {
                 id: "post-11",
                 userId: currentUser.id,
                 body: "",
-                topics: ["言葉"],
+                topics: [topicWords],
                 shareType: .repost,
                 sourcePostID: "post-1",
                 sourceUserID: secondUser.id,
@@ -452,33 +495,54 @@ final class MockDataStore: ObservableObject {
             )
         ]
 
-        let article1Preview = """
-        夜になると、昼間は言えなかった言葉が少しずつ戻ってくる。
-        誰に見せるためでもなく、ただ自分のために書く時間のこと。
-        この記事では、わたしが夜だけ書くようになった理由と、続けるための小さな習慣を綴ります。
-        """
-        let article2Preview = """
-        速く書ける時代に、あえて速く書かないという選択について。
-        推敲を重ねることは効率の敵のように見えて、実は「自分の言葉」を守る最後の砦だと思っています。
-        """
-        let article3Preview = """
-        AIがいくらでも文章を出力できるいま、手で打つことの意味はどこにあるのか。
-        三十二日間、毎日この問いと向き合いながら書いてきた記録をまとめました。
-        """
-        let article4Preview = """
-        札幌の冬は長い。だからこそ、毎日の小さなメモが積もると景色になる。
-        今日はその書き方のコツを、ゆるくシェアします。
-        """
+        let article1Preview = isEnglishDemo
+            ? """
+            At night, the words I could not say during the day slowly come back.
+            This is about the time I spend writing not for anyone else, but for myself.
+            In this article, I write about why I started writing only at night and the small habits that help me continue.
+            """
+            : """
+            夜になると、昼間は言えなかった言葉が少しずつ戻ってくる。
+            誰に見せるためでもなく、ただ自分のために書く時間のこと。
+            この記事では、わたしが夜だけ書くようになった理由と、続けるための小さな習慣を綴ります。
+            """
+        let article2Preview = isEnglishDemo
+            ? """
+            Choosing not to write quickly in an age where writing can be fast.
+            Rewriting may look like the enemy of efficiency, but I think it is the last line that protects my own words.
+            """
+            : """
+            速く書ける時代に、あえて速く書かないという選択について。
+            推敲を重ねることは効率の敵のように見えて、実は「自分の言葉」を守る最後の砦だと思っています。
+            """
+        let article3Preview = isEnglishDemo
+            ? """
+            Now that AI can output as much text as we ask for, what does it mean to type by hand?
+            I gathered notes from thirty-two days of facing that question every day.
+            """
+            : """
+            AIがいくらでも文章を出力できるいま、手で打つことの意味はどこにあるのか。
+            三十二日間、毎日この問いと向き合いながら書いてきた記録をまとめました。
+            """
+        let article4Preview = isEnglishDemo
+            ? """
+            Winters in Sapporo are long. That is why small daily notes can pile up into a view.
+            Today I am loosely sharing how I write them.
+            """
+            : """
+            札幌の冬は長い。だからこそ、毎日の小さなメモが積もると景色になる。
+            今日はその書き方のコツを、ゆるくシェアします。
+            """
 
         let articles = [
             Article(
                 id: "article-1",
                 userID: secondUser.id,
-                title: "夜にだけ書ける言葉について",
+                title: isEnglishDemo ? "About Words I Can Only Write at Night" : "夜にだけ書ける言葉について",
                 freePreviewBody: article1Preview,
                 status: .published,
                 price: .yen300,
-                topics: ["言葉", "創作"],
+                topics: [topicWords, topicCreative],
                 commentPermission: .everyone,
                 humanBadge: .verified,
                 humanScore: 95,
@@ -494,11 +558,11 @@ final class MockDataStore: ObservableObject {
             Article(
                 id: "article-2",
                 userID: thirdUser.id,
-                title: "速く書かない、という技術",
+                title: isEnglishDemo ? "The Practice of Not Writing Fast" : "速く書かない、という技術",
                 freePreviewBody: article2Preview,
                 status: .published,
                 price: .free,
-                topics: ["学び", "言葉"],
+                topics: [topicLearning, topicWords],
                 commentPermission: .everyone,
                 humanBadge: .verified,
                 humanScore: 96,
@@ -514,11 +578,11 @@ final class MockDataStore: ObservableObject {
             Article(
                 id: "article-3",
                 userID: currentUser.id,
-                title: "AI時代に、手で書く意味",
+                title: isEnglishDemo ? "What It Means to Write by Hand in the AI Era" : "AI時代に、手で書く意味",
                 freePreviewBody: article3Preview,
                 status: .published,
                 price: .yen500,
-                topics: ["言葉", "学び"],
+                topics: [topicWords, topicLearning],
                 commentPermission: .everyone,
                 humanBadge: .verified,
                 humanScore: 94,
@@ -534,11 +598,11 @@ final class MockDataStore: ObservableObject {
             Article(
                 id: "article-4",
                 userID: fourthUser.id,
-                title: "札幌の冬、毎日のメモ",
+                title: isEnglishDemo ? "Sapporo Winter, Daily Notes" : "札幌の冬、毎日のメモ",
                 freePreviewBody: article4Preview,
                 status: .published,
                 price: .free,
-                topics: ["日常ログ"],
+                topics: [topicDaily],
                 commentPermission: .everyone,
                 humanBadge: .checking,
                 humanScore: 88,
@@ -558,7 +622,9 @@ final class MockDataStore: ObservableObject {
                 id: "comment-1",
                 postId: "post-1",
                 userId: currentUser.id,
-                body: "この感覚わかります。整いすぎていない言葉のほうが、あとで読み返したくなります。",
+                body: isEnglishDemo
+                    ? "I know this feeling. Words that are not too polished are often the ones I want to reread later."
+                    : "この感覚わかります。整いすぎていない言葉のほうが、あとで読み返したくなります。",
                 humanScore: 93,
                 createdAt: now.addingTimeInterval(-210),
                 updatedAt: now.addingTimeInterval(-210),
@@ -568,7 +634,9 @@ final class MockDataStore: ObservableObject {
                 id: "comment-2",
                 postId: "post-1",
                 userId: fifthUser.id,
-                body: "本人入力バッジがあると、読む前の安心感が少し変わりますね。",
+                body: isEnglishDemo
+                    ? "The Human Check badge changes how safe a post feels before I even start reading."
+                    : "本人入力バッジがあると、読む前の安心感が少し変わりますね。",
                 humanScore: 89,
                 createdAt: now.addingTimeInterval(-180),
                 updatedAt: now.addingTimeInterval(-180),
@@ -578,7 +646,9 @@ final class MockDataStore: ObservableObject {
                 id: "comment-3",
                 postId: "post-2",
                 userId: secondUser.id,
-                body: "HitoLogらしさが一番伝わる言葉だと思います。",
+                body: isEnglishDemo
+                    ? "I think this says what makes HitoLog feel like HitoLog."
+                    : "HitoLogらしさが一番伝わる言葉だと思います。",
                 humanScore: 96,
                 createdAt: now.addingTimeInterval(-900),
                 updatedAt: now.addingTimeInterval(-900),
@@ -588,7 +658,9 @@ final class MockDataStore: ObservableObject {
                 id: "comment-4",
                 postId: "post-2",
                 userId: thirdUser.id,
-                body: "コピペ禁止というより、本人の入力を大切にする感じがいいですね。",
+                body: isEnglishDemo
+                    ? "It feels less like banning copy-paste and more like caring about the author's own input."
+                    : "コピペ禁止というより、本人の入力を大切にする感じがいいですね。",
                 humanScore: 91,
                 createdAt: now.addingTimeInterval(-760),
                 updatedAt: now.addingTimeInterval(-760),
@@ -598,7 +670,9 @@ final class MockDataStore: ObservableObject {
                 id: "comment-5",
                 postId: "post-2",
                 userId: fourthUser.id,
-                body: "AI時代のSNSとして、最初に伝える価値がはっきりしています。",
+                body: isEnglishDemo
+                    ? "As a social app for the AI era, the value is clear from the start."
+                    : "AI時代のSNSとして、最初に伝える価値がはっきりしています。",
                 humanScore: 92,
                 createdAt: now.addingTimeInterval(-610),
                 updatedAt: now.addingTimeInterval(-610),
@@ -608,7 +682,9 @@ final class MockDataStore: ObservableObject {
                 id: "comment-6",
                 postId: "post-3",
                 userId: fifthUser.id,
-                body: "速さを競わない場所、ちょうど欲しかったです。",
+                body: isEnglishDemo
+                    ? "A place that does not race for speed is exactly what I wanted."
+                    : "速さを競わない場所、ちょうど欲しかったです。",
                 humanScore: 88,
                 createdAt: now.addingTimeInterval(-3_100),
                 updatedAt: now.addingTimeInterval(-3_100),
@@ -618,7 +694,9 @@ final class MockDataStore: ObservableObject {
                 id: "comment-7",
                 postId: "post-4",
                 userId: secondUser.id,
-                body: "そのまま残せる場所があるだけで、書くハードルが下がります。",
+                body: isEnglishDemo
+                    ? "Just having a place to leave things as they are lowers the barrier to writing."
+                    : "そのまま残せる場所があるだけで、書くハードルが下がります。",
                 humanScore: 94,
                 createdAt: now.addingTimeInterval(-6_200),
                 updatedAt: now.addingTimeInterval(-6_200),
@@ -628,7 +706,9 @@ final class MockDataStore: ObservableObject {
                 id: "comment-8",
                 postId: "post-6",
                 userId: thirdUser.id,
-                body: "短いコメントでも、本人の言葉だとちゃんと届きますね。",
+                body: isEnglishDemo
+                    ? "Even short comments land differently when they are in the person's own words."
+                    : "短いコメントでも、本人の言葉だとちゃんと届きますね。",
                 humanScore: 90,
                 createdAt: now.addingTimeInterval(-14_600),
                 updatedAt: now.addingTimeInterval(-14_600),
@@ -638,7 +718,9 @@ final class MockDataStore: ObservableObject {
                 id: "comment-9",
                 postId: "post-7",
                 userId: currentUser.id,
-                body: "下書きのような言葉、わたしも好きです。整える前のほうが正直ですよね。",
+                body: isEnglishDemo
+                    ? "I like words that still feel like drafts too. They are often more honest before being cleaned up."
+                    : "下書きのような言葉、わたしも好きです。整える前のほうが正直ですよね。",
                 humanScore: 92,
                 createdAt: now.addingTimeInterval(-19_000),
                 updatedAt: now.addingTimeInterval(-19_000),
@@ -648,7 +730,9 @@ final class MockDataStore: ObservableObject {
                 id: "comment-10",
                 postId: "post-8",
                 userId: fifthUser.id,
-                body: "開店前の十五分、想像しただけで気持ちのいい時間です。",
+                body: isEnglishDemo
+                    ? "Those fifteen minutes before opening sound like such a good time."
+                    : "開店前の十五分、想像しただけで気持ちのいい時間です。",
                 humanScore: 87,
                 createdAt: now.addingTimeInterval(-27_000),
                 updatedAt: now.addingTimeInterval(-27_000),
@@ -658,7 +742,9 @@ final class MockDataStore: ObservableObject {
                 id: "comment-11",
                 postId: "post-8",
                 userId: secondUser.id,
-                body: "淹れた数だけ言葉が増える、という表現が好きです。",
+                body: isEnglishDemo
+                    ? "I like the line about words increasing with each cup brewed."
+                    : "淹れた数だけ言葉が増える、という表現が好きです。",
                 humanScore: 95,
                 createdAt: now.addingTimeInterval(-26_000),
                 updatedAt: now.addingTimeInterval(-26_000),
@@ -703,7 +789,7 @@ final class MockDataStore: ObservableObject {
         self.reportHistory = [
             ReportRecord(
                 id: "report-1",
-                targetDescription: "@sample_spam の投稿",
+                targetDescription: isEnglishDemo ? "@sample_spam's post" : "@sample_spam の投稿",
                 reason: "spam",
                 createdAt: now.addingTimeInterval(-86_400),
                 status: "対応済み"
@@ -950,11 +1036,11 @@ enum ReportTargetType: String, Codable, Equatable, CaseIterable {
 
     var displayText: String {
         switch self {
-        case .post:    return "投稿"
-        case .comment: return "コメント"
-        case .user:    return "ユーザー"
-        case .article: return "記事"
-        case .other:   return "その他"
+        case .post:    return "投稿".localized
+        case .comment: return "コメント".localized
+        case .user:    return "ユーザー".localized
+        case .article: return "記事".localized
+        case .other:   return "その他".localized
         }
     }
 }

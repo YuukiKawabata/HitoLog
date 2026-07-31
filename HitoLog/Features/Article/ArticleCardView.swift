@@ -95,7 +95,7 @@ struct ArticleCardView: View {
                     }
 
                     HStack(spacing: AppSpacing.sm) {
-                        Label(article.durationText + "かけて書かれた記事", systemImage: "timer")
+                        Label(L10n.format("%@かけて書かれた記事", article.durationText), systemImage: "timer")
                             .font(.caption2)
                             .foregroundStyle(AppColor.textSecondary)
                         Spacer(minLength: 0)

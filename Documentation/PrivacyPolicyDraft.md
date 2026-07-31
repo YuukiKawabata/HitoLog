@@ -24,4 +24,6 @@ HitoLog uses Firebase services for authentication, database storage, App Check, 
 Users can request account deletion from Settings. Deletion disables notification delivery, removes the Firebase Auth user, marks the user's profile, posts, and comments as deleted, removes likes and safety preference records created by the user, deletes saved notification tokens, and returns the app to the initial state. Reports may be retained as moderation records when required for safety review.
 
 ## Contact
-Support email and public policy URL must be filled in before App Store Connect submission.
+Support URL: https://yuukikawabata.github.io/HitoLog/support/
+
+Privacy Policy URL: https://yuukikawabata.github.io/HitoLog/privacy/

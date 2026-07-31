@@ -16,4 +16,33 @@ platform :ios do
       distribute_external: false
     )
   end
+
+  desc "Upload the prepared App Store screenshots for version 1.2"
+  lane :release_screenshots do
+    ENV["FASTLANE_ENABLE_BETA_DELIVER_SYNC_SCREENSHOTS"] = "1"
+
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID", "5F3H9LTR2Y"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID", "267a8430-2d83-4339-aeb5-1187988ce123"),
+      key_filepath: ENV.fetch(
+        "ASC_KEY_FILEPATH",
+        File.expand_path("~/.appstoreconnect/private_keys/AuthKey_5F3H9LTR2Y.p8")
+      )
+    )
+
+    deliver(
+      api_key: api_key,
+      app_identifier: "com.yukikawabata.HitoLog",
+      app_version: "1.2",
+      screenshots_path: "fastlane/screenshots",
+      skip_metadata: true,
+      skip_binary_upload: true,
+      overwrite_screenshots: false,
+      sync_screenshots: true,
+      force: true,
+      submit_for_review: false,
+      run_precheck_before_submit: false
+    )
+  end
+
 end

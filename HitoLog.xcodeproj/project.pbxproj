@@ -65,6 +65,9 @@
 		B00100000000000000000053 /* ArticleDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000049 /* ArticleDetailView.swift */; };
 		B00100000000000000000054 /* PurchaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000050 /* PurchaseService.swift */; };
 		B00100000000000000000056 /* EarningsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000052 /* EarningsView.swift */; };
+		B00200000000000000000100 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = A00200000000000000000100 /* Localizable.strings */; };
+		B00200000000000000000101 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = A00200000000000000000101 /* InfoPlist.strings */; };
+		B00200000000000000000102 /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000104 /* Localization.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -123,6 +126,11 @@
 		F00100000000000000000050 /* PurchaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PurchaseService.swift; sourceTree = "<group>"; };
 		F00100000000000000000051 /* HitoLog.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = HitoLog.storekit; sourceTree = "<group>"; };
 		F00100000000000000000052 /* EarningsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EarningsView.swift; sourceTree = "<group>"; };
+		F00200000000000000000100 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
+		F00200000000000000000101 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		F00200000000000000000102 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		F00200000000000000000103 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		F00200000000000000000104 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -223,6 +231,8 @@
 			isa = PBXGroup;
 			children = (
 				F00100000000000000000039 /* Info.plist */,
+				A00200000000000000000101 /* InfoPlist.strings */,
+				A00200000000000000000100 /* Localizable.strings */,
 				F00100000000000000000029 /* Assets.xcassets */,
 			);
 			path = Resources;
@@ -331,6 +341,7 @@
 				F00100000000000000000023 /* Constants.swift */,
 				F00100000000000000000024 /* DateFormatterUtil.swift */,
 				F00100000000000000000025 /* ValidationUtil.swift */,
+				F00200000000000000000104 /* Localization.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -399,6 +410,7 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				ja,
+				en,
 				Base,
 			);
 			mainGroup = A00100000000000000000002;
@@ -421,6 +433,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				B00100000000000000000029 /* Assets.xcassets in Resources */,
+				B00200000000000000000101 /* InfoPlist.strings in Resources */,
+				B00200000000000000000100 /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -489,6 +503,7 @@
 				B00100000000000000000023 /* Constants.swift in Sources */,
 				B00100000000000000000024 /* DateFormatterUtil.swift in Sources */,
 				B00100000000000000000025 /* ValidationUtil.swift in Sources */,
+				B00200000000000000000102 /* Localization.swift in Sources */,
 				B00100000000000000000026 /* AppColor.swift in Sources */,
 				B00100000000000000000027 /* AppFont.swift in Sources */,
 				B00100000000000000000028 /* AppButton.swift in Sources */,
@@ -508,6 +523,27 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		A00200000000000000000100 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				F00200000000000000000100 /* ja */,
+				F00200000000000000000101 /* en */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+		A00200000000000000000101 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				F00200000000000000000102 /* ja */,
+				F00200000000000000000103 /* en */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		A00100000000000000000026 /* Debug */ = {
@@ -638,7 +674,7 @@
 				CODE_SIGN_ENTITLEMENTS = HitoLog/HitoLog.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = 976WT2WW6X;
 				ENABLE_APP_INTENTS_METADATA_GENERATION = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -648,7 +684,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.2;
 				POSTHOG_HOST = "https://us.i.posthog.com";
 				POSTHOG_PROJECT_TOKEN = "";
 				"POSTHOG_PROJECT_TOKEN[arch=*]" = phc_oVcuGh3W2WeqxNR8Qhb83ASZf4nvuisJGpNpKncZUdpz;
@@ -674,7 +710,7 @@
 				CODE_SIGN_ENTITLEMENTS = HitoLog/HitoLog.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = 976WT2WW6X;
 				ENABLE_APP_INTENTS_METADATA_GENERATION = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -684,7 +720,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.2;
 				POSTHOG_HOST = "https://us.i.posthog.com";
 				POSTHOG_PROJECT_TOKEN = "";
 				"POSTHOG_PROJECT_TOKEN[arch=*]" = phc_oVcuGh3W2WeqxNR8Qhb83ASZf4nvuisJGpNpKncZUdpz;

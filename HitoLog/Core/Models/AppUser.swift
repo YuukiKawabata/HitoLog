@@ -75,7 +75,7 @@ struct InviteCode: Identifiable, Codable, Equatable {
     }
 
     var shareText: String {
-        "HitoLogへの招待です: \(shareURL.absoluteString)"
+        L10n.format("HitoLogへの招待です: %@", shareURL.absoluteString)
     }
 
     static func make(inviterID: String, maxUses: Int = 5) -> InviteCode {

@@ -3,6 +3,7 @@ import SwiftUI
 
 struct LoginView: View {
     @EnvironmentObject private var authSession: AuthSessionStore
+    @EnvironmentObject private var analytics: AnalyticsService
     let onContinue: () -> Void
     @State private var isSigningIn = false
     @State private var appeared = false
@@ -22,7 +23,7 @@ struct LoginView: View {
                     BrandIconView(size: 92)
 
                     VStack(spacing: AppSpacing.sm) {
-                        SectionKicker(text: "Human words in the AI age")
+                        SectionKicker(text: "AI時代の人間の言葉".localized)
 
                         Text("HitoLog")
                             .font(AppFont.display)
@@ -46,13 +47,17 @@ struct LoginView: View {
                         SignInWithAppleButton(.signIn) { request in
                             authSession.prepareAppleRequest(request)
                             isSigningIn = true
+                            analytics.capture("sign_in_started", properties: ["method": "apple"])
                         } onCompletion: { result in
                             Task {
                                 let didSignIn = await authSession.handleAppleCompletion(result)
                                 await MainActor.run {
                                     isSigningIn = false
                                     if didSignIn {
+                                        analytics.capture("sign_in_completed", properties: ["method": "apple"])
                                         onContinue()
+                                    } else {
+                                        analytics.capture("sign_in_failed", properties: ["method": "apple"])
                                     }
                                 }
                             }
@@ -63,11 +68,13 @@ struct LoginView: View {
                         .disabled(isSigningIn)
 
                         LocalPreviewButton {
+                            analytics.capture("sample_mode_started")
                             authSession.continueWithLocalPreview()
                             onContinue()
                         }
                     } else {
                         LocalPreviewButton {
+                            analytics.capture("sample_mode_started")
                             authSession.continueWithLocalPreview()
                             onContinue()
                         }
@@ -84,6 +91,7 @@ struct LoginView: View {
             .padding(AppSpacing.lg)
         }
         .onAppear {
+            analytics.capture("login_viewed")
             withAnimation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.1)) {
                 appeared = true
             }

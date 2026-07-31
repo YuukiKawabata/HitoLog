@@ -24,7 +24,7 @@ final class ComposePostViewModel: ObservableObject {
     }
 
     var humanCheckText: String {
-        metrics.suspiciousBulkInputCount == 0 ? "Human Check: OK" : "Human Check: 入力確認中"
+        metrics.suspiciousBulkInputCount == 0 ? "Human Check: OK".localized : "Human Check: 入力確認中".localized
     }
 
     var remainingCharacters: Int {

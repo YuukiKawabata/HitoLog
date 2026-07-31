@@ -4,49 +4,59 @@ struct MainTabView: View {
     @EnvironmentObject private var store: AppDataStore
     @EnvironmentObject private var analytics: AnalyticsService
     @State private var selectedTab: MainTab = .home
+    @State private var lastContentTab: MainTab = .home
     @State private var isShowingCompose = false
-    @State private var isShowingArticleCompose = false
     @State private var isShowingPostToast = false
     @State private var celebrationToken = 0
     @State private var toastMessage = "投稿しました"
     @State private var toastSystemImage = "checkmark.circle.fill"
     @State private var toastShowsCelebration = true
 
+    init() {
+        let scene = ScreenshotScene.current
+        let initialTab: MainTab = scene == .profile ? .profile : .home
+        _selectedTab = State(initialValue: initialTab)
+        _lastContentTab = State(initialValue: initialTab)
+        _isShowingCompose = State(initialValue: scene == .compose)
+    }
+
     var body: some View {
         TabView(selection: $selectedTab) {
             NavigationStack {
-                TimelineView()
+                TimelineView {
+                    showCompose(source: "daily_prompt")
+                }
+                .toolbar {
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        NavigationLink(destination: UserSearchView()) {
+                            Image(systemName: "magnifyingglass")
+                        }
+                        .accessibilityLabel("検索")
+
+                        NavigationLink(destination: NotificationsView()) {
+                            ZStack(alignment: .topTrailing) {
+                                Image(systemName: "bell")
+
+                                if store.unreadNotificationCount > 0 {
+                                    Circle()
+                                        .fill(AppColor.stamp)
+                                        .frame(width: 7, height: 7)
+                                        .offset(x: 2, y: -2)
+                                }
+                            }
+                        }
+                        .accessibilityLabel("通知")
+                    }
+                }
             }
             .tabItem {
                 Label("ホーム", systemImage: "house")
             }
             .tag(MainTab.home)
 
-            NavigationStack {
-                UserSearchView()
-            }
+            Color.clear
             .tabItem {
-                Label("検索", systemImage: "magnifyingglass")
-            }
-            .tag(MainTab.search)
-
-            NavigationStack {
-                NotificationsView()
-            }
-            .tabItem {
-                Label("通知", systemImage: "bell")
-            }
-            .badge(store.unreadNotificationCount)
-            .tag(MainTab.notifications)
-
-            NavigationStack {
-                ComposeEntryView(
-                    onComposeTap: { isShowingCompose = true },
-                    onArticleTap: { isShowingArticleCompose = true }
-                )
-            }
-            .tabItem {
-                Label("投稿", systemImage: "square.and.pencil")
+                Label("書く", systemImage: "square.and.pencil")
             }
             .tag(MainTab.compose)
 
@@ -62,15 +72,6 @@ struct MainTabView: View {
         .sheet(isPresented: $isShowingCompose) {
             ComposePostView {
                 showCompletionToast(message: "投稿しました", systemImage: "checkmark.circle.fill", celebration: true)
-            }
-        }
-        .sheet(isPresented: $isShowingArticleCompose) {
-            ComposeArticleView { status in
-                if status == .published {
-                    showCompletionToast(message: "記事を公開しました", systemImage: "checkmark.circle.fill", celebration: true)
-                } else {
-                    showCompletionToast(message: "下書きを保存しました", systemImage: "tray.and.arrow.down.fill", celebration: false)
-                }
             }
         }
         .overlay(alignment: .top) {
@@ -92,8 +93,22 @@ struct MainTabView: View {
             analytics.screen(selectedTab.analyticsName)
         }
         .onChange(of: selectedTab) { _, tab in
-            analytics.screen(tab.analyticsName)
+            if tab == .compose {
+                showCompose(source: "tab")
+                selectedTab = lastContentTab
+            } else {
+                lastContentTab = tab
+                analytics.screen(tab.analyticsName)
+            }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .didOpenFutureReflection)) { _ in
+            selectedTab = .profile
+        }
+    }
+
+    private func showCompose(source: String) {
+        analytics.capture("compose_opened", properties: ["source": source])
+        isShowingCompose = true
     }
 
     private func showCompletionToast(message: String, systemImage: String, celebration: Bool) {
@@ -114,10 +129,27 @@ struct MainTabView: View {
     }
 }
 
+private enum ScreenshotScene: String {
+    case home
+    case compose
+    case profile
+
+    static var current: ScreenshotScene? {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: "-HitoLogScreenshotScene"),
+              arguments.indices.contains(index + 1) else {
+            return nil
+        }
+        return ScreenshotScene(rawValue: arguments[index + 1])
+        #else
+        return nil
+        #endif
+    }
+}
+
 private enum MainTab: String {
     case home
-    case search
-    case notifications
     case compose
     case profile
 
@@ -125,12 +157,8 @@ private enum MainTab: String {
         switch self {
         case .home:
             return "timeline"
-        case .search:
-            return "search"
-        case .notifications:
-            return "notifications"
         case .compose:
-            return "compose_entry"
+            return "compose"
         case .profile:
             return "profile"
         }
@@ -256,7 +284,7 @@ private struct UserSearchView: View {
                                             targetType: .post,
                                             targetID: post.id,
                                             targetOwnerID: post.userId,
-                                            targetDescription: "投稿: \(post.body.prefix(40))",
+                                            targetDescription: L10n.format("投稿: %@", String(post.body.prefix(40))),
                                             reason: "不適切な投稿"
                                         )
                                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -322,7 +350,7 @@ private struct UserSearchView: View {
                                             targetType: .post,
                                             targetID: post.id,
                                             targetOwnerID: post.userId,
-                                            targetDescription: "投稿: \(post.body.prefix(40))",
+                                            targetDescription: L10n.format("投稿: %@", String(post.body.prefix(40))),
                                             reason: "不適切な投稿"
                                         )
                                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -353,7 +381,7 @@ private struct UserSearchView: View {
         if let topic = TopicExtractor.normalizedTopicQuery(from: query) {
             return "#\(topic)"
         }
-        return "話題検索"
+        return "話題検索".localized
     }
 
     private func scheduleSearch(for value: String, scope: SearchScope) {
@@ -392,11 +420,11 @@ private enum SearchScope: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .users: return "ユーザー"
-        case .topics: return "話題"
-        case .rooms: return "ルーム"
-        case .posts: return "投稿"
-        case .articles: return "記事"
+        case .users: return "ユーザー".localized
+        case .topics: return "話題".localized
+        case .rooms: return "ルーム".localized
+        case .posts: return "投稿".localized
+        case .articles: return "記事".localized
         }
     }
 
@@ -412,11 +440,11 @@ private enum SearchScope: String, CaseIterable, Identifiable {
 
     var prompt: String {
         switch self {
-        case .users: return "名前またはユーザー名"
-        case .topics: return "#健康 など"
-        case .rooms: return "ルーム名または#topic"
-        case .posts: return "投稿本文を検索"
-        case .articles: return "記事タイトルを検索"
+        case .users: return "名前またはユーザー名".localized
+        case .topics: return "#健康 など".localized
+        case .rooms: return "ルーム名または#topic".localized
+        case .posts: return "投稿本文を検索".localized
+        case .articles: return "記事タイトルを検索".localized
         }
     }
 }
@@ -437,7 +465,7 @@ private struct TopicTrendRow: View {
                     Text(trend.displayText)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(AppColor.textPrimary)
-                    Text("\(trend.postCount)件の投稿")
+                    Text(L10n.format("%lld件の投稿", Int64(trend.postCount)))
                         .font(.caption)
                         .foregroundStyle(AppColor.textSecondary)
                 }
@@ -470,7 +498,7 @@ private struct TopicRoomSearchRow: View {
                         Text(room.displayTitle)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(AppColor.textPrimary)
-                        Text("\(room.postCount)件の投稿 ・ \(room.followerCount)人がフォロー")
+                        Text(L10n.format("%lld件の投稿 ・ %lld人がフォロー", Int64(room.postCount), Int64(room.followerCount)))
                             .font(.caption)
                             .foregroundStyle(AppColor.textSecondary)
                     }
@@ -491,7 +519,7 @@ private struct TopicRoomSearchRow: View {
 private enum TopicRoomTab: String, CaseIterable, Identifiable {
     case posts, articles
     var id: String { rawValue }
-    var title: String { self == .posts ? "投稿" : "記事" }
+    var title: String { self == .posts ? "投稿".localized : "記事".localized }
     var systemImage: String { self == .posts ? "text.bubble" : "doc.text" }
 }
 
@@ -517,7 +545,7 @@ struct TopicRoomView: View {
                             .background(AppColor.accentSoft, in: RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
 
                         VStack(alignment: .leading, spacing: AppSpacing.xs) {
-                            SectionKicker(text: "Topic Room", systemImage: "person.3")
+                            SectionKicker(text: "ルーム".localized, systemImage: "person.3")
                             Text(room.displayTitle)
                                 .font(AppFont.title)
                                 .foregroundStyle(AppColor.textPrimary)
@@ -640,7 +668,7 @@ struct TopicRoomView: View {
                                             targetType: .post,
                                             targetID: post.id,
                                             targetOwnerID: post.userId,
-                                            targetDescription: "投稿: \(post.body.prefix(40))",
+                                            targetDescription: L10n.format("投稿: %@", String(post.body.prefix(40))),
                                             reason: "不適切な投稿"
                                         )
                                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -668,7 +696,7 @@ struct TopicRoomView: View {
                                             targetType: .article,
                                             targetID: article.id,
                                             targetOwnerID: article.userID,
-                                            targetDescription: "記事: \(article.title.prefix(40))",
+                                            targetDescription: L10n.format("記事: %@", String(article.title.prefix(40))),
                                             reason: "不適切な記事"
                                         )
                                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -888,7 +916,7 @@ private struct ComposeEntryView: View {
             VStack(spacing: AppSpacing.md) {
                 BrandIconView(size: 78)
 
-                SectionKicker(text: "Draft Desk", systemImage: "pencil.line")
+                SectionKicker(text: "投稿".localized, systemImage: "pencil.line")
 
                 Text("いま、あなたの言葉で。")
                     .font(AppFont.title)
