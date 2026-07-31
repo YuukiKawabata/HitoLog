@@ -9,7 +9,6 @@ struct PostDetailView: View {
     @State private var didSendComment = false
     @State private var editingPost: Post?
     @State private var isShowingDeleteConfirmation = false
-    @State private var isShowingQuoteSheet = false
 
     var body: some View {
         Group {
@@ -18,7 +17,12 @@ struct PostDetailView: View {
                     VStack(alignment: .leading, spacing: AppSpacing.lg) {
                         VStack(alignment: .leading, spacing: AppSpacing.lg) {
                             if post.shareType != .original {
-                                Label(post.shareType == .repost ? "\(author.displayName)さんがリポスト" : "\(author.displayName)さんが引用", systemImage: post.shareType == .repost ? "arrow.2.squarepath" : "quote.bubble")
+                                Label(
+                                    post.shareType == .repost
+                                        ? L10n.format("%@さんがリポスト", author.displayName)
+                                        : L10n.format("%@さんが引用", author.displayName),
+                                    systemImage: post.shareType == .repost ? "arrow.2.squarepath" : "quote.bubble"
+                                )
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(AppColor.textSecondary)
                             }
@@ -31,7 +35,7 @@ struct PostDetailView: View {
 
                                 NavigationLink(destination: ProfileView(userID: author.id)) {
                                     VStack(alignment: .leading, spacing: AppSpacing.xs) {
-                                        SectionKicker(text: "Original Note")
+                                        SectionKicker(text: "元の投稿".localized)
                                         Text(author.displayName)
                                             .font(AppFont.userName)
                                             .foregroundStyle(AppColor.textPrimary)
@@ -92,7 +96,7 @@ struct PostDetailView: View {
                                                 targetType: .post,
                                                 targetID: post.id,
                                                 targetOwnerID: post.userId,
-                                                targetDescription: "投稿: \(post.body.prefix(40))",
+                                                targetDescription: L10n.format("投稿: %@", String(post.body.prefix(40))),
                                                 reason: "不適切な投稿"
                                             )
                                             UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -118,43 +122,15 @@ struct PostDetailView: View {
                                 PostMediaGridView(mediaItems: post.mediaItems, isDetail: true)
                             }
 
-                            if !post.topics.isEmpty {
-                                ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(spacing: AppSpacing.xs) {
-                                        ForEach(post.topics, id: \.self) { topic in
-                                            TopicChip(topic: topic)
-                                        }
-                                    }
-                                }
-                            }
-
                             if let sourcePost = store.sourcePost(for: post),
                                let sourceAuthor = store.user(for: sourcePost.userId) {
                                 ReferencedPostCard(post: sourcePost, author: sourceAuthor)
                             }
 
                             if post.shareType != .repost {
-                                let trace = WritingTrace(post: post)
-                                HumanSignalStrip(
-                                    title: post.humanBadge.displayText,
-                                    detail: "\(trace.summaryText)で書かれた投稿です。",
-                                    systemImage: post.humanBadge.systemImage
-                                )
-
-                                if post.aiAssisted {
-                                    AIAssistedBadge()
-                                }
-
-                                WritingTraceCard(trace: trace)
-
-                                ReactionBar(
-                                    counts: post.reactionCounts,
-                                    selected: store.reaction(for: post.id),
-                                    onTap: { kind in
-                                        store.toggleReaction(kind, for: post.id)
-                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                    }
-                                )
+                                Label(post.humanBadge.displayText, systemImage: post.humanBadge.systemImage)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(post.humanBadge == .verified ? AppColor.accent : AppColor.textSecondary)
                             }
 
                             InkDivider()
@@ -166,13 +142,12 @@ struct PostDetailView: View {
                                 ],
                                 spacing: AppSpacing.sm
                             ) {
-                                let targetPost = store.shareTargetPost(for: post)
                                 Button {
                                     store.toggleLike(for: post.id)
                                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                 } label: {
                                     PaperMetricTile(
-                                        title: "いいね",
+                                        title: "いいね".localized,
                                         value: "\(post.likeCount)",
                                         systemImage: store.likedPostIDs.contains(post.id) ? "heart.fill" : "heart",
                                         tint: store.likedPostIDs.contains(post.id) ? AppColor.stamp : AppColor.accent
@@ -180,45 +155,7 @@ struct PostDetailView: View {
                                 }
                                 .buttonStyle(ScaleButtonStyle(scale: 0.95))
 
-                                PaperMetricTile(title: "コメント", value: "\(post.commentCount)", systemImage: "bubble.right")
-
-                                Button {
-                                    store.toggleRepost(for: targetPost.id)
-                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                } label: {
-                                    PaperMetricTile(
-                                        title: "リポスト",
-                                        value: "\(targetPost.repostCount)",
-                                        systemImage: "arrow.2.squarepath",
-                                        tint: store.isReposted(targetPost.id) ? AppColor.stamp : AppColor.accent
-                                    )
-                                }
-                                .buttonStyle(ScaleButtonStyle(scale: 0.95))
-
-                                Button {
-                                    isShowingQuoteSheet = true
-                                } label: {
-                                    PaperMetricTile(
-                                        title: "引用",
-                                        value: "\(targetPost.quoteCount)",
-                                        systemImage: "quote.bubble"
-                                    )
-                                }
-                                .buttonStyle(ScaleButtonStyle(scale: 0.95))
-
-                                Button {
-                                    store.toggleBookmark(for: post.id)
-                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                } label: {
-                                    PaperMetricTile(
-                                        title: "保存",
-                                        value: store.isBookmarked(post.id) ? "済み" : "未保存",
-                                        systemImage: store.isBookmarked(post.id) ? "bookmark.fill" : "bookmark",
-                                        tint: store.isBookmarked(post.id) ? AppColor.inkBlue : AppColor.accent
-                                    )
-                                }
-                                .buttonStyle(ScaleButtonStyle(scale: 0.95))
-                                PaperMetricTile(title: "入力", value: WritingTrace(post: post).durationText, systemImage: "keyboard")
+                                PaperMetricTile(title: "コメント".localized, value: "\(post.commentCount)", systemImage: "bubble.right")
                             }
                         }
                         .padding(AppSpacing.md)
@@ -239,7 +176,7 @@ struct PostDetailView: View {
                         }
 
                         VStack(alignment: .leading, spacing: AppSpacing.md) {
-                            SectionKicker(text: "Comments", systemImage: "bubble.right")
+                            SectionKicker(text: "コメント".localized, systemImage: "bubble.right")
 
                             let comments = store.comments(for: post.id)
                             if comments.isEmpty {
@@ -269,7 +206,7 @@ struct PostDetailView: View {
                                                     targetType: .comment,
                                                     targetID: comment.id,
                                                     targetOwnerID: comment.userId,
-                                                    targetDescription: "コメント: \(comment.body.prefix(40))",
+                                                    targetDescription: L10n.format("コメント: %@", String(comment.body.prefix(40))),
                                                     reason: "不適切なコメント"
                                                 )
                                                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -301,15 +238,6 @@ struct PostDetailView: View {
         .sheet(item: $editingPost) { post in
             PostEditSheet(post: post)
                 .environmentObject(store)
-        }
-        .sheet(isPresented: $isShowingQuoteSheet) {
-            if let post = store.post(for: postID) {
-                let targetPost = store.shareTargetPost(for: post)
-                if let targetAuthor = store.user(for: targetPost.userId) {
-                    QuotePostSheet(sourcePost: targetPost, sourceAuthor: targetAuthor)
-                        .environmentObject(store)
-                }
-            }
         }
         .confirmationDialog("投稿を削除しますか？", isPresented: $isShowingDeleteConfirmation, titleVisibility: .visible) {
             Button("削除", role: .destructive) {

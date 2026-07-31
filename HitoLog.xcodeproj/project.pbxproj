@@ -28,7 +28,6 @@
 		B00100000000000000000019 /* Comment.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000019 /* Comment.swift */; };
 		B00100000000000000000020 /* HumanBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000020 /* HumanBadge.swift */; };
 		B00100000000000000000021 /* HumanScoreService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000021 /* HumanScoreService.swift */; };
-		B00100000000000000000022 /* MockDataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000022 /* MockDataStore.swift */; };
 		B00100000000000000000023 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000023 /* Constants.swift */; };
 		B00100000000000000000024 /* DateFormatterUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000024 /* DateFormatterUtil.swift */; };
 		B00100000000000000000025 /* ValidationUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000025 /* ValidationUtil.swift */; };
@@ -37,6 +36,7 @@
 		B00100000000000000000028 /* AppButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000028 /* AppButton.swift */; };
 		B00100000000000000000057 /* MarkdownBodyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000053 /* MarkdownBodyView.swift */; };
 		B00100000000000000000058 /* InlineRichText.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000054 /* InlineRichText.swift */; };
+		B00100000000000000000059 /* ReportRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000055 /* ReportRecord.swift */; };
 		B00100000000000000000029 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000029 /* Assets.xcassets */; };
 		B00100000000000000000030 /* BrandIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000031 /* BrandIconView.swift */; };
 		B00100000000000000000031 /* HitoLogAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000032 /* HitoLogAppDelegate.swift */; };
@@ -58,14 +58,23 @@
 		B00100000000000000000047 /* AppReviewService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000044 /* AppReviewService.swift */; };
 		B00100000000000000000048 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = E00100000000000000000007 /* PostHog */; };
 		B00100000000000000000049 /* Article.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000045 /* Article.swift */; };
-		B00100000000000000000050 /* ComposeArticleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000046 /* ComposeArticleView.swift */; };
 		B00100000000000000000099 /* FocusedEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000099 /* FocusedEditorView.swift */; };
-		B00100000000000000000051 /* ComposeArticleViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000047 /* ComposeArticleViewModel.swift */; };
-		B00100000000000000000052 /* ArticleCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000048 /* ArticleCardView.swift */; };
-		B00100000000000000000053 /* ArticleDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000049 /* ArticleDetailView.swift */; };
 		B00100000000000000000054 /* PurchaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000050 /* PurchaseService.swift */; };
-		B00100000000000000000056 /* EarningsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000052 /* EarningsView.swift */; };
+		B00200000000000000000100 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = A00200000000000000000100 /* Localizable.strings */; };
+		B00200000000000000000101 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = A00200000000000000000101 /* InfoPlist.strings */; };
+		B00200000000000000000102 /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000104 /* Localization.swift */; };
+		B00300000000000000000100 /* ReviewRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000100 /* ReviewRegressionTests.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A00300000000000000000109 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A00100000000000000000024 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A00100000000000000000020;
+			remoteInfo = HitoLog;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		F00100000000000000000001 /* HitoLogApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HitoLogApp.swift; sourceTree = "<group>"; };
@@ -89,7 +98,6 @@
 		F00100000000000000000019 /* Comment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Comment.swift; sourceTree = "<group>"; };
 		F00100000000000000000020 /* HumanBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HumanBadge.swift; sourceTree = "<group>"; };
 		F00100000000000000000021 /* HumanScoreService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HumanScoreService.swift; sourceTree = "<group>"; };
-		F00100000000000000000022 /* MockDataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockDataStore.swift; sourceTree = "<group>"; };
 		F00100000000000000000023 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
 		F00100000000000000000024 /* DateFormatterUtil.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateFormatterUtil.swift; sourceTree = "<group>"; };
 		F00100000000000000000025 /* ValidationUtil.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ValidationUtil.swift; sourceTree = "<group>"; };
@@ -98,6 +106,7 @@
 		F00100000000000000000028 /* AppButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppButton.swift; sourceTree = "<group>"; };
 		F00100000000000000000053 /* MarkdownBodyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownBodyView.swift; sourceTree = "<group>"; };
 		F00100000000000000000054 /* InlineRichText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineRichText.swift; sourceTree = "<group>"; };
+		F00100000000000000000055 /* ReportRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportRecord.swift; sourceTree = "<group>"; };
 		F00100000000000000000029 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F00100000000000000000030 /* HitoLog.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HitoLog.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F00100000000000000000031 /* BrandIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandIconView.swift; sourceTree = "<group>"; };
@@ -115,14 +124,16 @@
 		F00100000000000000000043 /* AnalyticsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsService.swift; sourceTree = "<group>"; };
 		F00100000000000000000044 /* AppReviewService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppReviewService.swift; sourceTree = "<group>"; };
 		F00100000000000000000045 /* Article.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Article.swift; sourceTree = "<group>"; };
-		F00100000000000000000046 /* ComposeArticleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeArticleView.swift; sourceTree = "<group>"; };
 		F00100000000000000000099 /* FocusedEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusedEditorView.swift; sourceTree = "<group>"; };
-		F00100000000000000000047 /* ComposeArticleViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeArticleViewModel.swift; sourceTree = "<group>"; };
-		F00100000000000000000048 /* ArticleCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleCardView.swift; sourceTree = "<group>"; };
-		F00100000000000000000049 /* ArticleDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleDetailView.swift; sourceTree = "<group>"; };
 		F00100000000000000000050 /* PurchaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PurchaseService.swift; sourceTree = "<group>"; };
 		F00100000000000000000051 /* HitoLog.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = HitoLog.storekit; sourceTree = "<group>"; };
-		F00100000000000000000052 /* EarningsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EarningsView.swift; sourceTree = "<group>"; };
+		F00200000000000000000100 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
+		F00200000000000000000101 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		F00200000000000000000102 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		F00200000000000000000103 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		F00200000000000000000104 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
+		F00300000000000000000100 /* ReviewRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewRegressionTests.swift; sourceTree = "<group>"; };
+		F00300000000000000000101 /* HitoLogTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HitoLogTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -140,6 +151,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A00300000000000000000103 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -147,6 +165,7 @@
 			isa = PBXGroup;
 			children = (
 				A00100000000000000000004 /* HitoLog */,
+				A00300000000000000000100 /* HitoLogTests */,
 				A00100000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -155,6 +174,7 @@
 			isa = PBXGroup;
 			children = (
 				F00100000000000000000030 /* HitoLog.app */,
+				F00300000000000000000101 /* HitoLogTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -193,19 +213,8 @@
 				A00100000000000000000013 /* PostDetail */,
 				A00100000000000000000014 /* Profile */,
 				A00100000000000000000015 /* Settings */,
-				A00100000000000000000031 /* Article */,
 			);
 			path = Features;
-			sourceTree = "<group>";
-		};
-		A00100000000000000000031 /* Article */ = {
-			isa = PBXGroup;
-			children = (
-				F00100000000000000000048 /* ArticleCardView.swift */,
-				F00100000000000000000049 /* ArticleDetailView.swift */,
-				F00100000000000000000052 /* EarningsView.swift */,
-			);
-			path = Article;
 			sourceTree = "<group>";
 		};
 		A00100000000000000000007 /* Core */ = {
@@ -223,6 +232,8 @@
 			isa = PBXGroup;
 			children = (
 				F00100000000000000000039 /* Info.plist */,
+				A00200000000000000000101 /* InfoPlist.strings */,
+				A00200000000000000000100 /* Localizable.strings */,
 				F00100000000000000000029 /* Assets.xcassets */,
 			);
 			path = Resources;
@@ -263,9 +274,7 @@
 				F00100000000000000000011 /* NoPasteTextView.swift */,
 				F00100000000000000000012 /* NoPasteTextViewRepresentable.swift */,
 				F00100000000000000000013 /* TypingMetrics.swift */,
-				F00100000000000000000046 /* ComposeArticleView.swift */,
 				F00100000000000000000099 /* FocusedEditorView.swift */,
-				F00100000000000000000047 /* ComposeArticleViewModel.swift */,
 			);
 			path = Compose;
 			sourceTree = "<group>";
@@ -303,6 +312,7 @@
 				F00100000000000000000020 /* HumanBadge.swift */,
 				F00100000000000000000042 /* AppFeedback.swift */,
 				F00100000000000000000045 /* Article.swift */,
+				F00100000000000000000055 /* ReportRecord.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -320,7 +330,6 @@
 				F00100000000000000000044 /* AppReviewService.swift */,
 				F00100000000000000000040 /* MediaUploadService.swift */,
 				F00100000000000000000050 /* PurchaseService.swift */,
-				F00100000000000000000022 /* MockDataStore.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -331,6 +340,7 @@
 				F00100000000000000000023 /* Constants.swift */,
 				F00100000000000000000024 /* DateFormatterUtil.swift */,
 				F00100000000000000000025 /* ValidationUtil.swift */,
+				F00200000000000000000104 /* Localization.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -346,6 +356,14 @@
 				F00100000000000000000031 /* BrandIconView.swift */,
 			);
 			path = DesignSystem;
+			sourceTree = "<group>";
+		};
+		A00300000000000000000100 /* HitoLogTests */ = {
+			isa = PBXGroup;
+			children = (
+				F00300000000000000000100 /* ReviewRegressionTests.swift */,
+			);
+			path = HitoLogTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -378,6 +396,26 @@
 			productReference = F00100000000000000000030 /* HitoLog.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A00300000000000000000101 /* HitoLogTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A00300000000000000000105 /* Build configuration list for PBXNativeTarget "HitoLogTests" */;
+			buildPhases = (
+				A00300000000000000000102 /* Sources */,
+				A00300000000000000000103 /* Frameworks */,
+				A00300000000000000000104 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A00300000000000000000108 /* PBXTargetDependency */,
+			);
+			name = HitoLogTests;
+			packageProductDependencies = (
+			);
+			productName = HitoLogTests;
+			productReference = F00300000000000000000101 /* HitoLogTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -391,6 +429,10 @@
 					A00100000000000000000020 = {
 						CreatedOnToolsVersion = 26.5;
 					};
+					A00300000000000000000101 = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = A00100000000000000000020;
+					};
 				};
 			};
 			buildConfigurationList = A00100000000000000000025 /* Build configuration list for PBXProject "HitoLog" */;
@@ -399,6 +441,7 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				ja,
+				en,
 				Base,
 			);
 			mainGroup = A00100000000000000000002;
@@ -411,6 +454,7 @@
 			projectRoot = "";
 			targets = (
 				A00100000000000000000020 /* HitoLog */,
+				A00300000000000000000101 /* HitoLogTests */,
 			);
 		};
 /* End PBXProject section */
@@ -421,6 +465,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				B00100000000000000000029 /* Assets.xcassets in Resources */,
+				B00200000000000000000101 /* InfoPlist.strings in Resources */,
+				B00200000000000000000100 /* Localizable.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A00300000000000000000104 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -485,29 +538,62 @@
 				B00100000000000000000047 /* AppReviewService.swift in Sources */,
 				B00100000000000000000042 /* MediaUploadService.swift in Sources */,
 				B00100000000000000000054 /* PurchaseService.swift in Sources */,
-				B00100000000000000000022 /* MockDataStore.swift in Sources */,
 				B00100000000000000000023 /* Constants.swift in Sources */,
 				B00100000000000000000024 /* DateFormatterUtil.swift in Sources */,
 				B00100000000000000000025 /* ValidationUtil.swift in Sources */,
+				B00200000000000000000102 /* Localization.swift in Sources */,
 				B00100000000000000000026 /* AppColor.swift in Sources */,
 				B00100000000000000000027 /* AppFont.swift in Sources */,
 				B00100000000000000000028 /* AppButton.swift in Sources */,
 				B00100000000000000000057 /* MarkdownBodyView.swift in Sources */,
 				B00100000000000000000058 /* InlineRichText.swift in Sources */,
+				B00100000000000000000059 /* ReportRecord.swift in Sources */,
 				B00100000000000000000030 /* BrandIconView.swift in Sources */,
 				B00100000000000000000043 /* PostMediaGridView.swift in Sources */,
 				B00100000000000000000045 /* AppFeedback.swift in Sources */,
 				B00100000000000000000049 /* Article.swift in Sources */,
-				B00100000000000000000050 /* ComposeArticleView.swift in Sources */,
 				B00100000000000000000099 /* FocusedEditorView.swift in Sources */,
-				B00100000000000000000051 /* ComposeArticleViewModel.swift in Sources */,
-				B00100000000000000000052 /* ArticleCardView.swift in Sources */,
-				B00100000000000000000053 /* ArticleDetailView.swift in Sources */,
-				B00100000000000000000056 /* EarningsView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A00300000000000000000102 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00300000000000000000100 /* ReviewRegressionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A00300000000000000000108 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A00100000000000000000020 /* HitoLog */;
+			targetProxy = A00300000000000000000109 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		A00200000000000000000100 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				F00200000000000000000100 /* ja */,
+				F00200000000000000000101 /* en */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+		A00200000000000000000101 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				F00200000000000000000102 /* ja */,
+				F00200000000000000000103 /* en */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		A00100000000000000000026 /* Debug */ = {
@@ -638,7 +724,7 @@
 				CODE_SIGN_ENTITLEMENTS = HitoLog/HitoLog.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = 976WT2WW6X;
 				ENABLE_APP_INTENTS_METADATA_GENERATION = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -648,7 +734,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.3;
 				POSTHOG_HOST = "https://us.i.posthog.com";
 				POSTHOG_PROJECT_TOKEN = "";
 				"POSTHOG_PROJECT_TOKEN[arch=*]" = phc_oVcuGh3W2WeqxNR8Qhb83ASZf4nvuisJGpNpKncZUdpz;
@@ -674,7 +760,7 @@
 				CODE_SIGN_ENTITLEMENTS = HitoLog/HitoLog.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = 976WT2WW6X;
 				ENABLE_APP_INTENTS_METADATA_GENERATION = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -684,7 +770,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.3;
 				POSTHOG_HOST = "https://us.i.posthog.com";
 				POSTHOG_PROJECT_TOKEN = "";
 				"POSTHOG_PROJECT_TOKEN[arch=*]" = phc_oVcuGh3W2WeqxNR8Qhb83ASZf4nvuisJGpNpKncZUdpz;
@@ -697,6 +783,47 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A00300000000000000000106 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 976WT2WW6X;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yukikawabata.HitoLogTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HitoLog.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HitoLog";
+			};
+			name = Debug;
+		};
+		A00300000000000000000107 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 976WT2WW6X;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yukikawabata.HitoLogTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HitoLog.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HitoLog";
 			};
 			name = Release;
 		};
@@ -717,6 +844,15 @@
 			buildConfigurations = (
 				A00100000000000000000026 /* Debug */,
 				A00100000000000000000027 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A00300000000000000000105 /* Build configuration list for PBXNativeTarget "HitoLogTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A00300000000000000000106 /* Debug */,
+				A00300000000000000000107 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

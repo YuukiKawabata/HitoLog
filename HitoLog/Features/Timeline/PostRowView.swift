@@ -15,17 +15,14 @@ struct PostRowView: View {
     var onEdit: () -> Void = {}
     var onDelete: () -> Void = {}
     var onReport: () -> Void = {}
-    @State private var isShowingQuoteSheet = false
-    @State private var isShowingRecommendationReason = false
-    @State private var recommendationReason = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.md) {
+        VStack(alignment: .leading, spacing: AppSpacing.sm) {
             if post.shareType != .original {
                 PostShareContextLabel(post: post, author: author)
             }
 
-            HStack(alignment: .top, spacing: AppSpacing.md) {
+            HStack(alignment: .top, spacing: AppSpacing.sm) {
                 authorAvatar
 
                 VStack(alignment: .leading, spacing: AppSpacing.xs) {
@@ -81,37 +78,6 @@ struct PostRowView: View {
                             }
                         }
 
-                        if !post.topics.isEmpty {
-                            Menu {
-                                ForEach(post.topics, id: \.self) { topic in
-                                    Button("#\(topic)") {
-                                        store.setFeedControl(topic: topic, preference: .boost)
-                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                    }
-                                }
-                            } label: {
-                                Label("このルームを増やす", systemImage: "arrow.up.circle")
-                            }
-
-                            Menu {
-                                ForEach(post.topics, id: \.self) { topic in
-                                    Button("#\(topic)") {
-                                        store.setFeedControl(topic: topic, preference: .reduce)
-                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                    }
-                                }
-                            } label: {
-                                Label("この話題を減らす", systemImage: "arrow.down.circle")
-                            }
-                        }
-
-                        Button {
-                            recommendationReason = store.recommendationExplanation(for: post)
-                            isShowingRecommendationReason = true
-                        } label: {
-                            Label("おすすめ理由", systemImage: "questionmark.circle")
-                        }
-
                         Button(role: .destructive, action: onReport) {
                             Label("通報", systemImage: "exclamationmark.bubble")
                         }
@@ -134,39 +100,16 @@ struct PostRowView: View {
                 PostMediaGridView(mediaItems: post.mediaItems)
             }
 
-            if !post.topics.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: AppSpacing.xs) {
-                        ForEach(post.topics, id: \.self) { topic in
-                            TopicChip(topic: topic)
-                        }
-                    }
-                }
-            }
-
             if let sourcePost = store.sourcePost(for: post),
                let sourceAuthor = store.user(for: sourcePost.userId) {
                 ReferencedPostCard(post: sourcePost, author: sourceAuthor)
             }
 
             if post.shareType != .repost {
-                HStack(spacing: AppSpacing.sm) {
-                    HumanBadgeView(badge: post.humanBadge)
-
-                    if post.aiAssisted {
-                        AIAssistedBadge()
-                    }
-
-                    WritingTraceLabel(trace: WritingTrace(post: post))
-
-                    Spacer(minLength: 0)
-                }
+                PostIntegrityLine(post: post)
             }
 
-            InkDivider()
-
             HStack(spacing: AppSpacing.sm) {
-                let targetPost = store.shareTargetPost(for: post)
                 Button(action: onLike) {
                     PostActionView(
                         systemImage: isLiked ? "heart.fill" : "heart",
@@ -187,85 +130,24 @@ struct PostRowView: View {
                     PostActionView(systemImage: "bubble.right", value: post.commentCount, label: "コメント")
                 }
 
-                Button {
-                    store.toggleRepost(for: targetPost.id)
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                } label: {
-                    PostActionView(
-                        systemImage: "arrow.2.squarepath",
-                        value: targetPost.repostCount,
-                        isActive: store.isReposted(targetPost.id),
-                        activeTint: AppColor.accent,
-                        label: "リポスト"
-                    )
-                }
-                .buttonStyle(ScaleButtonStyle())
-
-                Button {
-                    isShowingQuoteSheet = true
-                } label: {
-                    PostActionView(systemImage: "quote.bubble", value: targetPost.quoteCount, label: "引用")
-                }
-                .buttonStyle(ScaleButtonStyle())
-
-                Button(action: onBookmark) {
-                    PostActionView(
-                        systemImage: isBookmarked ? "bookmark.fill" : "bookmark",
-                        value: nil,
-                        isActive: isBookmarked,
-                        activeTint: AppColor.inkBlue,
-                        label: "ブックマーク"
-                    )
-                }
-                .buttonStyle(ScaleButtonStyle())
-
                 Spacer(minLength: 0)
-            }
-
-            if post.shareType != .repost {
-                ReactionBar(
-                    counts: post.reactionCounts,
-                    selected: store.reaction(for: post.id),
-                    onTap: { kind in
-                        store.toggleReaction(kind, for: post.id)
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    }
-                )
             }
         }
         .padding(AppSpacing.md)
-        .paperSurface()
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(AppColor.accent.opacity(0.72))
-                .frame(width: 2)
-                .padding(.vertical, AppSpacing.md)
-        }
+        .paperSurface(shadow: false)
         .padding(.horizontal, AppSpacing.md)
-        .padding(.bottom, AppSpacing.xs)
-        .sheet(isPresented: $isShowingQuoteSheet) {
-            let targetPost = store.shareTargetPost(for: post)
-            if let targetAuthor = store.user(for: targetPost.userId) {
-                QuotePostSheet(sourcePost: targetPost, sourceAuthor: targetAuthor)
-                    .environmentObject(store)
-            }
-        }
-        .alert("おすすめ理由", isPresented: $isShowingRecommendationReason) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(recommendationReason)
-        }
+        .padding(.bottom, AppSpacing.sm)
     }
 
     @ViewBuilder
     private var authorAvatar: some View {
         if let authorDestination {
             NavigationLink(destination: authorDestination) {
-                AvatarView(user: author, size: 42)
+                AvatarView(user: author, size: 36)
             }
             .buttonStyle(.plain)
         } else {
-            AvatarView(user: author, size: 42)
+            AvatarView(user: author, size: 36)
         }
     }
 
@@ -307,9 +189,9 @@ private struct PostShareContextLabel: View {
     private var contextText: String {
         switch post.shareType {
         case .repost:
-            return "\(author.displayName)さんがリポスト"
+            return L10n.format("%@さんがリポスト", author.displayName)
         case .quote:
-            return "\(author.displayName)さんが引用"
+            return L10n.format("%@さんが引用", author.displayName)
         case .original:
             return ""
         }
@@ -394,7 +276,7 @@ struct QuotePostSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: AppSpacing.md) {
-                    SectionKicker(text: "Quote", systemImage: "quote.bubble")
+                    SectionKicker(text: "引用".localized, systemImage: "quote.bubble")
 
                     ZStack(alignment: .topLeading) {
                         NoPasteTextViewRepresentable(
@@ -605,6 +487,32 @@ struct PostEditSheet: View {
     }
 }
 
+private struct PostIntegrityLine: View {
+    let post: Post
+
+    var body: some View {
+        HStack(spacing: AppSpacing.xs) {
+            Group {
+                Image(systemName: post.humanBadge.systemImage)
+                    .font(.caption2.weight(.semibold))
+                Text(post.humanBadge.displayText)
+            }
+            .foregroundStyle(post.humanBadge == .verified ? AppColor.accent : AppColor.textSecondary)
+
+            if post.aiAssisted {
+                Text("・")
+                    .foregroundStyle(AppColor.textTertiary)
+                Text("AI併用")
+                    .foregroundStyle(AppColor.inkBlue)
+            }
+        }
+        .font(.caption.weight(.medium))
+        .lineLimit(1)
+        .minimumScaleFactor(0.85)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 private struct PostActionView: View {
     let systemImage: String
     let value: Int?
@@ -626,17 +534,13 @@ private struct PostActionView: View {
             }
         }
         .foregroundStyle(isActive ? activeTint : AppColor.textSecondary)
-        .padding(.horizontal, AppSpacing.sm)
-        .frame(minHeight: 36)
-        .frame(minWidth: 44)
-        .background {
-            Capsule(style: .continuous)
-                .fill(activeTint.opacity(isActive ? 0.12 : 0))
-        }
-        .contentShape(Capsule(style: .continuous))
+        .padding(.horizontal, AppSpacing.xxs)
+        .frame(minHeight: 32)
+        .frame(minWidth: 34)
+        .contentShape(Rectangle())
         .animation(.snappy(duration: 0.28), value: isActive)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(value.map { "\(label) \($0)件" } ?? label)
+        .accessibilityLabel(value.map { L10n.format("%@ %lld件", label, Int64($0)) } ?? label)
         .accessibilityAddTraits(.isButton)
     }
 }
@@ -772,22 +676,10 @@ struct ReactionBar: View {
                     }
                 }
                 .buttonStyle(ScaleButtonStyle())
-                .accessibilityLabel("\(kind.displayText)\(count > 0 ? " \(count)件" : "")")
+                .accessibilityLabel(Text(count > 0 ? L10n.format("%@ %lld件", kind.displayText, Int64(count)) : kind.displayText))
             }
             Spacer(minLength: 0)
         }
-    }
-}
-
-/// 一覧用の「思考の痕跡」一行ラベル（所要時間・推敲回数）。
-struct WritingTraceLabel: View {
-    let trace: WritingTrace
-
-    var body: some View {
-        Label(trace.summaryText, systemImage: trace.depth.systemImage)
-            .font(.caption.weight(.medium))
-            .foregroundStyle(AppColor.textSecondary)
-            .accessibilityLabel("\(trace.depth.label)。\(trace.summaryText)")
     }
 }
 
@@ -798,18 +690,18 @@ struct WritingTraceCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
-            SectionKicker(text: "この投稿の書かれ方", systemImage: trace.depth.systemImage)
+            SectionKicker(text: "この投稿の書かれ方".localized, systemImage: trace.depth.systemImage)
 
             Text(trace.depth.label)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(AppColor.textPrimary)
 
             HStack(spacing: AppSpacing.sm) {
-                WritingTraceTile(title: "綴った時間", value: trace.durationText, systemImage: "timer")
-                WritingTraceTile(title: "文字数", value: "\(trace.characterCount)字", systemImage: "character.cursor.ibeam")
+                WritingTraceTile(title: "綴った時間".localized, value: trace.durationText, systemImage: "timer")
+                WritingTraceTile(title: "文字数".localized, value: L10n.format("%lld字", Int64(trace.characterCount)), systemImage: "character.cursor.ibeam")
                 WritingTraceTile(
-                    title: "推敲",
-                    value: trace.revisionCount > 0 ? "\(trace.revisionCount)回" : "—",
+                    title: "推敲".localized,
+                    value: trace.revisionCount > 0 ? L10n.format("%lld回", Int64(trace.revisionCount)) : "—",
                     systemImage: "pencil.and.outline"
                 )
             }

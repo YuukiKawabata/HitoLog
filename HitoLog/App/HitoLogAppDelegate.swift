@@ -51,6 +51,13 @@ final class HitoLogAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificat
         #if canImport(FirebaseMessaging)
         Messaging.messaging().appDidReceiveMessage(response.notification.request.content.userInfo)
         #endif
+
+        let userInfo = response.notification.request.content.userInfo
+        if userInfo["hitolog_kind"] as? String == "future_reflection" {
+            await MainActor.run {
+                NotificationCenter.default.post(name: .didOpenFutureReflection, object: nil)
+            }
+        }
     }
 
     func installFirebaseMessagingDelegate() {
@@ -59,6 +66,10 @@ final class HitoLogAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificat
         Messaging.messaging().delegate = self
         #endif
     }
+}
+
+extension Notification.Name {
+    static let didOpenFutureReflection = Notification.Name("didOpenFutureReflection")
 }
 
 #if canImport(FirebaseMessaging)

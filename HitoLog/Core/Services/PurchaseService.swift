@@ -7,9 +7,9 @@ enum PurchaseError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .productNotFound:    return "商品情報を取得できませんでした。しばらくしてから再試行してください。"
-        case .failedVerification: return "購入の検証に失敗しました。サポートにお問い合わせください。"
-        case .purchasePending:    return "購入が承認待ちです。保護者の承認後に本文が読めるようになります。"
+        case .productNotFound:    return "商品情報を取得できませんでした。しばらくしてから再試行してください。".localized
+        case .failedVerification: return "購入の検証に失敗しました。サポートにお問い合わせください。".localized
+        case .purchasePending:    return "購入が承認待ちです。保護者の承認後に本文が読めるようになります。".localized
         }
     }
 }

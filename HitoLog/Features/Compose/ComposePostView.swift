@@ -4,6 +4,8 @@ import SwiftUI
 struct ComposePostView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: AppDataStore
+    @EnvironmentObject private var analytics: AnalyticsService
+    @EnvironmentObject private var futureReflectionService: FutureReflectionService
     @StateObject private var viewModel = ComposePostViewModel()
     @AppStorage("composePostDraftPayload") private var draftPayload = ""
     @State private var didRestoreDraft = false
@@ -17,6 +19,9 @@ struct ComposePostView: View {
     @State private var mediaErrorMessage: String?
     @State private var isKeyboardVisible = false
     @State private var isFocusedEditing = false
+    @State private var didTrackFirstInput = false
+    @State private var didSubmit = false
+    @State private var deliversToFuture = false
     let onSubmitted: () -> Void
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     private let mediaUploadService = MediaUploadService()
@@ -29,22 +34,14 @@ struct ComposePostView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: AppSpacing.lg) {
-                    VStack(alignment: .leading, spacing: AppSpacing.md) {
-                        SectionKicker(text: "Draft Desk", systemImage: "pencil.line")
-
-                        Text("いま、あなたの言葉で。")
-                            .font(AppFont.title)
-                            .foregroundStyle(AppColor.textPrimary)
-
-                        Text("考えて、消して、また書く。その時間ごと投稿に残します。")
-                            .font(.subheadline)
+                    VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                        Text("今日のお題")
+                            .font(.caption)
                             .foregroundStyle(AppColor.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        InkDivider()
+                        Text(DailyPrompt.current)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(AppColor.textPrimary)
                     }
-                    .padding(AppSpacing.md)
-                    .paperSurface()
 
                     if hasSavedDraft {
                         Label("下書きを復元しました", systemImage: "tray.and.arrow.down.fill")
@@ -61,46 +58,37 @@ struct ComposePostView: View {
                     }
 
                     VStack(alignment: .leading, spacing: AppSpacing.sm) {
-                        HStack {
-                            Spacer()
-                            Button {
-                                isFocusedEditing = true
-                            } label: {
-                                Label("全画面で書く", systemImage: "arrow.up.left.and.arrow.down.right")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(AppColor.accent)
-                            }
-                            .accessibilityLabel("全画面で書く")
-                        }
-
                         ZStack(alignment: .topLeading) {
                             NoPasteTextViewRepresentable(
                                 text: $viewModel.text,
                                 onTextChanged: viewModel.recordChange(from:to:),
                                 accessory: .formatting
                             )
-                            .frame(minHeight: 300)
+                            .frame(minHeight: 360)
                             .padding(AppSpacing.sm)
 
                             if viewModel.text.isEmpty {
-                                Text("思っていることを、そのまま入力")
+                                Text("今日のことを、そのまま書く")
                                     .font(.body)
                                     .foregroundStyle(AppColor.placeholder)
                                     .padding(.horizontal, AppSpacing.md + 4)
                                     .padding(.vertical, AppSpacing.md + 2)
                             }
                         }
-                        .background(AppColor.background, in: RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
-                        .paperSurface(shadow: false)
+                        .background(AppColor.elevatedSurface, in: RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                                .stroke(AppColor.border.opacity(0.6), lineWidth: 0.5)
+                        }
 
                         VStack(spacing: AppSpacing.xs) {
                             ProgressView(value: min(Double(viewModel.text.count), Double(AppConstants.maxPostLength)), total: Double(AppConstants.maxPostLength))
                                 .tint(viewModel.isNearLimit ? AppColor.warning : AppColor.accent)
 
                             HStack {
-                                Label("ペースト不可", systemImage: "doc.on.clipboard")
+                                Label("自分の言葉で入力", systemImage: "checkmark.seal")
                                 Spacer()
-                            Text(viewModel.characterCountText)
+                                Text(viewModel.characterCountText)
                                     .foregroundStyle(viewModel.isNearLimit ? AppColor.warning : AppColor.textSecondary)
                             }
                             .font(.caption)
@@ -118,23 +106,25 @@ struct ComposePostView: View {
                         }
                     }
 
-                    mediaAttachmentPanel
-
-                    topicRoomPreviewPanel
-
-                    commentPermissionPanel
-
-                    HumanCheckPanel(
-                        metrics: viewModel.metrics,
-                        statusText: viewModel.humanCheckText,
-                        aiAssisted: $viewModel.aiAssisted
+                    HumanSignalStrip(
+                        title: "本人入力として記録します",
+                        detail: "入力の過程は公開せず、小さな署名だけを投稿に添えます。"
                     )
 
-                    HStack(spacing: AppSpacing.sm) {
-                        PaperMetricTile(title: "入力時間", value: viewModel.metrics.durationText, systemImage: "timer")
-                        PaperMetricTile(title: "編集", value: "\(viewModel.metrics.editCount)", systemImage: "pencil")
-                        PaperMetricTile(title: "削除", value: "\(viewModel.metrics.deleteCount)", systemImage: "delete.left")
+                    VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                        Toggle(isOn: $deliversToFuture) {
+                            Label("この言葉を1か月後にも届ける", systemImage: "envelope.badge.clock")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(AppColor.textPrimary)
+                        }
+                        .tint(AppColor.accent)
+
+                        Text("未来の自分だけが読めるよう、端末内に保存します。")
+                            .font(.caption)
+                            .foregroundStyle(AppColor.textSecondary)
                     }
+                    .padding(AppSpacing.md)
+                    .paperSurface(shadow: false)
                 }
                 .padding(AppSpacing.md)
             }
@@ -192,9 +182,16 @@ struct ComposePostView: View {
             }
             .onAppear {
                 restoreDraftIfNeeded()
+                analytics.capture("compose_viewed", properties: [
+                    "restored_draft": hasSavedDraft
+                ])
             }
-            .onChange(of: viewModel.text) { _, _ in
+            .onChange(of: viewModel.text) { _, newValue in
                 saveDraft()
+                if !didTrackFirstInput, !newValue.isEmpty {
+                    didTrackFirstInput = true
+                    analytics.capture("compose_started")
+                }
             }
             .onChange(of: viewModel.metrics) { _, _ in
                 saveDraft()
@@ -204,12 +201,19 @@ struct ComposePostView: View {
             }
             .fullScreenCover(isPresented: $isFocusedEditing) {
                 FocusedEditorView(
-                    title: "投稿",
-                    placeholder: "思っていることを、そのまま入力",
+                    title: "投稿".localized,
+                    placeholder: "思っていることを、そのまま入力".localized,
                     text: $viewModel.text,
                     onTextChanged: viewModel.recordChange(from:to:)
                 )
                 .environmentObject(store)
+            }
+            .onDisappear {
+                guard !didSubmit, viewModel.hasDraft else { return }
+                analytics.capture("compose_abandoned", properties: [
+                    "character_count": viewModel.text.count,
+                    "input_duration_ms": viewModel.metrics.inputDurationMs
+                ])
             }
         }
     }
@@ -248,7 +252,7 @@ struct ComposePostView: View {
     private var mediaAttachmentPanel: some View {
         VStack(alignment: .leading, spacing: AppSpacing.md) {
             HStack(alignment: .center, spacing: AppSpacing.sm) {
-                SectionKicker(text: "Media", systemImage: "photo.on.rectangle.angled")
+                SectionKicker(text: "写真・動画".localized, systemImage: "photo.on.rectangle.angled")
 
                 Spacer(minLength: 0)
 
@@ -310,7 +314,7 @@ struct ComposePostView: View {
         let topics = TopicExtractor.topics(in: viewModel.text)
         if !topics.isEmpty {
             VStack(alignment: .leading, spacing: AppSpacing.md) {
-                SectionKicker(text: "Topic Rooms", systemImage: "number.square")
+                SectionKicker(text: "ルーム".localized, systemImage: "number.square")
 
                 Text("本文のハッシュタグから、投稿先の小部屋が自動で決まります。")
                     .font(.caption)
@@ -336,7 +340,7 @@ struct ComposePostView: View {
 
     private var commentPermissionPanel: some View {
         VStack(alignment: .leading, spacing: AppSpacing.md) {
-            SectionKicker(text: "Comments", systemImage: "bubble.right")
+            SectionKicker(text: "コメント".localized, systemImage: "bubble.right")
 
             Picker("コメント", selection: $commentPermission) {
                 ForEach(CommentPermission.allCases) { permission in
@@ -385,6 +389,15 @@ struct ComposePostView: View {
                 commentPermission: commentPermission
             )
             store.insert(post)
+            if deliversToFuture {
+                await futureReflectionService.schedule(post: post)
+            }
+            didSubmit = true
+            analytics.capture("compose_completed", properties: [
+                "character_count": post.characterCount,
+                "input_duration_ms": post.inputDurationMs,
+                "future_reflection": deliversToFuture
+            ])
             clearDraft()
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             onSubmitted()
@@ -402,13 +415,13 @@ struct ComposePostView: View {
             let allowedItems = Array(items.prefix(remainingMediaSlots))
             selectedPhotoItems = []
             guard !allowedItems.isEmpty else {
-                mediaErrorMessage = "写真と動画は最大\(AppConstants.maxPostMediaItems)件まで添付できます。"
+                mediaErrorMessage = L10n.format("写真と動画は最大%lld件まで添付できます。", Int64(AppConstants.maxPostMediaItems))
                 return
             }
 
             isLoadingMedia = true
             mediaErrorMessage = items.count > allowedItems.count
-                ? "写真と動画は最大\(AppConstants.maxPostMediaItems)件まで添付できます。"
+                ? L10n.format("写真と動画は最大%lld件まで添付できます。", Int64(AppConstants.maxPostMediaItems))
                 : nil
             defer { isLoadingMedia = false }
 
@@ -518,7 +531,7 @@ private struct HumanCheckPanel: View {
         VStack(alignment: .leading, spacing: AppSpacing.md) {
             HumanSignalStrip(
                 title: statusText,
-                detail: "入力の速度と編集の揺らぎを、読む人への小さな署名にします。",
+                detail: "入力の速度と編集の揺らぎを、読む人への小さな署名にします。".localized,
                 systemImage: isClean ? "checkmark.seal.fill" : "clock.badge.questionmark",
                 tint: isClean ? AppColor.accent : AppColor.warning
             )

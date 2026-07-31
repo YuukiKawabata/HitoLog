@@ -2,12 +2,12 @@ import SwiftUI
 import UIKit
 
 enum AppColor {
-    static let background = Color(lightHex: "#FFFDF8", darkHex: "#1A1712")
-    static let groupedBackground = Color(lightHex: "#F4EDE1", darkHex: "#100F0C")
-    static let surface = Color(lightHex: "#F8F1E6", darkHex: "#221E18")
-    static let elevatedSurface = Color(lightHex: "#FFF9EF", darkHex: "#2A251D")
-    static let subBackground = Color(lightHex: "#EFE4D4", darkHex: "#181511")
-    static let border = Color(lightHex: "#D8CBB8", darkHex: "#4B4236")
+    static let background = Color(lightHex: "#FBFAF7", darkHex: "#191816")
+    static let groupedBackground = Color(lightHex: "#F5F3EE", darkHex: "#11110F")
+    static let surface = Color(lightHex: "#F3F1EC", darkHex: "#22211E")
+    static let elevatedSurface = Color(lightHex: "#FFFFFF", darkHex: "#282724")
+    static let subBackground = Color(lightHex: "#EEECE6", darkHex: "#181715")
+    static let border = Color(lightHex: "#DEDCD5", darkHex: "#44423D")
     static let ruleLine = Color(lightHex: "#E9DDCA", darkHex: "#302A22")
     static let textPrimary = Color(lightHex: "#201C16", darkHex: "#F7EFE2")
     static let textSecondary = Color(lightHex: "#685F51", darkHex: "#B9AD9B")
@@ -18,7 +18,7 @@ enum AppColor {
     static let inkBlue = Color(lightHex: "#315C7D", darkHex: "#94BFE3")
     static let stamp = Color(lightHex: "#9E3F32", darkHex: "#DE8D7F")
     static let warning = Color(lightHex: "#B76538", darkHex: "#E2A174")
-    static let shadow = Color.black.opacity(0.08)
+    static let shadow = Color.black.opacity(0.05)
 }
 
 enum AppSpacing {
@@ -39,22 +39,7 @@ enum AppRadius {
 
 struct PaperCanvas: View {
     var body: some View {
-        ZStack {
-            AppColor.groupedBackground
-
-            LinearGradient(
-                colors: [
-                    AppColor.background.opacity(0.82),
-                    AppColor.groupedBackground,
-                    AppColor.subBackground.opacity(0.76)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            PaperRulePattern()
-                .opacity(0.58)
-        }
+        AppColor.groupedBackground
         .ignoresSafeArea()
     }
 }
@@ -78,14 +63,9 @@ private struct PaperRulePattern: View {
 
 struct InkDivider: View {
     var body: some View {
-        HStack(spacing: AppSpacing.sm) {
-            Capsule()
-                .fill(AppColor.stamp)
-                .frame(width: 5, height: 5)
-            Rectangle()
-                .fill(AppColor.border)
-                .frame(height: 0.5)
-        }
+        Rectangle()
+            .fill(AppColor.border)
+            .frame(height: 0.5)
     }
 }
 
@@ -103,9 +83,7 @@ struct SectionKicker: View {
             Text(text)
                 .font(AppFont.kicker)
         }
-        .foregroundStyle(AppColor.stamp)
-        .textCase(.uppercase)
-        .tracking(0.6)
+        .foregroundStyle(AppColor.accent)
     }
 }
 
@@ -197,12 +175,12 @@ extension Color {
 
 extension View {
     func paperSurface(cornerRadius: CGFloat = AppRadius.lg, shadow: Bool = true) -> some View {
-        background(AppColor.background, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        background(AppColor.elevatedSurface, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(AppColor.border, lineWidth: 0.7)
+                    .stroke(AppColor.border.opacity(0.62), lineWidth: 0.5)
             }
-            .shadow(color: shadow ? AppColor.shadow : .clear, radius: 14, x: 0, y: 8)
+            .shadow(color: shadow ? AppColor.shadow.opacity(0.45) : .clear, radius: 4, x: 0, y: 2)
     }
 }
 

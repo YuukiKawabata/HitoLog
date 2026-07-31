@@ -1,9 +1,9 @@
 import SwiftUI
 
 enum AppFont {
-    static let display = Font.system(size: 34, weight: .semibold, design: .serif)
-    static let title = Font.system(size: 26, weight: .semibold, design: .serif)
-    static let sectionTitle = Font.system(size: 18, weight: .semibold, design: .serif)
+    static let display = Font.system(size: 34, weight: .bold)
+    static let title = Font.system(size: 26, weight: .bold)
+    static let sectionTitle = Font.system(size: 18, weight: .semibold)
     static let userName = Font.system(size: 15, weight: .semibold)
     static let body = Font.system(size: 16, weight: .regular, design: .serif)
     static let postBody = Font.system(size: 15, weight: .regular)

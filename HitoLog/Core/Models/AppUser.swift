@@ -52,7 +52,7 @@ struct AppUser: Identifiable, Codable, Equatable {
     }
 
     var accountAgeDays: Int {
-        Calendar.current.dateComponents([.day], from: createdAt, to: Date()).day ?? 0
+        max(Calendar.current.dateComponents([.day], from: createdAt, to: Date()).day ?? 0, 0)
     }
 }
 
@@ -75,7 +75,7 @@ struct InviteCode: Identifiable, Codable, Equatable {
     }
 
     var shareText: String {
-        "HitoLogへの招待です: \(shareURL.absoluteString)"
+        L10n.format("HitoLogへの招待です: %@", shareURL.absoluteString)
     }
 
     static func make(inviterID: String, maxUses: Int = 5) -> InviteCode {

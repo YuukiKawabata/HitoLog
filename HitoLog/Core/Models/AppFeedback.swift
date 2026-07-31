@@ -24,13 +24,13 @@ enum AppFeedbackCategory: String, Codable, CaseIterable, Identifiable, Equatable
     var title: String {
         switch self {
         case .bug:
-            return "不具合"
+            return "不具合".localized
         case .usability:
-            return "使いづらさ"
+            return "使いづらさ".localized
         case .featureRequest:
-            return "要望"
+            return "要望".localized
         case .other:
-            return "その他"
+            return "その他".localized
         }
     }
 

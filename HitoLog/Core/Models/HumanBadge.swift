@@ -8,11 +8,11 @@ enum HumanBadge: String, Codable {
     var displayText: String {
         switch self {
         case .verified:
-            return "本人入力"
+            return "本人入力".localized
         case .checking:
-            return "入力確認中"
+            return "入力確認中".localized
         case .lowTrust:
-            return "信頼度低め"
+            return "信頼度低め".localized
         }
     }
 
@@ -27,4 +27,3 @@ enum HumanBadge: String, Codable {
         }
     }
 }
-

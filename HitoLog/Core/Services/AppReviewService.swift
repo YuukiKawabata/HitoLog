@@ -54,8 +54,6 @@ final class AppReviewService: ObservableObject {
     }
 
     func recordSession() {
-        guard !isScreenshotDemoLaunch else { return }
-
         let now = Date()
         if defaults.object(forKey: Keys.firstLaunchDate) == nil {
             defaults.set(now, forKey: Keys.firstLaunchDate)
@@ -71,8 +69,6 @@ final class AppReviewService: ObservableObject {
     }
 
     func recordPositiveMoment(_ moment: ReviewMoment) {
-        guard !isScreenshotDemoLaunch else { return }
-
         let nextScore = defaults.integer(forKey: Keys.positiveMomentScore) + moment.score
         defaults.set(nextScore, forKey: Keys.positiveMomentScore)
         schedulePromptIfEligible(reason: moment)
@@ -140,13 +136,5 @@ final class AppReviewService: ObservableObject {
 
     private var currentAppVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
-    }
-
-    private var isScreenshotDemoLaunch: Bool {
-        #if DEBUG
-        ProcessInfo.processInfo.arguments.contains("-HitoLogScreenshotDemo")
-        #else
-        false
-        #endif
     }
 }

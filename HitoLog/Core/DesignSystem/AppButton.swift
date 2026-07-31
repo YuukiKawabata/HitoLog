@@ -100,7 +100,7 @@ struct FollowPillButton: View {
         .buttonStyle(ScaleButtonStyle(scale: size == .prominent ? 0.97 : 0.92))
         .fixedSize(horizontal: size == .prominent, vertical: false)
         .animation(.snappy(duration: 0.28), value: isFollowing)
-        .accessibilityLabel(isFollowing ? "\(followingText)。タップで解除" : followText)
+        .accessibilityLabel(Text(isFollowing ? L10n.format("%@。タップで解除", followingText) : followText))
     }
 
     private var font: Font {

@@ -183,9 +183,9 @@ enum ReactionKind: String, Codable, CaseIterable, Identifiable, Equatable {
 
     var displayText: String {
         switch self {
-        case .empathy: return "共感"
-        case .insight: return "なるほど"
-        case .cheer: return "応援"
+        case .empathy: return "共感".localized
+        case .insight: return "なるほど".localized
+        case .cheer: return "応援".localized
         }
     }
 
@@ -208,22 +208,22 @@ enum CommentPermission: String, Codable, CaseIterable, Identifiable, Equatable {
     var displayText: String {
         switch self {
         case .everyone:
-            return "全員"
+            return "全員".localized
         case .following:
-            return "フォロー中のみ"
+            return "フォロー中のみ".localized
         case .closed:
-            return "不可"
+            return "不可".localized
         }
     }
 
     var detailText: String {
         switch self {
         case .everyone:
-            return "すべてのユーザーがコメントできます。"
+            return "すべてのユーザーがコメントできます。".localized
         case .following:
-            return "あなたがフォローしているユーザーだけコメントできます。"
+            return "あなたがフォローしているユーザーだけコメントできます。".localized
         case .closed:
-            return "この投稿にはコメントできません。"
+            return "この投稿にはコメントできません。".localized
         }
     }
 
@@ -268,15 +268,15 @@ struct TopicRoom: Identifiable, Codable, Equatable {
     var id: String { topic }
     var displayTitle: String { title.isEmpty ? "#\(topic)" : title }
     var displayDescription: String {
-        description.isEmpty ? "#\(topic) の投稿が集まる小部屋です。" : description
+        description.isEmpty ? L10n.format("#%@ の投稿が集まる小部屋です。", topic) : description
     }
 
     static func officialRooms(now: Date = Date()) -> [TopicRoom] {
         [
             TopicRoom(
                 topic: "言葉",
-                title: "言葉を書く人",
-                description: "その場で考えて書いた言葉を読み合う部屋です。",
+                title: "言葉を書く人".localized,
+                description: "その場で考えて書いた言葉を読み合う部屋です。".localized,
                 postCount: 0,
                 followerCount: 0,
                 lastPostAt: nil,
@@ -287,8 +287,8 @@ struct TopicRoom: Identifiable, Codable, Equatable {
             ),
             TopicRoom(
                 topic: "日常ログ",
-                title: "日常ログ",
-                description: "今日の出来事や生活の記録を残す部屋です。",
+                title: "日常ログ".localized,
+                description: "今日の出来事や生活の記録を残す部屋です。".localized,
                 postCount: 0,
                 followerCount: 0,
                 lastPostAt: nil,
@@ -299,8 +299,8 @@ struct TopicRoom: Identifiable, Codable, Equatable {
             ),
             TopicRoom(
                 topic: "創作",
-                title: "創作",
-                description: "物語、作品、アイデアを育てる部屋です。",
+                title: "創作".localized,
+                description: "物語、作品、アイデアを育てる部屋です。".localized,
                 postCount: 0,
                 followerCount: 0,
                 lastPostAt: nil,
@@ -311,8 +311,8 @@ struct TopicRoom: Identifiable, Codable, Equatable {
             ),
             TopicRoom(
                 topic: "学び",
-                title: "学び",
-                description: "学習メモや気づきを共有する部屋です。",
+                title: "学び".localized,
+                description: "学習メモや気づきを共有する部屋です。".localized,
                 postCount: 0,
                 followerCount: 0,
                 lastPostAt: nil,
@@ -334,9 +334,9 @@ enum TopicRoomPostSort: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .latest:
-            return "最新"
+            return "最新".localized
         case .popular:
-            return "人気"
+            return "人気".localized
         }
     }
 }
@@ -368,9 +368,9 @@ enum FeedControlPreference: String, Codable, CaseIterable, Identifiable, Equatab
     var displayText: String {
         switch self {
         case .boost:
-            return "増やす"
+            return "増やす".localized
         case .reduce:
-            return "減らす"
+            return "減らす".localized
         }
     }
 
@@ -656,9 +656,9 @@ struct WritingTrace: Equatable {
 
         var label: String {
             switch self {
-            case .quick: return "さっと書いた言葉"
-            case .considered: return "考えて書いた言葉"
-            case .deliberate: return "じっくり推敲した言葉"
+            case .quick: return "さっと書いた言葉".localized
+            case .considered: return "考えて書いた言葉".localized
+            case .deliberate: return "じっくり推敲した言葉".localized
             }
         }
 
@@ -686,20 +686,22 @@ struct WritingTrace: Equatable {
         if seconds >= 60 {
             let minutes = seconds / 60
             let remainder = seconds % 60
-            return remainder == 0 ? "\(minutes)分" : "\(minutes)分\(remainder)秒"
+            return remainder == 0
+                ? L10n.format("%lld分", Int64(minutes))
+                : L10n.format("%lld分%lld秒", Int64(minutes), Int64(remainder))
         }
-        return "\(seconds)秒"
+        return L10n.format("%lld秒", Int64(seconds))
     }
 
     /// 推敲回数の短い表記。推敲が無ければ nil。
     var revisionText: String? {
-        revisionCount > 0 ? "推敲\(revisionCount)回" : nil
+        revisionCount > 0 ? L10n.format("推敲%lld回", Int64(revisionCount)) : nil
     }
 
     /// 一覧などで使う一行要約。例: "1分20秒・推敲3回"
     var summaryText: String {
         [durationText, revisionText]
             .compactMap { $0 }
-            .joined(separator: "・")
+            .joined(separator: "・".localized)
     }
 }

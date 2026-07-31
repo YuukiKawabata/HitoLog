@@ -4,102 +4,55 @@ struct TimelineView: View {
     @EnvironmentObject private var store: AppDataStore
     @State private var editingPost: Post?
     @State private var deletingPost: Post?
-    @State private var selectedFilter: TimelineFilter = .all
-    @State private var selectedStarterPack: StarterPackCategory = .writers
+    var onComposeTap: () -> Void = {}
 
     var body: some View {
-        let items = itemsForSelectedFilter
+        let posts = visiblePosts
 
         ScrollView {
             LazyVStack(spacing: AppSpacing.sm) {
                 TimelineHeaderView()
                     .padding(.horizontal, AppSpacing.md)
                     .padding(.top, AppSpacing.md)
-                    .padding(.bottom, AppSpacing.xs)
 
-                Picker("タイムライン", selection: $selectedFilter) {
-                    ForEach(TimelineFilter.allCases) { filter in
-                        Text(filter.title).tag(filter)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, AppSpacing.md)
-                .padding(.bottom, AppSpacing.xs)
+                DailyPromptCard(onComposeTap: onComposeTap)
+                    .padding(.horizontal, AppSpacing.md)
+                    .padding(.bottom, AppSpacing.sm)
 
-                Group {
-                if items.isEmpty {
-                    if selectedFilter == .rooms {
-                        TimelineTopicRoomEmptyView(
-                            title: selectedFilter.emptyTitle,
-                            message: selectedFilter.emptyMessage
-                        )
-                    } else if selectedFilter == .following || selectedFilter == .recommended {
-                        TimelineStarterPackEmptyView(
-                            title: selectedFilter.emptyTitle,
-                            message: selectedFilter.emptyMessage,
-                            selectedCategory: $selectedStarterPack
-                        )
-                    } else {
-                        EmptyTimelineView(
-                            title: selectedFilter.emptyTitle,
-                            message: selectedFilter.emptyMessage
-                        )
-                        .padding(.horizontal, AppSpacing.md)
-                        .padding(.top, 96)
-                    }
+                if posts.isEmpty {
+                    EmptyTimelineView(
+                        title: "まだ言葉がありません",
+                        message: "今日のことをひとつ書くと、ここから記録が始まります。"
+                    )
+                    .padding(.horizontal, AppSpacing.md)
+                    .padding(.top, AppSpacing.xl)
                 } else {
-                    ForEach(items) { item in
-                        switch item {
-                        case .post(let post):
-                            if let author = store.user(for: post.userId) {
-                                PostRowView(
-                                    post: post,
-                                    author: author,
-                                    isLiked: store.likedPostIDs.contains(post.id),
-                                    isBookmarked: store.isBookmarked(post.id),
-                                    onLike: {
-                                        store.toggleLike(for: post.id)
-                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                    },
-                                    onBookmark: {
-                                        store.toggleBookmark(for: post.id)
-                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                    },
-                                    commentDestination: AnyView(PostDetailView(postID: post.id)),
-                                    authorDestination: AnyView(ProfileView(userID: author.id)),
-                                    showsOwnerActions: post.userId == store.currentUser.id,
-                                    onEdit: { editingPost = post },
-                                    onDelete: { deletingPost = post },
-                                    onReport: {
-                                        store.addReport(
-                                            targetType: .post,
-                                            targetID: post.id,
-                                            targetOwnerID: post.userId,
-                                            targetDescription: "投稿: \(post.body.prefix(40))",
-                                            reason: "不適切な投稿"
-                                        )
-                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                    }
-                                )
-                            }
-                        case .article(let article):
-                            if let author = store.user(for: article.userID) {
-                                ArticleCardView(
-                                    article: article,
-                                    author: author,
-                                    showsOwnerActions: article.userID == store.currentUser.id,
-                                    onReport: {
-                                        store.addReport(
-                                            targetType: .article,
-                                            targetID: article.id,
-                                            targetOwnerID: article.userID,
-                                            targetDescription: "記事: \(article.title.prefix(40))",
-                                            reason: "不適切な記事"
-                                        )
-                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                    }
-                                )
-                            }
+                    ForEach(posts) { post in
+                        if let author = store.user(for: post.userId) {
+                            PostRowView(
+                                post: post,
+                                author: author,
+                                isLiked: store.likedPostIDs.contains(post.id),
+                                onLike: {
+                                    store.toggleLike(for: post.id)
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                },
+                                commentDestination: AnyView(PostDetailView(postID: post.id)),
+                                authorDestination: AnyView(ProfileView(userID: author.id)),
+                                showsOwnerActions: post.userId == store.currentUser.id,
+                                onEdit: { editingPost = post },
+                                onDelete: { deletingPost = post },
+                                onReport: {
+                                    store.addReport(
+                                        targetType: .post,
+                                        targetID: post.id,
+                                        targetOwnerID: post.userId,
+                                        targetDescription: L10n.format("投稿: %@", String(post.body.prefix(40))),
+                                        reason: "不適切な投稿"
+                                    )
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                }
+                            )
                         }
                     }
 
@@ -124,22 +77,12 @@ struct TimelineView: View {
                         .padding(.vertical, AppSpacing.sm)
                     }
                 }
-                }
-                .id(selectedFilter)
-                .transition(.opacity)
             }
             .padding(.bottom, AppSpacing.lg)
-            .animation(.easeInOut(duration: 0.22), value: selectedFilter)
         }
         .background(PaperCanvas())
         .refreshable {
             await store.refresh()
-        }
-        .onChange(of: selectedFilter) { _, newValue in
-            guard newValue == .recommended, store.isRemoteSyncEnabled, store.hasMoreTimelinePosts else { return }
-            Task {
-                await store.loadMoreTimelinePosts()
-            }
         }
         .navigationTitle("HitoLog")
         .navigationBarTitleDisplayMode(.inline)
@@ -174,18 +117,10 @@ struct TimelineView: View {
         }
     }
 
-    private var itemsForSelectedFilter: [TimelineItem] {
-        switch selectedFilter {
-        case .all:
-            return store.timelineItems
-        case .following:
-            let followingIDs = store.followingUserIDs
-            return store.timelineItems.filter { followingIDs.contains($0.userID) }
-        case .recommended:
-            return store.recommendedTimelinePosts.map { .post($0) }
-        case .rooms:
-            let followedTopics = store.followedTopicIDs
-            return store.timelineItems.filter { !Set($0.topics).intersection(followedTopics).isEmpty }
+    private var visiblePosts: [Post] {
+        store.timelineItems.compactMap { item in
+            guard case .post(let post) = item, post.shareType == .original else { return nil }
+            return post
         }
     }
 }
@@ -201,68 +136,95 @@ private enum TimelineFilter: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .all:
-            return "すべて"
+            return "すべて".localized
         case .following:
-            return "フォロー中"
+            return "フォロー中".localized
         case .recommended:
-            return "おすすめ"
+            return "おすすめ".localized
         case .rooms:
-            return "ルーム"
+            return "ルーム".localized
         }
     }
 
     var emptyTitle: String {
         switch self {
         case .all:
-            return "まだ表示できる投稿がありません"
+            return "まだ表示できる投稿がありません".localized
         case .following:
-            return "フォロー中の投稿はまだありません"
+            return "フォロー中の投稿はまだありません".localized
         case .recommended:
-            return "おすすめできる投稿はまだありません"
+            return "おすすめできる投稿はまだありません".localized
         case .rooms:
-            return "フォロー中ルームの投稿はまだありません"
+            return "フォロー中ルームの投稿はまだありません".localized
         }
     }
 
     var emptyMessage: String {
         switch self {
         case .all:
-            return "他の人の投稿が届くと、ここに表示されます。"
+            return "他の人の投稿が届くと、ここに表示されます。".localized
         case .following:
-            return "気になる人をフォローすると、ここに投稿が表示されます。"
+            return "気になる人をフォローすると、ここに投稿が表示されます。".localized
         case .recommended:
-            return "反応や本人入力率の高い投稿が見つかると、ここに表示されます。"
+            return "反応や本人入力率の高い投稿が見つかると、ここに表示されます。".localized
         case .rooms:
-            return "気になる小部屋をフォローすると、ここに投稿が表示されます。"
+            return "気になる小部屋をフォローすると、ここに投稿が表示されます。".localized
         }
     }
 }
 
 private struct TimelineHeaderView: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.md) {
-            HStack(alignment: .center, spacing: AppSpacing.md) {
-                BrandIconView(size: 44, showsShadow: false)
+        VStack(alignment: .leading, spacing: AppSpacing.xs) {
+            Text("今日の言葉")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(AppColor.textPrimary)
+            Text("1日1つ、自分の言葉を残す。")
+                .font(.caption)
+                .foregroundStyle(AppColor.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
 
-                VStack(alignment: .leading, spacing: AppSpacing.xs) {
-                    SectionKicker(text: "Human Timeline", systemImage: "pencil.and.outline")
-                    Text("いま書かれた言葉")
-                        .font(AppFont.title)
+private struct DailyPromptCard: View {
+    let onComposeTap: () -> Void
+
+    var body: some View {
+        Button(action: onComposeTap) {
+            HStack(spacing: AppSpacing.md) {
+                Image(systemName: "pencil")
+                    .font(.headline)
+                    .foregroundStyle(AppColor.accent)
+                    .frame(width: 38, height: 38)
+                    .background(AppColor.accentSoft, in: Circle())
+
+                VStack(alignment: .leading, spacing: AppSpacing.xxs) {
+                    Text("今日のお題")
+                        .font(.caption)
+                        .foregroundStyle(AppColor.textSecondary)
+                    Text(DailyPrompt.current)
+                        .font(.body.weight(.semibold))
                         .foregroundStyle(AppColor.textPrimary)
+                        .multilineTextAlignment(.leading)
                 }
 
                 Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColor.textTertiary)
             }
-
-            Text("書いた時間の温度が、そのまま残るタイムライン。")
-                .font(.subheadline)
-                .foregroundStyle(AppColor.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            InkDivider()
+            .padding(AppSpacing.md)
+            .background(AppColor.elevatedSurface, in: RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                    .stroke(AppColor.border.opacity(0.6), lineWidth: 0.5)
+            }
         }
-        .padding(AppSpacing.md)
-        .paperSurface()
+        .buttonStyle(ScaleButtonStyle(scale: 0.98))
+        .accessibilityHint("投稿画面を開きます")
     }
 }
 
@@ -277,7 +239,7 @@ private struct TimelineStarterPackEmptyView: View {
             EmptyTimelineView(title: title, message: message)
 
             VStack(alignment: .leading, spacing: AppSpacing.md) {
-                SectionKicker(text: "Starter Pack", systemImage: selectedCategory.systemImage)
+                SectionKicker(text: "スターターパック".localized, systemImage: selectedCategory.systemImage)
 
                 Picker("スターターパック", selection: $selectedCategory) {
                     ForEach(StarterPackCategory.allCases) { category in
@@ -316,7 +278,7 @@ private struct TimelineTopicRoomEmptyView: View {
             EmptyTimelineView(title: title, message: message)
 
             VStack(alignment: .leading, spacing: AppSpacing.md) {
-                SectionKicker(text: "Topic Rooms", systemImage: "number.square")
+                SectionKicker(text: "ルーム".localized, systemImage: "number.square")
 
                 let rooms = Array(store.discoverTopicRooms.prefix(6))
                 if rooms.isEmpty {
@@ -355,7 +317,7 @@ private struct TopicRoomCompactRow: View {
                         Text(room.displayTitle)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(AppColor.textPrimary)
-                        Text("\(room.postCount)件の投稿")
+                        Text(L10n.format("%lld件の投稿", Int64(room.postCount)))
                             .font(.caption)
                             .foregroundStyle(AppColor.textSecondary)
                     }
@@ -405,8 +367,8 @@ private struct StarterPackUserRow: View {
 }
 
 private struct EmptyTimelineView: View {
-    var title = "まだ投稿がありません"
-    var message = "あなたの言葉で、最初の投稿をしてみましょう。"
+    var title = "まだ投稿がありません".localized
+    var message = "あなたの言葉で、最初の投稿をしてみましょう。".localized
 
     @State private var appeared = false
 

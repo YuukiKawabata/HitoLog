@@ -3,7 +3,7 @@ import Foundation
 enum DateFormatterUtil {
     private static let relativeFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.locale = .current
         formatter.unitsStyle = .short
         return formatter
     }()
@@ -12,4 +12,3 @@ enum DateFormatterUtil {
         relativeFormatter.localizedString(for: date, relativeTo: referenceDate)
     }
 }
-

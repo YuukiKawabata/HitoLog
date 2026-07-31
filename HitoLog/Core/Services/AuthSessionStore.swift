@@ -68,14 +68,6 @@ final class AuthSessionStore: NSObject, ObservableObject {
         }
     }
 
-    func continueWithLocalPreview() {
-        currentUserID = "user-nagi"
-        appleUserID = nil
-        displayName = "Nagi"
-        email = nil
-        state = .ready
-    }
-
     func signOut() {
         #if canImport(FirebaseAuth)
         if FirebaseBootstrap.isConfigured {
@@ -117,7 +109,7 @@ final class AuthSessionStore: NSObject, ObservableObject {
 
     private func signInToFirebase(with authorization: ASAuthorization) async -> Bool {
         guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential else {
-            errorMessage = "Apple IDの認証情報を取得できませんでした。"
+            errorMessage = "Apple IDの認証情報を取得できませんでした。".localized
             return false
         }
 
@@ -134,13 +126,13 @@ final class AuthSessionStore: NSObject, ObservableObject {
         }
 
         guard let nonce = currentNonce else {
-            errorMessage = "認証セッションを開始し直してください。"
+            errorMessage = "認証セッションを開始し直してください。".localized
             return false
         }
 
         guard let appleIDToken = appleIDCredential.identityToken,
               let idTokenString = String(data: appleIDToken, encoding: .utf8) else {
-            errorMessage = "Apple IDトークンを取得できませんでした。"
+            errorMessage = "Apple IDトークンを取得できませんでした。".localized
             return false
         }
 

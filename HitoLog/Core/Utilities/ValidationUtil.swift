@@ -13,13 +13,13 @@ enum ValidationUtil {
             case .valid:
                 return nil
             case .tooShort:
-                return "ユーザーIDは3文字以上で入力してください。"
+                return "ユーザーIDは3文字以上で入力してください。".localized
             case .tooLong:
-                return "ユーザーIDは20文字以内で入力してください。"
+                return "ユーザーIDは20文字以内で入力してください。".localized
             case .reserved:
-                return "このユーザーIDは使用できません。"
+                return "このユーザーIDは使用できません。".localized
             case .invalidCharacters:
-                return "ユーザーIDに使えるのは英数字とアンダースコアのみです。"
+                return "ユーザーIDに使えるのは英数字とアンダースコアのみです。".localized
             }
         }
     }

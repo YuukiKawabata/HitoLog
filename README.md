@@ -8,7 +8,7 @@ HitoLog is an iOS native SNS focused on posts that are typed in the app instead 
 
 The initial project follows the Obsidian spec:
 
-`個人/開発/Mobile/Hitolog/hitolog_spec_design_v3.md`
+`個人/開発/モバイル/HitoLog/hitolog_spec_design_v3.md`
 
 ## Stack
 
@@ -38,7 +38,7 @@ The initial project follows the Obsidian spec:
 
 ## Backend Policy
 
-The app uses Firebase Auth, Cloud Firestore, App Check with App Attest, Firebase Cloud Messaging, Cloud Functions, and PostHog. Local seed and screenshot demo data are development-only aids and are not written to Firebase. Set `POSTHOG_PROJECT_TOKEN` in the Xcode build settings to enable PostHog event delivery.
+The app uses Firebase Auth, Cloud Firestore, App Check with App Attest, Firebase Cloud Messaging, Cloud Functions, and PostHog. Runtime content is loaded from the authenticated user's production Firebase data. Set `POSTHOG_PROJECT_TOKEN` in the Xcode build settings to enable PostHog event delivery.
 
 ## Build
 
@@ -54,6 +54,6 @@ GitHub Pages files live in `docs/`.
 
 Recommended App Store Connect URLs after enabling GitHub Pages from the `docs` folder:
 
-- Support URL: `https://<github-user>.github.io/<repo-name>/support/`
-- Privacy Policy URL: `https://<github-user>.github.io/<repo-name>/privacy/`
-- Terms URL: `https://<github-user>.github.io/<repo-name>/terms/`
+- Support URL: `https://yuukikawabata.github.io/HitoLog/support/`
+- Privacy Policy URL: `https://yuukikawabata.github.io/HitoLog/privacy/`
+- Terms URL: `https://yuukikawabata.github.io/HitoLog/terms/`

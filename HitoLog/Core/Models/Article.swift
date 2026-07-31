@@ -10,12 +10,12 @@ enum ArticlePrice: String, Codable, CaseIterable {
 
     var displayText: String {
         switch self {
-        case .free: return "無料"
-        case .yen100: return "100円"
-        case .yen300: return "300円"
-        case .yen500: return "500円"
-        case .yen800: return "800円"
-        case .yen1000: return "1,000円"
+        case .free: return "無料".localized
+        case .yen100: return "100円".localized
+        case .yen300: return "300円".localized
+        case .yen500: return "500円".localized
+        case .yen800: return "800円".localized
+        case .yen1000: return "1,000円".localized
         }
     }
 
@@ -53,9 +53,9 @@ enum CreatorMembershipPlan: String, Codable, CaseIterable, Identifiable {
 
     var displayText: String {
         switch self {
-        case .monthly300: return "月額300円"
-        case .monthly500: return "月額500円"
-        case .monthly1000: return "月額1,000円"
+        case .monthly300: return "月額300円".localized
+        case .monthly500: return "月額500円".localized
+        case .monthly1000: return "月額1,000円".localized
         }
     }
 
@@ -86,10 +86,10 @@ enum SupportAmount: String, Codable, CaseIterable, Identifiable {
 
     var displayText: String {
         switch self {
-        case .yen100: return "100円"
-        case .yen300: return "300円"
-        case .yen500: return "500円"
-        case .yen1000: return "1,000円"
+        case .yen100: return "100円".localized
+        case .yen300: return "300円".localized
+        case .yen500: return "500円".localized
+        case .yen1000: return "1,000円".localized
         }
     }
 
@@ -293,11 +293,13 @@ struct Article: Identifiable, Codable, Equatable {
 
     var durationText: String {
         let seconds = inputDurationMs / 1000
-        if seconds < 60 { return "\(seconds)秒" }
-        if seconds < 3600 { return "\(seconds / 60)分" }
+        if seconds < 60 { return L10n.format("%lld秒", Int64(seconds)) }
+        if seconds < 3600 { return L10n.format("%lld分", Int64(seconds / 60)) }
         let h = seconds / 3600
         let m = (seconds % 3600) / 60
-        return m == 0 ? "\(h)時間" : "\(h)時間\(m)分"
+        return m == 0
+            ? L10n.format("%lld時間", Int64(h))
+            : L10n.format("%lld時間%lld分", Int64(h), Int64(m))
     }
 
     var isPublished: Bool { status == .published }

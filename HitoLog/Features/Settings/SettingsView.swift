@@ -150,41 +150,20 @@ struct SettingsView: View {
             }
 
             Section("アプリ") {
-                #if DEBUG
-                Toggle(isOn: Binding(
-                    get: { store.isDemoDataVisible },
-                    set: { isEnabled in
-                        if isEnabled {
-                            store.showScreenshotDemoData()
-                        } else {
-                            Task {
-                                await store.hideScreenshotDemoData()
-                            }
-                        }
-                    }
-                )) {
-                    Label("スクリーンショット用デモデータ", systemImage: "sparkles")
-                }
-
-                Text("オンにすると他ユーザー、投稿、コメントを端末内だけに表示します。Firebaseには保存しません。")
-                    .font(.footnote)
-                    .foregroundStyle(AppColor.textSecondary)
-                #endif
-
                 NavigationLink {
-                    LegalDocumentView(title: "利用規約", bodyText: legalTermsText)
+                    LegalDocumentView(title: "利用規約".localized, bodyText: legalTermsText)
                 } label: {
                     Label("利用規約", systemImage: "doc.text")
                 }
 
                 NavigationLink {
-                    LegalDocumentView(title: "コミュニティガイドライン", bodyText: communityGuidelinesText)
+                    LegalDocumentView(title: "コミュニティガイドライン".localized, bodyText: communityGuidelinesText)
                 } label: {
                     Label("コミュニティガイドライン", systemImage: "checkmark.shield")
                 }
 
                 NavigationLink {
-                    LegalDocumentView(title: "プライバシーポリシー", bodyText: privacyPolicyText)
+                    LegalDocumentView(title: "プライバシーポリシー".localized, bodyText: privacyPolicyText)
                 } label: {
                     Label("プライバシーポリシー", systemImage: "lock.doc")
                 }
@@ -206,7 +185,7 @@ struct SettingsView: View {
             Button("キャンセル", role: .cancel) {}
             Button("ログアウト", role: .destructive) {
                 authSession.signOut()
-                store.deactivateRemoteUser()
+                store.clearLocalSession()
                 hasCompletedInitialExperience = false
             }
         } message: {
@@ -221,17 +200,17 @@ struct SettingsView: View {
                         let didDelete = await authSession.deleteAccount()
                         if didDelete {
                             await MainActor.run {
-                                store.resetLocalAccount()
+                                store.clearLocalSession(removePendingInvite: true)
                                 hasCompletedInitialExperience = false
                             }
                         } else {
                             await MainActor.run {
-                                accountDeleteErrorMessage = authSession.errorMessage ?? "アカウントを削除できませんでした。もう一度サインインしてからお試しください。"
+                                accountDeleteErrorMessage = authSession.errorMessage ?? "アカウントを削除できませんでした。もう一度サインインしてからお試しください。".localized
                             }
                         }
                     } catch {
                         await MainActor.run {
-                            accountDeleteErrorMessage = "アカウント情報を削除できませんでした。通信状態を確認して、もう一度お試しください。"
+                            accountDeleteErrorMessage = "アカウント情報を削除できませんでした。通信状態を確認して、もう一度お試しください。".localized
                         }
                     }
                 }
@@ -354,7 +333,7 @@ private struct FeedbackView: View {
         )) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(errorMessage ?? "通信状態を確認して、もう一度お試しください。")
+            Text(errorMessage ?? "通信状態を確認して、もう一度お試しください。".localized)
         }
     }
 
@@ -394,7 +373,7 @@ private struct FeedbackView: View {
     private func feedbackErrorMessage(for error: Error) -> String {
         let message = error.localizedDescription
         if message.localizedCaseInsensitiveContains("permission") {
-            return "送信権限を確認できませんでした。アカウント状態を同期してから、もう一度お試しください。"
+            return "送信権限を確認できませんでした。アカウント状態を同期してから、もう一度お試しください。".localized
         }
         return message
     }
@@ -438,7 +417,7 @@ private struct InviteCodeView: View {
 
                                 Spacer(minLength: 0)
 
-                                Text("残り\(invite.remainingUses)")
+                                Text(L10n.format("残り%lld", Int64(invite.remainingUses)))
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(invite.remainingUses > 0 ? AppColor.accent : AppColor.textSecondary)
                             }
@@ -481,7 +460,7 @@ private struct InviteCodeView: View {
         )) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(errorMessage ?? "通信状態を確認して、もう一度お試しください。")
+            Text(errorMessage ?? "通信状態を確認して、もう一度お試しください。".localized)
         }
     }
 
@@ -573,7 +552,7 @@ private struct ProfileEditView: View {
 
                     if hasEditedDisplayName && trimmedDisplayName.isEmpty {
                         ValidationMessage(
-                            text: "表示名を入力してください。",
+                            text: "表示名を入力してください。".localized,
                             color: .red,
                             systemImage: "exclamationmark.circle.fill"
                         )
@@ -627,7 +606,7 @@ private struct ProfileEditView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button(isSavingProfile ? "保存中" : "保存") {
+                Button(isSavingProfile ? "保存中".localized : "保存".localized) {
                     Task {
                         await save()
                     }
@@ -662,7 +641,7 @@ private struct ProfileEditView: View {
         )) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(profileSaveErrorMessage ?? "通信状態を確認して、もう一度お試しください。")
+            Text(profileSaveErrorMessage ?? "通信状態を確認して、もう一度お試しください。".localized)
         }
     }
 
@@ -691,7 +670,7 @@ private struct ProfileEditView: View {
             dismiss()
         } catch {
             UINotificationFeedbackGenerator().notificationOccurred(.error)
-            profileSaveErrorMessage = "プロフィールを保存できませんでした。通信状態を確認して、もう一度お試しください。"
+            profileSaveErrorMessage = "プロフィールを保存できませんでした。通信状態を確認して、もう一度お試しください。".localized
         }
     }
 
@@ -702,14 +681,14 @@ private struct ProfileEditView: View {
             guard let data = try await selectedPhotoItem.loadTransferable(type: Data.self),
                   let image = UIImage(data: data),
                   let dataURL = ProfileAvatarEncoder.dataURL(from: image) else {
-                avatarProcessingError = "画像を読み込めませんでした。別の写真を選択してください。"
+                avatarProcessingError = "画像を読み込めませんでした。別の写真を選択してください。".localized
                 return
             }
 
             avatarDataURL = dataURL
             avatarProcessingError = nil
         } catch {
-            avatarProcessingError = "画像を読み込めませんでした。別の写真を選択してください。"
+            avatarProcessingError = "画像を読み込めませんでした。別の写真を選択してください。".localized
         }
     }
 
@@ -733,7 +712,7 @@ private struct ProfileEditView: View {
         if let message = handleValidationResult.message, hasEditedHandle {
             return message
         }
-        return "3〜20文字の英数字とアンダースコアのみ使えます。"
+        return "3〜20文字の英数字とアンダースコアのみ使えます。".localized
     }
 
     private var handleValidationColor: Color {
@@ -818,36 +797,36 @@ private enum UserManagementMode {
     var title: String {
         switch self {
         case .blocked:
-            return "ブロックしたユーザー"
+            return "ブロックしたユーザー".localized
         case .muted:
-            return "ミュートしたユーザー"
+            return "ミュートしたユーザー".localized
         }
     }
 
     var emptyText: String {
         switch self {
         case .blocked:
-            return "ブロック中のユーザーはいません。"
+            return "ブロック中のユーザーはいません。".localized
         case .muted:
-            return "ミュート中のユーザーはいません。"
+            return "ミュート中のユーザーはいません。".localized
         }
     }
 
     var activeButtonTitle: String {
         switch self {
         case .blocked:
-            return "解除"
+            return "解除".localized
         case .muted:
-            return "解除"
+            return "解除".localized
         }
     }
 
     var candidateButtonTitle: String {
         switch self {
         case .blocked:
-            return "ブロック"
+            return "ブロック".localized
         case .muted:
-            return "ミュート"
+            return "ミュート".localized
         }
     }
 }
@@ -977,7 +956,7 @@ private struct FeedControlSettingsView: View {
                                 Image(systemName: "xmark.circle")
                             }
                             .buttonStyle(.borderless)
-                            .accessibilityLabel("#\(control.targetID) の調整を解除")
+                            .accessibilityLabel(Text(L10n.format("#%@ の調整を解除", control.targetID)))
                         }
                         .padding(.vertical, AppSpacing.xs)
                     }
@@ -1023,7 +1002,7 @@ private struct MutedWordsView: View {
                             VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                                 Text(mutedWord.word)
                                     .font(.subheadline.weight(.semibold))
-                                Text("判定: \(mutedWord.normalizedWord)")
+                                Text(L10n.format("判定: %@", mutedWord.normalizedWord))
                                     .font(.caption2)
                                     .foregroundStyle(AppColor.textSecondary)
                                     .lineLimit(1)
@@ -1038,7 +1017,7 @@ private struct MutedWordsView: View {
                                 Image(systemName: "trash")
                             }
                             .buttonStyle(.borderless)
-                            .accessibilityLabel("「\(mutedWord.word)」を削除")
+                            .accessibilityLabel(Text(L10n.format("「%@」を削除", mutedWord.word)))
                         }
                         .padding(.vertical, AppSpacing.xs)
                     }
@@ -1077,12 +1056,12 @@ private struct ReportHistoryView: View {
             } else {
                 ForEach(store.reportHistory) { report in
                     VStack(alignment: .leading, spacing: AppSpacing.xs) {
-                        Text(report.targetDescription)
+                        Text(report.localizedTargetDescription)
                             .font(.subheadline.weight(.semibold))
-                        Text("理由: \(report.reason)")
+                        Text(L10n.format("理由: %@", report.localizedReason))
                             .font(.caption)
                             .foregroundStyle(AppColor.textSecondary)
-                        Text("\(DateFormatterUtil.relativeString(from: report.createdAt)) ・ \(report.status)")
+                        Text(L10n.format("%@ ・ %@", DateFormatterUtil.relativeString(from: report.createdAt), report.localizedStatus))
                             .font(.caption2)
                             .foregroundStyle(AppColor.textTertiary)
                     }
@@ -1131,25 +1110,25 @@ private struct AdminReportRow: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(AppColor.accent)
                 Spacer()
-                Text(report.status)
+                Text(report.localizedStatus)
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(report.status == "確認待ち" ? AppColor.warning : AppColor.textSecondary)
             }
 
-            Text(report.targetDescription)
+            Text(report.localizedTargetDescription)
                 .font(.subheadline.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("理由: \(report.reason)")
+            Text(L10n.format("理由: %@", report.localizedReason))
                 .font(.caption)
                 .foregroundStyle(AppColor.textSecondary)
 
-            Text("通報: \(DateFormatterUtil.relativeString(from: report.createdAt))")
+            Text(L10n.format("通報: %@", DateFormatterUtil.relativeString(from: report.createdAt)))
                 .font(.caption2)
                 .foregroundStyle(AppColor.textTertiary)
 
             if let adminNote = report.adminNote {
-                Text("メモ: \(adminNote)")
+                Text(L10n.format("メモ: %@", adminNote.localized))
                     .font(.caption2)
                     .foregroundStyle(AppColor.textSecondary)
             }
@@ -1194,6 +1173,34 @@ private struct AdminReportRow: View {
     }
 }
 
+private extension ReportRecord {
+    var localizedStatus: String {
+        status.localized
+    }
+
+    var localizedReason: String {
+        reason.localized
+    }
+
+    var localizedTargetDescription: String {
+        localizedDescription(prefix: "投稿: ", key: "投稿: %@")
+            ?? localizedDescription(prefix: "Post: ", key: "投稿: %@")
+            ?? localizedDescription(prefix: "記事: ", key: "記事: %@")
+            ?? localizedDescription(prefix: "Article: ", key: "記事: %@")
+            ?? localizedDescription(prefix: "コメント: ", key: "コメント: %@")
+            ?? localizedDescription(prefix: "Comment: ", key: "コメント: %@")
+            ?? localizedDescription(prefix: "ユーザー: ", key: "ユーザー: %@")
+            ?? localizedDescription(prefix: "User: ", key: "ユーザー: %@")
+            ?? targetDescription.localized
+    }
+
+    private func localizedDescription(prefix: String, key: String) -> String? {
+        guard targetDescription.hasPrefix(prefix) else { return nil }
+        let value = String(targetDescription.dropFirst(prefix.count))
+        return L10n.format(key, value)
+    }
+}
+
 private extension ReportTargetType {
     var systemImage: String {
         switch self {
@@ -1230,35 +1237,80 @@ private struct LegalDocumentView: View {
     }
 }
 
-private let legalTermsText = """
-HitoLogは、本人がアプリ内で入力した言葉を投稿するためのSNSです。
+private var legalTermsText: String {
+    if L10n.prefersEnglish {
+        return """
+        HitoLog is a social networking app for posting words that the user types directly in the app.
 
-ユーザーは、自分が投稿またはコメントする内容について責任を持つものとします。第三者の権利を侵害する内容、誹謗中傷、違法または不適切な内容、スパム行為、サービスの運営を妨げる行為は禁止します。
+        Users are responsible for the content they post or comment. Content that infringes third-party rights, harassment, threats, illegal or inappropriate content, spam, and actions that interfere with service operation are prohibited.
 
-HitoLogでは、投稿、コメント、いいね、ブロック、ミュート、通報などの機能を提供します。運営上必要な場合、不適切な投稿やアカウントの表示制限、削除、利用停止を行うことがあります。
+        HitoLog provides posting, comments, likes, blocks, mutes, reports, and related safety features. When necessary for operation or safety, HitoLog may limit visibility, delete content, or restrict accounts.
 
-アカウント削除は設定画面から実行できます。削除すると、アカウント情報、投稿、コメント、通知トークンなどのユーザーデータは削除または非表示化されます。安全確認や法令対応のため、通報記録など一部の情報を必要な期間保持する場合があります。
-"""
+        Account deletion can be requested from Settings. When an account is deleted, account information, posts, comments, notification tokens, and related user data are deleted or hidden. Some records, such as reports, may be retained for a necessary period for safety review or legal compliance.
+        """
+    }
 
-private let communityGuidelinesText = """
-HitoLogでは、本人が入力した言葉を安心して読める場にするため、以下の行為を禁止します。
+    return """
+    HitoLogは、本人がアプリ内で入力した言葉を投稿するためのSNSです。
 
-・誹謗中傷、脅迫、嫌がらせ、差別的な表現
-・性的、暴力的、違法、または他者に危害を与える内容
-・個人情報、なりすまし、権利侵害、無断転載
-・スパム、過度な連投、サービスの安全性を損なう行為
+    ユーザーは、自分が投稿またはコメントする内容について責任を持つものとします。第三者の権利を侵害する内容、誹謗中傷、違法または不適切な内容、スパム行為、サービスの運営を妨げる行為は禁止します。
 
-問題のある投稿、コメント、ユーザーは通報できます。運営は通報内容を確認し、必要に応じて投稿やコメントの非表示、アカウントの利用制限を行います。
-"""
+    HitoLogでは、投稿、コメント、いいね、ブロック、ミュート、通報などの機能を提供します。運営上必要な場合、不適切な投稿やアカウントの表示制限、削除、利用停止を行うことがあります。
 
-private let privacyPolicyText = """
-HitoLogは、アカウント作成、投稿、コメント、通知、安全機能を提供するために必要な情報を扱います。
+    アカウント削除は設定画面から実行できます。削除すると、アカウント情報、投稿、コメント、通知トークンなどのユーザーデータは削除または非表示化されます。安全確認や法令対応のため、通報記録など一部の情報を必要な期間保持する場合があります。
+    """
+}
 
-収集する情報には、Sign in with AppleおよびFirebase Authのアカウント識別子、プロフィール情報、投稿、コメント、いいね、ブロック、ミュート、通報、投稿時の入力時間や編集回数などの入力指標、通知を有効にした場合のFirebase Cloud Messagingトークンが含まれます。
+private var communityGuidelinesText: String {
+    if L10n.prefersEnglish {
+        return """
+        HitoLog is designed as a place where people can read words typed by the author with a sense of trust. The following actions are prohibited:
 
-これらの情報は、タイムラインやプロフィールの表示、安全機能の提供、通報対応、コメントといいねの通知配信、サービスの保護のために利用します。通知トークンはHitoLogの通知配信にのみ利用します。
+        - Defamation, threats, harassment, or discriminatory expression
+        - Sexual, violent, illegal, or harmful content
+        - Personal information, impersonation, rights infringement, or unauthorized reposting
+        - Spam, excessive repeated posting, or actions that harm service safety
 
-HitoLogはFirebase Auth、Cloud Firestore、App Check、Cloud Messaging、Cloud Functionsを利用します。収集したデータを販売することはありません。
+        Users can report problematic posts, comments, and accounts. Reports are reviewed by the team, and HitoLog may hide posts or comments or restrict account use when necessary.
+        """
+    }
 
-ユーザーはアプリ内の設定から通知をオフにできます。また、設定画面からアカウント削除を実行できます。
-"""
+    return """
+    HitoLogでは、本人が入力した言葉を安心して読める場にするため、以下の行為を禁止します。
+
+    ・誹謗中傷、脅迫、嫌がらせ、差別的な表現
+    ・性的、暴力的、違法、または他者に危害を与える内容
+    ・個人情報、なりすまし、権利侵害、無断転載
+    ・スパム、過度な連投、サービスの安全性を損なう行為
+
+    問題のある投稿、コメント、ユーザーは通報できます。運営は通報内容を確認し、必要に応じて投稿やコメントの非表示、アカウントの利用制限を行います。
+    """
+}
+
+private var privacyPolicyText: String {
+    if L10n.prefersEnglish {
+        return """
+        HitoLog handles information needed to provide account creation, posting, comments, notifications, safety features, and product improvement.
+
+        Information collected may include account identifiers from Sign in with Apple and Firebase Auth, profile information, posts, comments, likes, blocks, mutes, reports, typing-derived input signals such as input duration and edit counts, Firebase Cloud Messaging tokens when notifications are enabled, feedback submitted from Settings, and usage analytics events such as screen views and button actions. Post body text and feedback body text are not included in analytics events.
+
+        This information is used to operate timelines and profiles, provide safety features, process reports, calculate Human Check labels, deliver notifications for comments and likes, protect the service, and improve product quality.
+
+        HitoLog uses Firebase Auth, Cloud Firestore, App Check, Cloud Messaging, Cloud Functions, and PostHog analytics when enabled. HitoLog does not sell collected data.
+
+        Users can disable notifications in the app or in iOS Settings. Users can request account deletion from Settings. Reports may be retained as moderation records when required for safety review.
+        """
+    }
+
+    return """
+    HitoLogは、アカウント作成、投稿、コメント、通知、安全機能を提供するために必要な情報を扱います。
+
+    収集する情報には、Sign in with AppleおよびFirebase Authのアカウント識別子、プロフィール情報、投稿、コメント、いいね、ブロック、ミュート、通報、投稿時の入力時間や編集回数などの入力指標、通知を有効にした場合のFirebase Cloud Messagingトークンが含まれます。
+
+    これらの情報は、タイムラインやプロフィールの表示、安全機能の提供、通報対応、コメントといいねの通知配信、サービスの保護のために利用します。通知トークンはHitoLogの通知配信にのみ利用します。
+
+    HitoLogはFirebase Auth、Cloud Firestore、App Check、Cloud Messaging、Cloud Functionsを利用します。収集したデータを販売することはありません。
+
+    ユーザーはアプリ内の設定から通知をオフにできます。また、設定画面からアカウント削除を実行できます。
+    """
+}
