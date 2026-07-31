@@ -21,7 +21,7 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 [bundle exec] fastlane ios latest_build
 ```
 
-Show the latest TestFlight build number for version 1.2
+Show the latest TestFlight build number for version 1.3
 
 ### ios beta
 
@@ -37,7 +37,7 @@ Build and upload HitoLog to TestFlight
 [bundle exec] fastlane ios release_screenshots
 ```
 
-Upload the prepared App Store screenshots for version 1.2
+Upload the prepared App Store screenshots for version 1.3
 
 ----
 
