@@ -681,6 +681,15 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // App Store署名を検証したCloud Functionsだけが購入処理を更新する。
+    match /purchaseIntents/{intentID} {
+      allow read, write: if false;
+    }
+
+    match /appStoreTransactions/{transactionID} {
+      allow read, write: if false;
+    }
+
 	    match /creatorRevenueEvents/{eventID} {
 	      allow read: if signedIn()
 	        && (resource.data.creatorID == request.auth.uid

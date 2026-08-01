@@ -3,14 +3,25 @@ import { DocumentData, DocumentReference, FieldValue, getFirestore, Timestamp } 
 import { getMessaging } from "firebase-admin/messaging";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { onDocumentCreated, onDocumentDeleted, onDocumentUpdated } from "firebase-functions/v2/firestore";
-import { onRequest } from "firebase-functions/v2/https";
+import { onCall, onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
+import { makeCompletePurchaseHandler, makeCreatePurchaseIntentHandler } from "./purchases";
 
 initializeApp();
 setGlobalOptions({ region: "asia-northeast1" });
 
 const db = getFirestore();
+
+export const createPurchaseIntent = onCall(
+  { region: "asia-northeast1", enforceAppCheck: true },
+  makeCreatePurchaseIntentHandler(db)
+);
+
+export const completePurchase = onCall(
+  { region: "asia-northeast1", enforceAppCheck: true },
+  makeCompletePurchaseHandler(db)
+);
 
 type NotificationType = "comment" | "like" | "follow" | "repost" | "quote" | "mention";
 type ModerationStatus = "active" | "reviewRequired" | "hidden";

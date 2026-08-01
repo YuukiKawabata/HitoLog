@@ -36,6 +36,7 @@ final class AnalyticsService: ObservableObject {
         config.captureScreenViews = false
         config.captureElementInteractions = false
         config.sessionReplay = false
+        config.errorTrackingConfig.autoCapture = isEnabled
         config.optOut = !isEnabled
         #if DEBUG
         config.debug = true

@@ -324,6 +324,8 @@ final class AppDataStore: ObservableObject {
             }
 
             try await remoteStore.upsertUser(currentUser, email: email)
+            await PurchaseService.shared.startTransactionListener()
+            _ = await PurchaseService.shared.recoverUnfinishedPurchases()
             await redeemPendingInviteIfNeeded(inviteeID: uid)
             try await reloadRemoteSnapshot()
             startRemoteListeners(for: uid)
@@ -1338,16 +1340,12 @@ final class AppDataStore: ObservableObject {
     func purchaseArticle(_ article: Article) async throws -> Bool {
         guard MonetizationPolicy.isEnabled else { return false }
         guard isRemoteSyncEnabled else { return false }
-        guard let result = try await PurchaseService.shared.purchase(price: article.price) else {
+        guard let result = try await PurchaseService.shared.purchase(
+            price: article.price,
+            articleID: article.id
+        ) else {
             return false
         }
-        try await remoteStore.recordArticleUnlock(
-            userID: currentUser.id,
-            articleID: article.id,
-            price: article.price,
-            transactionID: result.transactionID,
-            productID: result.productID
-        )
         unlockedArticleIDs.insert(article.id)
         if let idx = articles.firstIndex(where: { $0.id == article.id }) {
             articles[idx].purchaseCount += 1
@@ -1378,17 +1376,12 @@ final class AppDataStore: ObservableObject {
     func purchaseCreatorMembership(creatorID: String, plan: CreatorMembershipPlan) async throws -> Bool {
         guard MonetizationPolicy.isEnabled else { return false }
         guard isRemoteSyncEnabled, creatorID != currentUser.id else { return false }
-        guard let result = try await PurchaseService.shared.purchase(membershipPlan: plan) else {
+        guard let result = try await PurchaseService.shared.purchase(
+            membershipPlan: plan,
+            creatorID: creatorID
+        ) else {
             return false
         }
-        try await remoteStore.recordCreatorMembership(
-            subscriberID: currentUser.id,
-            creatorID: creatorID,
-            plan: plan,
-            transactionID: result.transactionID,
-            productID: result.productID,
-            expirationDate: result.expirationDate
-        )
         AnalyticsService.shared.capture("creator_membership_purchased", properties: [
             "creator_id": creatorID,
             "plan": plan.rawValue,
@@ -1406,18 +1399,14 @@ final class AppDataStore: ObservableObject {
     ) async throws -> Bool {
         guard MonetizationPolicy.isEnabled else { return false }
         guard isRemoteSyncEnabled, recipientID != currentUser.id else { return false }
-        guard let result = try await PurchaseService.shared.purchase(supportAmount: amount) else {
-            return false
-        }
-        try await remoteStore.recordSupportPurchase(
-            senderID: currentUser.id,
+        guard let result = try await PurchaseService.shared.purchase(
+            supportAmount: amount,
             recipientID: recipientID,
             targetType: targetType,
-            targetID: targetID,
-            amount: amount,
-            transactionID: result.transactionID,
-            productID: result.productID
-        )
+            targetID: targetID
+        ) else {
+            return false
+        }
         AnalyticsService.shared.capture("support_purchased", properties: [
             "recipient_id": recipientID,
             "target_type": targetType,

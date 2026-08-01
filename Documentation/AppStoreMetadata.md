@@ -1,5 +1,15 @@
 # HitoLog App Store Metadata
 
+## Version 1.3.1 Release Notes
+
+### Japanese
+
+安定性を高めるため、内部処理とエラー検知を改善しました。
+
+### English
+
+Improved internal reliability and error detection for a more stable experience.
+
 ## Recommended Promotional Text
 
 日記ほど構えず、SNSほど飾らず。HitoLogは、1日1つ、自分の言葉を残すための静かなSNSです。
