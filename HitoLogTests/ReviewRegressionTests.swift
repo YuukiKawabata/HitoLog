@@ -99,6 +99,72 @@ final class ReviewRegressionTests: XCTestCase {
         XCTAssertTrue(store.comments.isEmpty)
     }
 
+    func testLegacyUserDecodesWithoutTimeZoneIdentifier() throws {
+        let source = makeUser(id: "legacy-user")
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(source)) as? [String: Any])
+        object.removeValue(forKey: "timeZoneIdentifier")
+
+        let decoded = try JSONDecoder().decode(AppUser.self, from: JSONSerialization.data(withJSONObject: object))
+
+        XCTAssertNil(decoded.timeZoneIdentifier)
+    }
+
+    func testCircleInviteRouterSupportsNewLegacyAndUniversalLinks() {
+        let router = CircleInviteRouter()
+        let token = String(repeating: "a", count: 43)
+
+        XCTAssertEqual(router.route(for: URL(string: "wamori://invite?token=\(token)")!), .invite(token: token))
+        XCTAssertEqual(router.route(for: URL(string: "hitolog://invite?token=\(token)")!), .invite(token: token))
+        XCTAssertEqual(router.route(for: URL(string: "https://wamori.app/c/\(token)")!), .invite(token: token))
+        XCTAssertEqual(router.route(for: URL(string: "https://hitolog-e22d2.web.app/c/\(token)")!), .invite(token: token))
+        XCTAssertEqual(CreatedCircleInvite(id: "invite", token: token, expiresAt: Date()).shareURL?.host, "hitolog-e22d2.web.app")
+    }
+
+    func testCircleEntryDraftBoundariesAndPhotoOnly() {
+        XCTAssertTrue(CircleEntryDraftValidator.isValid(body: String(repeating: "あ", count: 500), hasMedia: false))
+        XCTAssertFalse(CircleEntryDraftValidator.isValid(body: String(repeating: "あ", count: 501), hasMedia: false))
+        XCTAssertTrue(CircleEntryDraftValidator.isValid(body: "", hasMedia: true))
+        XCTAssertFalse(CircleEntryDraftValidator.isValid(body: "  \n", hasMedia: false))
+    }
+
+    func testCircleDateKeyUsesProvidedTimeZoneAtDayBoundary() {
+        let date = Date(timeIntervalSince1970: 1_735_689_000) // 2025-01-01 JST / 2024-12-31 UTC
+        XCTAssertEqual(CircleDataStore.dateKey(for: date, timeZone: TimeZone(identifier: "Asia/Tokyo")!), "2025-01-01")
+        XCTAssertEqual(CircleDataStore.dateKey(for: date, timeZone: TimeZone(secondsFromGMT: 0)!), "2024-12-31")
+    }
+
+    func testCircleFeatureFlagsStartConservativelyDisabled() {
+        let flags = FeatureFlagService.shared
+
+        XCTAssertFalse(flags.enableCircles)
+        XCTAssertFalse(flags.circlesAsDefaultHome)
+        XCTAssertFalse(flags.enableCircleImages)
+        XCTAssertFalse(flags.enableCircleComments)
+        XCTAssertFalse(flags.enableCircleReactions)
+        XCTAssertFalse(flags.enableCirclePush)
+        XCTAssertFalse(flags.enableCircleMoments)
+        XCTAssertTrue(flags.showLegacyPublicTimeline)
+    }
+
+    func testAnalyticsDropsPrivateCircleProperties() {
+        let sanitized = AnalyticsService.shared.privacySafeProperties([
+            "entry_point": "write_tab",
+            "user_id": "private-user",
+            "author_id": "private-author",
+            "ownerID": "private-owner",
+            "circle_id": "private-circle",
+            "circleID": "private-circle-camelcase",
+            "circle_name": "family",
+            "body": "private entry",
+            "comment_text": "private comment",
+            "invite_token": "secret",
+            "storage_path": "circleMedia/private"
+        ])
+
+        XCTAssertEqual(sanitized.count, 1)
+        XCTAssertEqual(sanitized["entry_point"] as? String, "write_tab")
+    }
+
     private func makeUser(id: String) -> AppUser {
         let now = Date()
         return AppUser(

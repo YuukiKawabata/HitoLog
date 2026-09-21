@@ -20,6 +20,10 @@ enum ReportTargetType: String, Codable, Equatable, CaseIterable {
     case comment
     case user
     case article
+    case circle
+    case circleEntry
+    case circleComment
+    case circleMember
     case other
 
     var displayText: String {
@@ -28,6 +32,10 @@ enum ReportTargetType: String, Codable, Equatable, CaseIterable {
         case .comment: return "コメント".localized
         case .user: return "ユーザー".localized
         case .article: return "記事".localized
+        case .circle: return "輪"
+        case .circleEntry: return "輪の記録"
+        case .circleComment: return "輪のコメント"
+        case .circleMember: return "輪のメンバー"
         case .other: return "その他".localized
         }
     }

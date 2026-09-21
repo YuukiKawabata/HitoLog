@@ -226,6 +226,7 @@ enum MediaUploadError: LocalizedError {
     case tooManyItems
     case unsupportedMedia
     case invalidImage
+    case imageTooLarge
     case videoTooLarge
     case videoTooLong
     case storageUnavailable
@@ -243,6 +244,8 @@ enum MediaUploadError: LocalizedError {
             return "このメディア形式は投稿できません。".localized
         case .invalidImage:
             return "画像を読み込めませんでした。別の写真を選んでください。".localized
+        case .imageTooLarge:
+            return "写真は10MB以下にしてください。".localized
         case .videoTooLarge:
             return "動画は100MB以下にしてください。".localized
         case .videoTooLong:

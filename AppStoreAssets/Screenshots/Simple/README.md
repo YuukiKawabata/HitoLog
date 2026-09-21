@@ -1,10 +1,10 @@
-# HitoLog App Store screenshots
+# Wamori App Store screenshots
 
 シンプル版の掲載順は次の3枚です。
 
-1. `01-one-word-a-day.png` — 1日1つ、自分の言葉を残す。
-2. `02-write-as-you-are.png` — 今日のことを、そのまま書く。
-3. `03-meet-your-past-self.png` — ときどき、過去の自分に会う。
+1. `01-one-word-a-day.png` — 大切な人と、今日をひとつずつ。
+2. `02-write-as-you-are.png` — 今日のひとことを、輪へ。
+3. `03-meet-your-past-self.png` — これまでの投稿も、そのまま。
 
 出力先:
 
@@ -12,5 +12,5 @@
 - `iPad/`: 2048 × 2732 px
 - `raw/`: シミュレータから撮影した元画面
 
-再撮影時は、本番のレビュー用アカウントでサインインし、実際のFirebaseデータを使用します。
+2.0用画像は、実際のWamori画面を決定論的な撮影データで表示して再撮影したものです。旧ブランド名が写った1.x画像は提出しません。
 従来版のスクリーンショットは `AppStoreAssets/Screenshots/` 直下に残しています。

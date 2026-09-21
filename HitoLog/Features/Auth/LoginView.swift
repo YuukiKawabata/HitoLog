@@ -23,9 +23,9 @@ struct LoginView: View {
                     BrandIconView(size: 92)
 
                     VStack(spacing: AppSpacing.sm) {
-                        SectionKicker(text: "AI時代の人間の言葉".localized)
+                        SectionKicker(text: "親しい人だけの交換日記".localized)
 
-                        Text("HitoLog")
+                        Text("Wamori")
                             .font(AppFont.display)
                             .foregroundStyle(AppColor.textPrimary)
 

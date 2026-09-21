@@ -1,8 +1,21 @@
 import SwiftUI
 
 struct MainTabView: View {
+    @EnvironmentObject private var flags: FeatureFlagService
+
+    var body: some View {
+        if flags.enableCircles && flags.circlesAsDefaultHome {
+            WamoriMainTabView()
+        } else {
+            LegacyMainTabView()
+        }
+    }
+}
+
+private struct LegacyMainTabView: View {
     @EnvironmentObject private var store: AppDataStore
     @EnvironmentObject private var analytics: AnalyticsService
+    @EnvironmentObject private var flags: FeatureFlagService
     @State private var selectedTab: MainTab = .home
     @State private var lastContentTab: MainTab = .home
     @State private var homeNavigationPath = NavigationPath()
@@ -62,6 +75,12 @@ struct MainTabView: View {
                 Label("ホーム", systemImage: "house")
             }
             .tag(MainTab.home)
+
+            if flags.enableCircles {
+                CircleNavigationView()
+                    .tabItem { Label("輪", systemImage: "circle.grid.2x2") }
+                    .tag(MainTab.circles)
+            }
 
             Color.clear
             .tabItem {
@@ -145,6 +164,7 @@ private enum HomeDestination: Hashable {
 
 private enum MainTab: String {
     case home
+    case circles
     case compose
     case profile
 
@@ -152,6 +172,8 @@ private enum MainTab: String {
         switch self {
         case .home:
             return "timeline"
+        case .circles:
+            return "circle_list"
         case .compose:
             return "compose"
         case .profile:
@@ -676,7 +698,7 @@ private struct UserSearchRow: View {
     }
 }
 
-private struct NotificationsView: View {
+struct NotificationsView: View {
     @EnvironmentObject private var store: AppDataStore
 
     var body: some View {
@@ -733,7 +755,9 @@ private struct NotificationRow: View {
 
     @ViewBuilder
     private var destination: some View {
-        if let postID = notification.postID {
+        if notification.type == .circleEntryCreated || notification.type == .circleCommentCreated {
+            CircleListView()
+        } else if let postID = notification.postID {
             PostDetailView(postID: postID)
         } else {
             ProfileView(userID: notification.actorID)
@@ -756,6 +780,10 @@ private extension AppNotificationType {
             return "quote.bubble.fill"
         case .mention:
             return "at"
+        case .circleEntryCreated:
+            return "circle.grid.2x2.fill"
+        case .circleCommentCreated:
+            return "bubble.left.and.bubble.right.fill"
         }
     }
 }

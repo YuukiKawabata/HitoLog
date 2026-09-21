@@ -1,8 +1,8 @@
-# HitoLog
+# Wamori 2.0
 
-AI時代に、人間の言葉を残すSNS。
+大切な人と、今日をひとつずつ。
 
-HitoLog is an iOS native SNS focused on posts that are typed in the app instead of pasted or mass-generated.
+Wamori is an invitation-only social journal for circles of two to five close people. It is delivered as the 2.0 update of the existing HitoLog app, preserving the bundle ID, target, Firebase project, products, and public-post data.
 
 ## Source
 
@@ -35,6 +35,8 @@ The initial project follows the Obsidian spec:
 - Sign in with Apple through Firebase Auth
 - Firestore sync for profiles, posts, comments, likes, safety settings, reports, and push tokens
 - Firebase Cloud Messaging notifications for comments and likes
+- Private Circle data, invitations, daily entries, one-photo uploads, reactions, comments, ownership transfer, and asynchronous cleanup
+- Firebase Remote Config rollout switches with conservative defaults
 
 ## Backend Policy
 
@@ -52,8 +54,10 @@ xcodebuild -project HitoLog.xcodeproj -scheme HitoLog -destination 'generic/plat
 
 GitHub Pages files live in `docs/`.
 
-Recommended App Store Connect URLs after enabling GitHub Pages from the `docs` folder:
+Canonical URLs after connecting the custom domain:
 
-- Support URL: `https://yuukikawabata.github.io/HitoLog/support/`
-- Privacy Policy URL: `https://yuukikawabata.github.io/HitoLog/privacy/`
-- Terms URL: `https://yuukikawabata.github.io/HitoLog/terms/`
+- Support URL: `https://wamori.app/support/`
+- Privacy Policy URL: `https://wamori.app/privacy/`
+- Terms URL: `https://wamori.app/terms/`
+
+Until `wamori.app` is acquired and connected, production invitations, support, privacy, and App Store metadata use `https://hitolog-e22d2.web.app`. Both hosts and both `wamori://` / `hitolog://` schemes remain supported, so the later switch is backward-compatible.

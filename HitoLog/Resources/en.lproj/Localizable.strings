@@ -24,8 +24,11 @@
 "AI併用を開示した投稿" = "Post disclosed AI assistance";
 "Apple IDでサインインしてください。" = "Sign in with Apple ID.";
 "現在サインインを利用できません。しばらくしてからもう一度お試しください。" = "Sign-in is currently unavailable. Please try again later.";
-"HitoLog" = "HitoLog";
-"HitoLog 招待" = "HitoLog Invite";
+"HitoLog" = "Wamori";
+"HitoLog 招待" = "Wamori Invite";
+"Wamori" = "Wamori";
+"Wamori 招待" = "Wamori Invite";
+"Wamoriへの招待です: %@" = "You are invited to Wamori: %@";
 "Lv.%lld" = "Lv.%lld";
 "OK" = "OK";
 "iOSの設定で通知がオフになっています。通知を受け取るには設定アプリから許可してください。" = "Notifications are off in iOS Settings. To receive notifications, allow them in the Settings app.";
@@ -186,7 +189,7 @@
 "投稿検索" = "Post search";
 "招待コード" = "Invite code";
 "招待コードを作成" = "Create invite code";
-"振込予定額は App Store 控除（推定%lld%%）後の金額から HitoLog 手数料（%lld%%）を差し引いた目安です。返金・税・Appleの精算により実際の金額は変動します。" = "Estimated payout after App Store deduction (estimated %lld%%) and HitoLog fee (%lld%%). Refunds, taxes, and Apple settlements may change the actual amount.";
+"振込予定額は App Store 控除（推定%lld%%）後の金額から HitoLog 手数料（%lld%%）を差し引いた目安です。返金・税・Appleの精算により実際の金額は変動します。" = "Estimated payout after App Store deduction (estimated %lld%%) and Wamori fee (%lld%%). Refunds, taxes, and Apple settlements may change the actual amount.";
 "時間をかけて書いた言葉を残す" = "Preserve words written over time";
 "書いた時間の温度が、そのまま残るタイムライン。" = "A timeline that keeps the feel of the time spent writing.";
 "未対応の通報はありません" = "No unresolved reports";
@@ -373,7 +376,7 @@
 "あなたの投稿やフォロー中ユーザーと近い話題 %@ に一致しています。" = "Matches topics close to your posts or followed users: %@.";
 "アカウント開設14日以上 (%lld日)" = "Account age at least 14 days (%lld days)";
 "本人入力率80%以上 (%lld%%)" = "Human-written rate at least 80%% (%lld%%)";
-"HitoLogへの招待です: %@" = "You are invited to HitoLog: %@";
+"HitoLogへの招待です: %@" = "You are invited to Wamori: %@";
 "%@から綴っています" = "Writing since %@";
 "%@に開設しました" = "Joined in %@";
 "開設当日" = "Joined today";
@@ -422,7 +425,7 @@
 "売上（税込）" = "Gross revenue";
 "振込予定額" = "Estimated payout";
 "Apple控除" = "Apple deduction";
-"HitoLog手数料" = "HitoLog fee";
+"HitoLog手数料" = "Wamori fee";
 "保留期間" = "Hold period";
 "サブスク月額" = "Monthly subscriptions";
 "%lld日" = "%lld days";
@@ -432,7 +435,7 @@
 "%@ %lld件" = "%@ %lld";
 "%lld回" = "%lld times";
 "自分の言葉で書く" = "Write in your own words";
-"HitoLogでは、投稿欄で入力した言葉を大切にします。" = "HitoLog values the words you type in the posting field.";
+"HitoLogでは、投稿欄で入力した言葉を大切にします。" = "Wamori values the words you type in the posting field.";
 "貼り付けではなく、その場で考えながら書く体験を中心にします。" = "It centers the experience of thinking and writing in the moment, not pasting.";
 "ペーストできない投稿欄" = "A posting field without paste";
 "投稿作成ではコピー＆ペーストを使えません。" = "Copy and paste cannot be used when composing posts.";

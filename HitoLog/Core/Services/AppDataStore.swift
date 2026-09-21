@@ -1868,7 +1868,9 @@ final class AppDataStore: ObservableObject {
                 articles[index].hiddenReason = reason
                 articles[index].hiddenAt = Date()
             }
-        case .user, .other:
+        case .circle, .circleEntry, .circleComment:
+            break
+        case .user, .circleMember, .other:
             return
         }
 

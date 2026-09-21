@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>HitoLog</string>
+	<string>Wamori</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -23,6 +23,7 @@
 			<string>com.yukikawabata.HitoLog</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
+				<string>wamori</string>
 				<string>hitolog</string>
 			</array>
 		</dict>

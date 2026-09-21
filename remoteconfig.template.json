@@ -1,0 +1,38 @@
+{
+  "parameters": {
+    "enable_circles": {
+      "defaultValue": { "value": "true" },
+      "description": "Master switch for all Circle surfaces."
+    },
+    "circles_as_default_home": {
+      "defaultValue": { "value": "true" },
+      "description": "Makes Wamori's Circle/Write/Self tabs the root navigation."
+    },
+    "show_legacy_public_timeline": {
+      "defaultValue": { "value": "true" },
+      "description": "Keeps the existing public timeline available under Self."
+    },
+    "enable_circle_images": {
+      "defaultValue": { "value": "true" }
+    },
+    "enable_circle_comments": {
+      "defaultValue": { "value": "true" }
+    },
+    "enable_circle_reactions": {
+      "defaultValue": { "value": "true" }
+    },
+    "enable_circle_push": {
+      "defaultValue": { "value": "true" }
+    },
+    "enable_circle_moments": {
+      "defaultValue": { "value": "false" }
+    },
+    "circles_internal_user_ids": {
+      "defaultValue": { "value": "" },
+      "description": "Comma-separated internal Firebase Auth UIDs."
+    }
+  },
+  "version": {
+    "description": "Wamori 2.0 release defaults; enable_circles remains the rollback switch"
+  }
+}

@@ -3,6 +3,9 @@ import Foundation
 #if canImport(FirebaseFirestore)
 import FirebaseFirestore
 #endif
+#if canImport(FirebaseFunctions)
+import FirebaseFunctions
+#endif
 
 struct RemoteDataSnapshot {
     var users: [AppUser]
@@ -577,7 +580,6 @@ struct FirebaseDataStore {
         data["website"] = user.website ?? FieldValue.delete()
         data["location"] = user.location ?? FieldValue.delete()
         data["occupation"] = user.occupation ?? FieldValue.delete()
-
         let ref = Firestore.firestore().collection("users").document(user.id)
         let snapshot = try await ref.getDocument()
         if snapshot.exists {
@@ -932,7 +934,14 @@ struct FirebaseDataStore {
         case .post:    collection = "posts"
         case .comment: collection = "comments"
         case .article: collection = "articles"
-        case .user, .other:
+        case .circle, .circleEntry, .circleComment:
+            #if canImport(FirebaseFunctions)
+            _ = try await Functions.functions(region: "asia-northeast1")
+                .httpsCallable("moderateCircleContent")
+                .call(["targetType": targetType.rawValue, "targetID": targetID, "reason": reason])
+            #endif
+            return
+        case .user, .circleMember, .other:
             return
         }
 
@@ -1171,7 +1180,8 @@ private extension FirebaseDataStore {
             followingCount: intValue(data["followingCount"], fallback: 0),
             website: (data["website"] as? String).flatMap { $0.isEmpty ? nil : $0 },
             location: (data["location"] as? String).flatMap { $0.isEmpty ? nil : $0 },
-            occupation: (data["occupation"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            occupation: (data["occupation"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+            timeZoneIdentifier: (data["timeZoneIdentifier"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         )
     }
 
@@ -1397,7 +1407,7 @@ private extension FirebaseDataStore {
               let type = AppNotificationType(rawValue: typeValue),
               let recipientID = data["recipientID"] as? String,
               let actorID = data["actorID"] as? String,
-              let text = data["text"] as? String else {
+              let text = (data["text"] as? String) ?? (data["body"] as? String) else {
             return nil
         }
 

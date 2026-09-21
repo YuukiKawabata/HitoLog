@@ -84,7 +84,7 @@ struct TimelineView: View {
         .refreshable {
             await store.refresh()
         }
-        .navigationTitle("HitoLog")
+        .navigationTitle("みんなの投稿")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $editingPost) { post in
             PostEditSheet(post: post)

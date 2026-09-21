@@ -7,6 +7,7 @@ struct SettingsView: View {
     @EnvironmentObject private var authSession: AuthSessionStore
     @EnvironmentObject private var pushService: PushNotificationService
     @EnvironmentObject private var analytics: AnalyticsService
+    @EnvironmentObject private var circleStore: CircleDataStore
     @AppStorage("hasCompletedInitialExperience") private var hasCompletedInitialExperience = true
     @State private var isShowingLogoutConfirmation = false
     @State private var isShowingDeleteConfirmation = false
@@ -19,7 +20,7 @@ struct SettingsView: View {
                     BrandIconView(size: 52)
 
                     VStack(alignment: .leading, spacing: AppSpacing.xs) {
-                        Text("HitoLog")
+                        Text("Wamori")
                             .font(.headline)
                         Text(AppConstants.copy)
                             .font(.caption)
@@ -196,6 +197,7 @@ struct SettingsView: View {
             Button("削除", role: .destructive) {
                 Task {
                     do {
+                        try await circleStore.prepareAccountDeletion()
                         try await store.deleteCurrentAccountData()
                         let didDelete = await authSession.deleteAccount()
                         if didDelete {
@@ -209,9 +211,7 @@ struct SettingsView: View {
                             }
                         }
                     } catch {
-                        await MainActor.run {
-                            accountDeleteErrorMessage = "アカウント情報を削除できませんでした。通信状態を確認して、もう一度お試しください。".localized
-                        }
+                        await MainActor.run { accountDeleteErrorMessage = error.localizedDescription }
                     }
                 }
             }
@@ -423,7 +423,7 @@ private struct InviteCodeView: View {
                             }
 
                             HStack(spacing: AppSpacing.sm) {
-                                ShareLink(item: invite.shareURL, subject: Text("HitoLog 招待"), message: Text(invite.shareText)) {
+                                ShareLink(item: invite.shareURL, subject: Text("Wamori 招待"), message: Text(invite.shareText)) {
                                     Label("共有", systemImage: "square.and.arrow.up")
                                 }
 
@@ -1208,6 +1208,10 @@ private extension ReportTargetType {
         case .comment: return "bubble.right"
         case .user:    return "person.crop.circle"
         case .article: return "doc.text"
+        case .circle:  return "person.3"
+        case .circleEntry: return "text.book.closed"
+        case .circleComment: return "bubble.left"
+        case .circleMember: return "person.crop.circle.badge.exclamationmark"
         case .other:   return "exclamationmark.bubble"
         }
     }
@@ -1240,22 +1244,22 @@ private struct LegalDocumentView: View {
 private var legalTermsText: String {
     if L10n.prefersEnglish {
         return """
-        HitoLog is a social networking app for posting words that the user types directly in the app.
+        Wamori provides private invitation-only circles for two to five people alongside its existing public posting features.
 
         Users are responsible for the content they post or comment. Content that infringes third-party rights, harassment, threats, illegal or inappropriate content, spam, and actions that interfere with service operation are prohibited.
 
-        HitoLog provides posting, comments, likes, blocks, mutes, reports, and related safety features. When necessary for operation or safety, HitoLog may limit visibility, delete content, or restrict accounts.
+        A valid invitation is required to join a circle. Wamori also provides public posts, comments, reactions, blocks, mutes, reports, and related safety features. When necessary for operation or safety, Wamori may limit visibility, delete content, or restrict accounts.
 
         Account deletion can be requested from Settings. When an account is deleted, account information, posts, comments, notification tokens, and related user data are deleted or hidden. Some records, such as reports, may be retained for a necessary period for safety review or legal compliance.
         """
     }
 
     return """
-    HitoLogは、本人がアプリ内で入力した言葉を投稿するためのSNSです。
+    Wamoriは、2〜5人の招待制グループ「輪」と、従来の公開投稿を提供するSNSです。
 
     ユーザーは、自分が投稿またはコメントする内容について責任を持つものとします。第三者の権利を侵害する内容、誹謗中傷、違法または不適切な内容、スパム行為、サービスの運営を妨げる行為は禁止します。
 
-    HitoLogでは、投稿、コメント、いいね、ブロック、ミュート、通報などの機能を提供します。運営上必要な場合、不適切な投稿やアカウントの表示制限、削除、利用停止を行うことがあります。
+    輪への参加には有効な招待が必要です。Wamoriでは、投稿、コメント、リアクション、ブロック、ミュート、通報などの機能を提供します。運営上必要な場合、不適切な投稿やアカウントの表示制限、削除、利用停止を行うことがあります。
 
     アカウント削除は設定画面から実行できます。削除すると、アカウント情報、投稿、コメント、通知トークンなどのユーザーデータは削除または非表示化されます。安全確認や法令対応のため、通報記録など一部の情報を必要な期間保持する場合があります。
     """
@@ -1264,19 +1268,19 @@ private var legalTermsText: String {
 private var communityGuidelinesText: String {
     if L10n.prefersEnglish {
         return """
-        HitoLog is designed as a place where people can read words typed by the author with a sense of trust. The following actions are prohibited:
+        Wamori is designed as a place where people can read words typed by the author with a sense of trust. The following actions are prohibited:
 
         - Defamation, threats, harassment, or discriminatory expression
         - Sexual, violent, illegal, or harmful content
         - Personal information, impersonation, rights infringement, or unauthorized reposting
         - Spam, excessive repeated posting, or actions that harm service safety
 
-        Users can report problematic posts, comments, and accounts. Reports are reviewed by the team, and HitoLog may hide posts or comments or restrict account use when necessary.
+        Users can report problematic posts, comments, and accounts. Reports are reviewed by the team, and Wamori may hide posts or comments or restrict account use when necessary.
         """
     }
 
     return """
-    HitoLogでは、本人が入力した言葉を安心して読める場にするため、以下の行為を禁止します。
+    Wamoriでは、本人が入力した言葉を安心して読める場にするため、以下の行為を禁止します。
 
     ・誹謗中傷、脅迫、嫌がらせ、差別的な表現
     ・性的、暴力的、違法、または他者に危害を与える内容
@@ -1290,26 +1294,26 @@ private var communityGuidelinesText: String {
 private var privacyPolicyText: String {
     if L10n.prefersEnglish {
         return """
-        HitoLog handles information needed to provide account creation, posting, comments, notifications, safety features, and product improvement.
+        Wamori handles information needed to provide accounts, private invitation-only circles, posts, comments, notifications, safety features, and product improvement.
 
         Information collected may include account identifiers from Sign in with Apple and Firebase Auth, profile information, posts, comments, likes, blocks, mutes, reports, typing-derived input signals such as input duration and edit counts, Firebase Cloud Messaging tokens when notifications are enabled, feedback submitted from Settings, and usage analytics events such as screen views and button actions. Post body text and feedback body text are not included in analytics events.
 
         This information is used to operate timelines and profiles, provide safety features, process reports, calculate Human Check labels, deliver notifications for comments and likes, protect the service, and improve product quality.
 
-        HitoLog uses Firebase Auth, Cloud Firestore, App Check, Cloud Messaging, Cloud Functions, and PostHog analytics when enabled. HitoLog does not sell collected data.
+        Wamori uses Firebase Auth, Cloud Firestore, Cloud Storage, Remote Config, App Check, Cloud Messaging, Cloud Functions, and PostHog analytics when enabled. Active members can read content and images in their circles. Wamori does not sell collected data.
 
         Users can disable notifications in the app or in iOS Settings. Users can request account deletion from Settings. Reports may be retained as moderation records when required for safety review.
         """
     }
 
     return """
-    HitoLogは、アカウント作成、投稿、コメント、通知、安全機能を提供するために必要な情報を扱います。
+    Wamoriは、アカウント作成、招待制の「輪」、投稿、コメント、通知、安全機能を提供するために必要な情報を扱います。
 
     収集する情報には、Sign in with AppleおよびFirebase Authのアカウント識別子、プロフィール情報、投稿、コメント、いいね、ブロック、ミュート、通報、投稿時の入力時間や編集回数などの入力指標、通知を有効にした場合のFirebase Cloud Messagingトークンが含まれます。
 
-    これらの情報は、タイムラインやプロフィールの表示、安全機能の提供、通報対応、コメントといいねの通知配信、サービスの保護のために利用します。通知トークンはHitoLogの通知配信にのみ利用します。
+    これらの情報は、輪、タイムラインやプロフィールの表示、安全機能の提供、通報対応、通知配信、サービスの保護のために利用します。通知トークンはWamoriの通知配信にのみ利用します。通知・分析・運用ログには、輪の名前、投稿本文、コメント本文、招待トークンを含めません。
 
-    HitoLogはFirebase Auth、Cloud Firestore、App Check、Cloud Messaging、Cloud Functionsを利用します。収集したデータを販売することはありません。
+    WamoriはFirebase Auth、Cloud Firestore、Cloud Storage、Remote Config、App Check、Cloud Messaging、Cloud Functionsを利用します。輪の内容と画像は、その輪の有効なメンバーだけが閲覧できます。収集したデータを販売することはありません。
 
     ユーザーはアプリ内の設定から通知をオフにできます。また、設定画面からアカウント削除を実行できます。
     """

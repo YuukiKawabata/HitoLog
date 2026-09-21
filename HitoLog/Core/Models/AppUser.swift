@@ -19,6 +19,7 @@ struct AppUser: Identifiable, Codable, Equatable {
     var website: String? = nil
     var location: String? = nil
     var occupation: String? = nil
+    var timeZoneIdentifier: String? = nil
 
     /// 表示用にスキーム補完したウェブサイトURL
     var websiteURL: URL? {
@@ -75,7 +76,7 @@ struct InviteCode: Identifiable, Codable, Equatable {
     }
 
     var shareText: String {
-        L10n.format("HitoLogへの招待です: %@", shareURL.absoluteString)
+        L10n.format("Wamoriへの招待です: %@", shareURL.absoluteString)
     }
 
     static func make(inviterID: String, maxUses: Int = 5) -> InviteCode {
@@ -93,7 +94,7 @@ struct InviteCode: Identifiable, Codable, Equatable {
     }
 
     static func code(from url: URL) -> String? {
-        if url.scheme == "hitolog", url.host == "invite" {
+        if ["hitolog", "wamori"].contains(url.scheme?.lowercased() ?? ""), url.host == "invite" {
             let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
             return normalizedCode(components?.queryItems?.first(where: { $0.name == "code" })?.value)
         }
@@ -113,6 +114,6 @@ struct InviteCode: Identifiable, Codable, Equatable {
     private static func randomCode() -> String {
         let alphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
         let suffix = String((0..<8).compactMap { _ in alphabet.randomElement() })
-        return "HL\(suffix)"
+        return "WM\(suffix)"
     }
 }

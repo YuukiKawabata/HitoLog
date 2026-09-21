@@ -6,6 +6,7 @@
         "appID": "976WT2WW6X.com.yukikawabata.HitoLog",
         "paths": [
           "/i/*",
+          "/c/*",
           "/p/*",
           "/t/*"
         ]

@@ -1,34 +1,30 @@
-# HitoLog TestFlight Review Notes
+# Wamori 2.0 TestFlight Review Notes
 
-## App Summary
-HitoLog is a social posting app focused on writing text directly in the app. The compose screen blocks paste input and records typing signals such as duration, edit count, delete count, and suspicious bulk input count to show a Human Check badge.
+## App summary
 
-## Sign-In
-Use Sign in with Apple. Firebase Auth stores the authenticated user ID and profile document.
+Wamori is the 2.0 update of HitoLog. Existing accounts and public posts remain available. The main experience is an invitation-only “Circle” (Japanese UI: 「輪」) for two to five close people, with one private entry per member and local calendar day.
 
-## Firebase Data
-- `users/{uid}`: profile, Apple user ID, notification preference.
-- `posts/{postID}`: post body, author ID, human score signals, like/comment counts.
-- `comments/{commentID}`: comment body, post ID, author ID, human score.
-- `likes/{postID}_{uid}`: one like per user per post.
-- `blocks/{blockerID}_{blockedUserID}` and `mutes/{muterID}_{mutedUserID}`: safety preferences.
-- `reports/{reportID}`: user-submitted reports.
-- `fcmTokens/{uid}/tokens/{tokenID}`: iOS FCM token records for push notifications.
+## Reviewer path
 
-## Push Notifications
-The app asks for notification permission from Settings. Cloud Functions send FCM notifications for comments and likes. Notifications are skipped for self-actions, notification-off recipients, and blocked or muted actor relationships.
+1. Sign in with Apple using a review account.
+2. Confirm the one-time “HitoLogはWamoriになりました” migration screen when upgrading a 1.x install.
+3. Create a Circle or join from a `https://hitolog-e22d2.web.app/c/{token}` invitation. This is the live compatibility host until `wamori.app` is connected.
+4. Use the center Write tab. With one Circle it opens the editor directly; with multiple Circles it asks for a destination.
+5. Create a text or one-photo entry, then test reactions and comments from another member.
+6. Open Self > Public Posts to confirm the existing public timeline and composer remain available.
+7. As owner, inspect invitation revocation, member removal, ownership transfer, and Circle deletion.
 
-## Reviewer Path
-1. Sign in with Apple using the production review account.
-2. Complete onboarding.
-3. Create a post from the Post / 投稿 tab.
-4. Open a post and add a comment.
-5. Like and unlike a post.
-6. Open Settings to edit profile, change notification preference, and inspect block/mute/report screens.
+## Privacy and security
 
-## Required Console Setup Before Submission
-- Add the real `GoogleService-Info.plist` to `HitoLog/Resources/` and to the Xcode target resources.
-- Enable Firebase Auth Sign in with Apple, Firestore, Cloud Messaging, and App Check.
-- Upload the APNs Auth Key to Firebase Cloud Messaging.
-- Confirm the Apple App ID has Sign in with Apple, Push Notifications, and App Attest capabilities.
-- Deploy Firestore rules, indexes, and Cloud Functions.
+- Circle reads require an active membership in Firestore and Storage Rules.
+- Circle mutations use App Check-enforced callable Functions.
+- Invitation tokens contain 256 bits of entropy; only SHA-256 hashes are persisted.
+- Push text is generic and does not include Circle names, post text, comment text, identifiers, tokens, or Storage paths.
+- Circle media is one JPEG up to 10 MB and 1,600 px on its longest edge.
+- Account deletion requires ownership transfer when another active member remains.
+
+## Rollout
+
+The release template enables Circles, default Circle navigation, images, comments, reactions, and generic push notifications. Setting `enable_circles=false` restores the legacy navigation without deleting Circle data.
+
+Production Firebase and Remote Config are deployed. Build 12 is the final TestFlight/App Store candidate. The custom-domain connection remains pending acquisition of `wamori.app`.

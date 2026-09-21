@@ -2,8 +2,8 @@ import CoreGraphics
 import Foundation
 
 enum AppConstants {
-    static let appName = "HitoLog"
-    static var copy: String { "1日1つ、自分の言葉を残す。".localized }
+    static let appName = "Wamori"
+    static var copy: String { "大切な人と、今日をひとつずつ。".localized }
     static let maxPostLength = 500
     static let maxPostMediaItems = 4
     static let maxPostVideoDurationSeconds = 60.0
@@ -12,7 +12,15 @@ enum AppConstants {
     static let maxMutedWordLength = 40
     static let maxFeedbackLength = 1_000
     static let minimumStarterPackFollowerCount = 1
+    static let canonicalPublicBaseURL = "https://wamori.app"
+    // Use the live Firebase host until the custom domain has been acquired and connected.
+    // Both hosts remain accepted by CircleInviteRouter, so switching later is backward-compatible.
     static let publicBaseURL = "https://hitolog-e22d2.web.app"
+    static let legacyPublicBaseURL = "https://hitolog-e22d2.web.app"
+    static let maxCircleMembers = 5
+    static let maxOwnedCircles = 5
+    static let maxJoinedCircles = 20
+    static let maxCircleImageBytes: Int64 = 10 * 1024 * 1024
 }
 
 enum DailyPrompt {
@@ -27,7 +35,17 @@ enum DailyPrompt {
     ]
 
     static var current: String {
-        let day = Calendar.current.ordinality(of: .day, in: .era, for: Date()) ?? 0
-        return prompts[day % prompts.count].localized
+        text(for: CircleDataStore.dateKey(for: Date(), timeZone: .current))
+    }
+
+    static func text(for dateKey: String) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        guard let date = formatter.date(from: dateKey) else { return prompts[0].localized }
+        let day = Int(floor(date.timeIntervalSince1970 / 86_400))
+        return prompts[abs(day) % prompts.count].localized
     }
 }

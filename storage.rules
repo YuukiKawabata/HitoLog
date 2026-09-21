@@ -10,6 +10,36 @@ service firebase.storage {
       return signedIn() && request.auth.uid == userID;
     }
 
+    function isActiveCircleMember(circleID) {
+      return signedIn()
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isDeleted != true
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isSuspended != true
+        && firestore.exists(/databases/(default)/documents/circles/$(circleID))
+        && firestore.get(/databases/(default)/documents/circles/$(circleID)).data.status == 'active'
+        && firestore.exists(/databases/(default)/documents/circles/$(circleID)/members/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/circles/$(circleID)/members/$(request.auth.uid)).data.status == 'active';
+    }
+
+    match /circleMedia/{circleID}/drafts/{userID}/{fileName} {
+      allow read: if isActiveCircleMember(circleID);
+      allow create: if isOwner(userID)
+        && isActiveCircleMember(circleID)
+        && resource == null
+        && request.resource.size > 0
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType == 'image/jpeg';
+      // Draft object paths are immutable. Posted entries may reference them, so
+      // replacing the bytes at the same path would otherwise alter history.
+      allow update: if false;
+      allow delete: if isOwner(userID) && isActiveCircleMember(circleID);
+    }
+
+    match /circleMedia/{circleID}/{allPaths=**} {
+      allow read: if isActiveCircleMember(circleID);
+      allow write: if false;
+    }
+
     match /postMedia/{userID}/{postID}/{fileName} {
       allow read: if signedIn();
       allow create, update: if isOwner(userID)

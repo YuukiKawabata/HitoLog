@@ -269,6 +269,38 @@
         { "fieldPath": "creatorID", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "entries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isDeleted", "order": "ASCENDING" },
+        { "fieldPath": "dateKey", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "circleInvites",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "circleID", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "circleInvites",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "circleID", "order": "ASCENDING" },
+        { "fieldPath": "managementID", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "circleMemberships",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "role", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

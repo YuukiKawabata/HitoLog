@@ -21,7 +21,7 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 [bundle exec] fastlane ios latest_build
 ```
 
-Show the latest TestFlight build number for version 1.3
+Show the latest TestFlight build number for version 2.0
 
 ### ios beta
 
@@ -29,7 +29,7 @@ Show the latest TestFlight build number for version 1.3
 [bundle exec] fastlane ios beta
 ```
 
-Build and upload HitoLog to TestFlight
+Build and upload Wamori to TestFlight
 
 ### ios release_screenshots
 
@@ -37,7 +37,7 @@ Build and upload HitoLog to TestFlight
 [bundle exec] fastlane ios release_screenshots
 ```
 
-Upload the prepared App Store screenshots for version 1.3
+Upload the prepared App Store screenshots for version 2.0
 
 ----
 

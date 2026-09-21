@@ -10,7 +10,8 @@
     "serve": "npm run build && firebase emulators:start --only functions,firestore",
     "deploy": "firebase deploy --only functions,firestore:rules,firestore:indexes",
     "lint": "tsc --noEmit",
-    "test": "npm run build && node --test test/*.test.cjs"
+    "test": "npm run build && node --test test/*.test.cjs",
+    "test:rules": "cd .. && firebase emulators:exec --only firestore,storage \"node --test functions/test/circle-rules.test.cjs functions/test/circle-functions.test.cjs\""
   },
   "dependencies": {
     "@apple/app-store-server-library": "^3.1.0",
@@ -18,9 +19,12 @@
     "firebase-functions": "^7.3.2"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "firebase": "^12.19.0",
     "typescript": "^6.0.3"
   },
   "overrides": {
-    "uuid": "11.1.1"
+    "uuid": "11.1.1",
+    "qs": "6.16.0"
   }
 }

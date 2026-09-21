@@ -24,22 +24,22 @@ let panels = [
         source: "01-home.png",
         output: "01-one-word-a-day.png",
         number: "01",
-        headline: "1日1つ、\n自分の言葉を残す。",
-        subline: "今日のお題から、すぐ書ける。"
+        headline: "大切な人と、\n今日をひとつずつ。",
+        subline: "2〜5人だけの、小さな交換日記。"
     ),
     Panel(
         source: "02-compose.png",
         output: "02-write-as-you-are.png",
         number: "02",
-        headline: "今日のことを、\nそのまま書く。",
-        subline: "未来の自分にも、そっと届ける。"
+        headline: "今日のひとことを、\n輪へ。",
+        subline: "親しい人だけに届く、非公開の記録。"
     ),
     Panel(
         source: "03-profile.png",
         output: "03-meet-your-past-self.png",
         number: "03",
-        headline: "ときどき、\n過去の自分に会う。",
-        subline: "週刊の振り返りと、1か月前の言葉。"
+        headline: "これまでの投稿も、\nそのまま。",
+        subline: "自分から「みんなの投稿」へ。"
     ),
 ]
 
@@ -158,7 +158,7 @@ func render(panel: Panel, device: DeviceClass) -> Bool {
     let brandY = height * 0.925
     let numberSize = width * 0.026
     drawText(
-        "HitoLog",
+        "Wamori",
         in: NSRect(x: horizontalInset, y: brandY, width: width * 0.3, height: width * 0.06),
         font: font(size: numberSize, weight: .bold),
         color: accent

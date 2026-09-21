@@ -21,6 +21,8 @@ enum AppNotificationType: String, Codable, Equatable {
     case repost
     case quote
     case mention
+    case circleEntryCreated = "circle_entry_created"
+    case circleCommentCreated = "circle_comment_created"
 }
 
 struct AppNotification: Identifiable, Codable, Equatable {

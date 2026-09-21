@@ -10,6 +10,7 @@
 	</array>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
+		<string>applinks:wamori.app</string>
 		<string>applinks:hitolog-e22d2.web.app</string>
 	</array>
 	<key>com.apple.developer.devicecheck.appattest-environment</key>

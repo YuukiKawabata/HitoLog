@@ -1,4 +1,4 @@
-import { initializeApp } from "firebase-admin/app";
+import { getApps, initializeApp } from "firebase-admin/app";
 import { DocumentData, DocumentReference, FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { setGlobalOptions } from "firebase-functions/v2";
@@ -8,8 +8,34 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
 import { makeCompletePurchaseHandler, makeCreatePurchaseIntentHandler } from "./purchases";
 
-initializeApp();
+if (getApps().length === 0) initializeApp();
 setGlobalOptions({ region: "asia-northeast1" });
+
+export {
+  createCircle,
+  updateCircle,
+  createCircleInvite,
+  listCircleInvites,
+  revokeCircleInvite,
+  previewCircleInvite,
+  publicCircleInvitePreview,
+  joinCircleByInvite,
+  createCircleEntry,
+  updateCircleEntry,
+  deleteCircleEntry,
+  setCircleReaction,
+  createCircleComment,
+  deleteCircleComment,
+  leaveCircle,
+  transferCircleOwnership,
+  removeCircleMember,
+  deleteCircle,
+  updateTimeZone,
+  prepareCircleAccountDeletion,
+  moderateCircleContent,
+  processCircleOperationJobs,
+  cleanupCircleEphemeralRecords,
+} from "./circles";
 
 const db = getFirestore();
 
@@ -678,10 +704,10 @@ export const publicPage = onRequest(async (request, response) => {
   }
 
   response.status(404).send(renderBaseHTML({
-    title: "HitoLog",
-    description: "HitoLogは、自分の言葉で書くSNSです。",
+    title: "Wamori",
+    description: "Wamoriは、大切な人と今日を交換するSNSです。",
     canonicalURL: baseURL,
-    body: "<main><h1>HitoLog</h1><p>ページが見つかりません。</p></main>"
+    body: "<main><h1>Wamori</h1><p>ページが見つかりません。</p></main>"
   }));
 });
 
@@ -770,7 +796,7 @@ async function sendDigestPush(recipientID: string, unreadCount: number): Promise
   await getMessaging().sendEachForMulticast({
     tokens,
     notification: {
-      title: "HitoLog",
+      title: "Wamori",
       body: `あなたの言葉に${unreadCount}件の反応が届いています`
     },
     data: { type: "digest" },
@@ -812,7 +838,7 @@ async function createAndSendNotification(input: {
     return;
   }
 
-  const actorName = typeof actor?.displayName === "string" ? actor.displayName : "HitoLog";
+  const actorName = typeof actor?.displayName === "string" ? actor.displayName : "Wamori";
   const notificationText = notificationTextFor(input.type, actorName);
 
   const notificationData: { [key: string]: unknown } = {
@@ -854,7 +880,7 @@ async function createAndSendNotification(input: {
   await getMessaging().sendEachForMulticast({
     tokens,
     notification: {
-      title: "HitoLog",
+      title: "Wamori",
       body: notificationText
     },
     data: messageData,
@@ -1144,8 +1170,8 @@ async function renderPostPage(postID: string, baseURL: string, response: PublicP
 
   const userSnapshot = await db.collection("users").doc(post.userID).get();
   const user = userSnapshot.data();
-  const authorName = typeof user?.displayName === "string" ? user.displayName : "HitoLog";
-  const description = truncate(post.body ?? "", 120) || `${authorName}さんのHitoLog投稿`;
+  const authorName = typeof user?.displayName === "string" ? user.displayName : "Wamori";
+  const description = truncate(post.body ?? "", 120) || `${authorName}さんのWamori投稿`;
   const canonicalURL = `${baseURL}/p/${encodeURIComponent(postID)}`;
   const imageURL = `${baseURL}/og/post/${encodeURIComponent(postID)}`;
   const topics = (post.topics ?? []).filter(isValidTopic).map((topic) => `<a href="/t/${encodeURIComponent(topic)}">#${escapeHTML(topic)}</a>`).join(" ");
@@ -1155,20 +1181,20 @@ async function renderPostPage(postID: string, baseURL: string, response: PublicP
     .status(200)
     .set("Cache-Control", "public, max-age=120, s-maxage=300")
     .send(renderBaseHTML({
-      title: `${authorName} on HitoLog`,
+      title: `${authorName} on Wamori`,
       description,
       canonicalURL,
       imageURL,
       body: `
         <main>
-          <p class="kicker">HitoLog Post</p>
+          <p class="kicker">Wamori Post</p>
           <h1>${escapeHTML(authorName)}さんの投稿</h1>
           <article class="card">
             <p class="body">${escapeHTML(post.body ?? "").replace(/\n/g, "<br>")}</p>
             ${topics ? `<p class="topics">${topics}</p>` : ""}
             ${createdAt ? `<p class="meta">${escapeHTML(createdAt)}</p>` : ""}
           </article>
-          <a class="button" href="/">HitoLogを開く</a>
+          <a class="button" href="/">Wamoriを開く</a>
         </main>`
     }));
 }
@@ -1192,7 +1218,7 @@ async function renderTopicPage(topic: string, baseURL: string, response: PublicP
   const title = typeof room?.title === "string" && room.title.length > 0 ? room.title : `#${topic}`;
   const description = typeof room?.description === "string" && room.description.length > 0
     ? room.description
-    : `#${topic} の投稿が集まるHitoLogの小部屋です。`;
+    : `#${topic} の投稿が集まるWamoriの小部屋です。`;
   const canonicalURL = `${baseURL}/t/${encodeURIComponent(topic)}`;
   const postItems = postsSnapshot.docs
     .map((doc) => doc.data() as PostRecord)
@@ -1204,7 +1230,7 @@ async function renderTopicPage(topic: string, baseURL: string, response: PublicP
     .status(200)
     .set("Cache-Control", "public, max-age=120, s-maxage=300")
     .send(renderBaseHTML({
-      title: `${title} | HitoLog`,
+      title: `${title} | Wamori`,
       description,
       canonicalURL,
       body: `
@@ -1217,7 +1243,7 @@ async function renderTopicPage(topic: string, baseURL: string, response: PublicP
             <h2>最近の投稿</h2>
             ${postItems ? `<ul>${postItems}</ul>` : "<p>このルームの投稿はまだありません。</p>"}
           </section>
-          <a class="button" href="/">HitoLogを開く</a>
+          <a class="button" href="/">Wamoriを開く</a>
         </main>`
     }));
 }
@@ -1233,31 +1259,31 @@ async function renderInvitePage(rawCode: string, baseURL: string, response: Publ
   const invite = inviteSnapshot.data() as InviteCodeRecord | undefined;
   const inviterSnapshot = invite?.inviterID ? await db.collection("users").doc(invite.inviterID).get() : undefined;
   const inviter = inviterSnapshot?.data();
-  const inviterName = typeof inviter?.displayName === "string" ? inviter.displayName : "HitoLog";
+  const inviterName = typeof inviter?.displayName === "string" ? inviter.displayName : "Wamori";
   const remainingUses = Math.max((invite?.maxUses ?? 5) - (invite?.useCount ?? 0), 0);
   const isAvailable = !!invite && invite.isActive !== false && remainingUses > 0
     && (!(invite.expiresAt instanceof Timestamp) || invite.expiresAt.toMillis() >= Date.now());
   const canonicalURL = `${baseURL}/i/${encodeURIComponent(code)}`;
-  const appURL = `hitolog://invite?code=${encodeURIComponent(code)}`;
+  const appURL = `wamori://invite?code=${encodeURIComponent(code)}`;
 
   response
     .status(200)
     .set("Cache-Control", "public, max-age=60, s-maxage=120")
     .send(renderBaseHTML({
-      title: "HitoLogへの招待",
-      description: `${inviterName}さんからHitoLogへの招待です。`,
+      title: "Wamoriへの招待",
+      description: `${inviterName}さんからWamoriへの招待です。`,
       canonicalURL,
       body: `
         <main>
           <p class="kicker">Invitation</p>
-          <h1>HitoLogへの招待</h1>
+          <h1>Wamoriへの招待</h1>
           <p class="lead">${escapeHTML(inviterName)}さんから招待が届いています。</p>
           <section class="card">
             <p class="meta">招待コード</p>
             <p class="code">${escapeHTML(code)}</p>
             <p>${isAvailable ? `残り${remainingUses}回使えます。` : "この招待コードは利用できません。"}</p>
           </section>
-          <a class="button" href="${escapeAttribute(appURL)}">HitoLogで受け取る</a>
+          <a class="button" href="${escapeAttribute(appURL)}">Wamoriで受け取る</a>
         </main>`
     }));
 }
@@ -1272,8 +1298,8 @@ async function renderPostOGImage(postID: string, response: PublicPageResponse) {
 
   const userSnapshot = await db.collection("users").doc(post.userID).get();
   const user = userSnapshot.data();
-  const authorName = typeof user?.displayName === "string" ? user.displayName : "HitoLog";
-  const handle = typeof user?.handle === "string" ? `@${user.handle}` : "@hitolog";
+  const authorName = typeof user?.displayName === "string" ? user.displayName : "Wamori";
+  const handle = typeof user?.handle === "string" ? `@${user.handle}` : "@wamori";
   const bodyLines = svgTextLines(post.body ?? "", 34, 5);
   const badgeLabel = humanBadgeOGLabel(post.humanBadge);
   const badgeColor = post.humanBadge === "verified" ? "#2f7d5c" : post.humanBadge === "lowTrust" ? "#8a6a32" : "#67736d";
@@ -1286,7 +1312,7 @@ async function renderPostOGImage(postID: string, response: PublicPageResponse) {
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect width="1200" height="630" fill="#fbfaf6"/>
   <rect x="56" y="56" width="1088" height="518" rx="28" fill="#ffffff" stroke="#ded8cc" stroke-width="2"/>
-  <text x="96" y="124" fill="#2f7d5c" font-family="-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif" font-size="28" font-weight="700">HitoLog</text>
+  <text x="96" y="124" fill="#2f7d5c" font-family="-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif" font-size="28" font-weight="700">Wamori</text>
   <rect x="94" y="154" width="${Math.max(220, badgeLabel.length * 28)}" height="52" rx="26" fill="${badgeColor}" opacity="0.12"/>
   <text x="122" y="188" fill="${badgeColor}" font-family="-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif" font-size="25" font-weight="700">${escapeHTML(badgeLabel)}</text>
   ${bodyLines.map((line, index) => `<text x="96" y="${276 + index * 58}" fill="#1e2421" font-family="-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif" font-size="38" font-weight="650">${escapeHTML(line)}</text>`).join("\n  ")}
@@ -1297,8 +1323,8 @@ async function renderPostOGImage(postID: string, response: PublicPageResponse) {
 
 function renderNotFound(baseURL: string): string {
   return renderBaseHTML({
-    title: "ページが見つかりません | HitoLog",
-    description: "HitoLogのページが見つかりません。",
+    title: "ページが見つかりません | Wamori",
+    description: "Wamoriのページが見つかりません。",
     canonicalURL: baseURL,
     body: "<main><h1>ページが見つかりません</h1><p>投稿またはルームが削除された可能性があります。</p></main>"
   });
@@ -1323,7 +1349,7 @@ function renderBaseHTML(input: {
   <meta name="description" content="${escapeAttribute(input.description)}">
   <link rel="canonical" href="${escapeAttribute(input.canonicalURL)}">
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="HitoLog">
+  <meta property="og:site_name" content="Wamori">
   <meta property="og:title" content="${escapeAttribute(input.title)}">
   <meta property="og:description" content="${escapeAttribute(input.description)}">
   <meta property="og:url" content="${escapeAttribute(input.canonicalURL)}">
@@ -1372,7 +1398,7 @@ function truncate(value: string, maxLength: number): string {
 function svgTextLines(value: string, maxCharsPerLine: number, maxLines: number): string[] {
   const compact = value.replace(/\s+/g, " ").trim();
   if (!compact) {
-    return ["人間の言葉を、HitoLogに。"];
+    return ["人間の言葉を、Wamoriに。"];
   }
 
   const lines: string[] = [];

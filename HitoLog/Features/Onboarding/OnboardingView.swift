@@ -16,12 +16,12 @@ struct OnboardingView: View {
             BrandIconView(size: 84, showsShadow: false)
 
             VStack(spacing: AppSpacing.sm) {
-                Text("1日1つ、自分の言葉を残す。")
+                Text("大切な人と、今日をひとつずつ。")
                     .font(AppFont.title)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(AppColor.textPrimary)
 
-                Text("日記ほど構えず、SNSほど飾らず。\n今日のことを、そのまま書ける場所です。")
+                Text("2〜5人だけの「輪」で続ける、\n小さな交換日記です。")
                     .font(.body)
                     .foregroundStyle(AppColor.textSecondary)
                     .multilineTextAlignment(.center)
@@ -29,9 +29,9 @@ struct OnboardingView: View {
             }
 
             VStack(alignment: .leading, spacing: AppSpacing.md) {
-                OnboardingValueRow(systemImage: "pencil", text: "今日のことを、1〜500文字で書く")
-                OnboardingValueRow(systemImage: "checkmark.seal", text: "自分で入力した印を、小さく添える")
-                OnboardingValueRow(systemImage: "bubble.right", text: "誰かの言葉を読み、静かに反応する")
+                OnboardingValueRow(systemImage: "person.2", text: "招待した人だけで輪をつくる")
+                OnboardingValueRow(systemImage: "pencil", text: "今日のことを、輪ごとに1つ残す")
+                OnboardingValueRow(systemImage: "bubble.right", text: "言葉やリアクションで静かにつながる")
             }
             .padding(AppSpacing.lg)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -40,13 +40,13 @@ struct OnboardingView: View {
             Spacer()
 
             Button(action: finish) {
-                Label("今日の言葉を見にいく", systemImage: "arrow.right")
+                Label("Wamoriをはじめる", systemImage: "arrow.right")
             }
             .buttonStyle(PrimaryButtonStyle())
         }
         .padding(AppSpacing.lg)
         .background(PaperCanvas())
-        .navigationTitle("HitoLog")
+        .navigationTitle("Wamori")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             guard !didTrackAppearance else { return }

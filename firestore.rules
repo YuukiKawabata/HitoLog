@@ -29,6 +29,14 @@ service cloud.firestore {
         && signedInUser().data.isSuspended != true;
     }
 
+    function isActiveCircleMember(circleID) {
+      return isActiveAccount()
+        && exists(/databases/$(database)/documents/circles/$(circleID))
+        && get(/databases/$(database)/documents/circles/$(circleID)).data.status == 'active'
+        && exists(/databases/$(database)/documents/circles/$(circleID)/members/$(request.auth.uid))
+        && get(/databases/$(database)/documents/circles/$(circleID)/members/$(request.auth.uid)).data.status == 'active';
+    }
+
     function changedOnly(allowed) {
       return request.resource.data.diff(resource.data).changedKeys().hasOnly(allowed);
     }
@@ -303,6 +311,49 @@ service cloud.firestore {
           'updatedAt'
         ]);
       allow delete: if false;
+    }
+
+    // Wamoriの輪は、activeなメンバーだけが読める。全変更はApp Check付きcallableで行う。
+    match /circles/{circleID} {
+      allow read: if isActiveCircleMember(circleID);
+      allow create, update, delete: if false;
+
+      match /members/{memberID} {
+        allow read: if isActiveCircleMember(circleID);
+        allow create, update, delete: if false;
+      }
+
+      match /entries/{entryID} {
+        allow read: if isActiveCircleMember(circleID);
+        allow create, update, delete: if false;
+
+        match /reactions/{reactionID} {
+          allow read: if isActiveCircleMember(circleID);
+          allow create, update, delete: if false;
+        }
+
+        match /comments/{commentID} {
+          allow read: if isActiveCircleMember(circleID);
+          allow create, update, delete: if false;
+        }
+      }
+    }
+
+    match /users/{userID}/circleMemberships/{circleID} {
+      allow read: if isOwner(userID) && isActiveAccount();
+      allow create, update, delete: if false;
+    }
+
+    match /circleInvites/{inviteID} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /circleOperationRequests/{requestID} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /circleOperationJobs/{jobID} {
+      allow read, create, update, delete: if false;
     }
 
     match /posts/{postID} {

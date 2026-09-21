@@ -65,20 +65,14 @@ final class AnalyticsService: ObservableObject {
         guard isConfigured, isEnabled else { return }
 
         #if canImport(PostHog)
-        PostHogSDK.shared.identify(
-            user.id,
-            userProperties: [
-                "human_level": user.humanLevel,
-                "human_verified_post_rate": user.humanVerifiedPostRate,
-                "account_age_days": user.accountAgeDays,
-                "is_admin": user.isAdmin
-            ],
-            userPropertiesSetOnce: [
-                "first_app_version": appVersion,
-                "first_build_number": buildNumber,
-                "signup_email_provided": email?.isEmpty == false
-            ]
-        )
+        // PostHogの匿名distinct IDを維持し、Firebase UIDやメールアドレスは送らない。
+        PostHogSDK.shared.capture("account_context", properties: enriched([
+            "human_level": user.humanLevel,
+            "human_verified_post_rate": user.humanVerifiedPostRate,
+            "account_age_days": user.accountAgeDays,
+            "is_admin": user.isAdmin,
+            "signup_email_provided": email?.isEmpty == false
+        ]))
         #endif
     }
 
@@ -107,11 +101,24 @@ final class AnalyticsService: ObservableObject {
     }
 
     private func enriched(_ properties: [String: Any]) -> [String: Any] {
-        var next = properties
+        var next = privacySafeProperties(properties)
         next["app_version"] = appVersion
         next["build_number"] = buildNumber
         next["platform"] = "ios"
         return next
+    }
+
+    /// Circleの内容や識別子が、将来イベントを追加した際にも誤って送信されないための最終防波堤。
+    func privacySafeProperties(_ properties: [String: Any]) -> [String: Any] {
+        let forbiddenFragments = [
+            "userid", "authorid", "actorid", "ownerid", "recipientid", "memberid",
+            "circleid", "circlename", "targetid", "postid", "commentid", "entryid",
+            "inviteid", "requestid", "transactionid", "body", "commenttext", "token", "storagepath"
+        ]
+        return properties.filter { element in
+            let normalizedKey = element.key.lowercased().filter { $0.isLetter || $0.isNumber }
+            return !forbiddenFragments.contains { normalizedKey.contains($0) }
+        }
     }
 
     private var appVersion: String {
