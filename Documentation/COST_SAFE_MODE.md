@@ -44,7 +44,22 @@ Wamori（旧 HitoLog、App ID 6772677155）は App Store に公開したまま�
 - `functions/test/cost-safe-mode.test.cjs` で、ビルドしたマニフェストの全関数に上限があること、スケジュール関数が1であること、ダイジェストが既定で止まることを確認している。
 - 利用者への影響: 毎晩19時の「あなたの言葉にN件の反応が届いています」通知が止まる。輪のリアルタイム通知（`enable_circle_push`）は続く。
 
+### 2. 旧SNS（みんなの投稿）を読み取り専用にする
+
+| 変更 | 内容 |
+|---|---|
+| `firestore.rules` | スイッチ関数 `legacySocialWritesEnabled()` を `false` にした。posts・comments・likes・reactions・follows・topicFollows・articles の作成と編集を拒否する（どれも Functions のトリガーが付いているコレクション） |
+| 許可したままの操作 | 閲覧、いいね・フォロー・リアクションの解除（削除）、投稿・記事・コメントの論理削除、プロフィール編集、ブロック・ミュート・通報・フィードバック、招待コード |
+| `storage.rules` | スイッチ関数 `legacySocialUploadsEnabled()` を `false` にした。`postMedia`（最大100MBの画像・動画）への新規アップロードを拒否する。閲覧と本人による削除はできる |
+| Remote Config | `show_legacy_public_timeline` を `false` にした。2.0 の「自分」タブから「みんなの投稿」への入口が消える |
+
+- 輪（2.0 のメイン機能）は影響を受けない。
+- `functions/test/legacy-readonly-rules.test.cjs` で、エミュレータを使って、書き込みの拒否、削除の許可、プロフィールの「京都 → 大阪」の保存ができることを確認している（`npm run test:rules`）。
+- デプロイ時に、Storage のルールから Firestore を読むための権限（`roles/firebaserules.firestoreServiceAgent`）を Storage のサービスエージェントに付けた。**それまでこの権限がなかったため、本番では輪の画像のルール（メンバー判定）が働かず、アップロードと表示が拒否されていた可能性が高い。**
+
 ## 対応していないこと・残っているリスク
+
+- **ダイジェストのインデックス**: `sendDailyDigest` は少なくとも 2026-09-17 から毎日「インデックスが必要」というエラーで失敗していた（通知は送られていなかった）。再開する場合は、先に `notifications` の複合インデックス（`isRead` と `createdAt`）を `firestore.indexes.json` に追加する。
 
 - **スケジュールジョブ4つ目の料金**: 無料枠（3ジョブ）を1つ超えるため、約$0.10/月かかる可能性がある。ジョブをまとめるには既存の関数とジョブを削除する必要があるため、見送った。
 - **削除済み投稿の Storage ファイル**: 削除する処理は入れていない（データを削除しない方針）。今は 30.9MB で無料枠内。
@@ -53,10 +68,12 @@ Wamori（旧 HitoLog、App ID 6772677155）は App Store に公開したまま�
 
 ## 元に戻す・再開する手順
 
-1. ダイジェストを再開する: `functions/.env` に `WAMORI_DAILY_DIGEST_ENABLED=true` を書き、Functions を再デプロイする。
+1. 旧SNSを再開する: `firestore.rules` の `legacySocialWritesEnabled()` と `storage.rules` の `legacySocialUploadsEnabled()` を `true` に戻し、`remoteconfig.template.json` の `show_legacy_public_timeline` を `true` にして、`firebase deploy --only firestore:rules,storage,remoteconfig --project hitolog-e22d2` を実行する。
+1. ダイジェストを再開する（先に上記のインデックスを追加する）: `functions/.env` に `WAMORI_DAILY_DIGEST_ENABLED=true` を書き、Functions を再デプロイする。
 2. Functions を再デプロイする: `firebase deploy --only functions --project hitolog-e22d2`
 3. 本格的に再開する場合: インスタンス上限をこのブランチの変更前に戻し（`git revert`）、予算額を見直す。
 
 ## 確認日
 
-- 2026-09-26: 現状把握（CLI・Cloud Monitoring）、Functions の変更、単体テスト（12件成功）、エミュレータでのルールと輪の関数のテスト（6件成功）
+- 2026-09-26: 現状把握（CLI・Cloud Monitoring）、Functions の変更、単体テスト（12件成功）、エミュレータでのルールと輪の関数のテスト（11件成功）
+- 2026-09-26: 本番にデプロイした（ユーザーが実行。functions・firestore:rules・storage・remoteconfig）。全46関数の `maxScale` が 3（スケジュール関数4個は1）になったこと、Remote Config の `show_legacy_public_timeline=false`、Storage サービスエージェントの権限、デプロイ後1時間のエラーログがないことを確認した
