@@ -11,7 +11,7 @@
     "deploy": "firebase deploy --only functions,firestore:rules,firestore:indexes",
     "lint": "tsc --noEmit",
     "test": "npm run build && node --test test/*.test.cjs",
-    "test:rules": "cd .. && firebase emulators:exec --only firestore,storage \"node --test functions/test/circle-rules.test.cjs functions/test/circle-functions.test.cjs\""
+    "test:rules": "cd .. && firebase emulators:exec --only firestore,storage \"node --test functions/test/circle-rules.test.cjs functions/test/circle-functions.test.cjs functions/test/legacy-readonly-rules.test.cjs\""
   },
   "dependencies": {
     "@apple/app-store-server-library": "^3.1.0",

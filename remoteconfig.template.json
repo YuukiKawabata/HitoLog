@@ -9,8 +9,8 @@
       "description": "Makes Wamori's Circle/Write/Self tabs the root navigation."
     },
     "show_legacy_public_timeline": {
-      "defaultValue": { "value": "true" },
-      "description": "Keeps the existing public timeline available under Self."
+      "defaultValue": { "value": "false" },
+      "description": "Keeps the existing public timeline available under Self. false in cost-safe mode (legacy SNS is read-only)."
     },
     "enable_circle_images": {
       "defaultValue": { "value": "true" }

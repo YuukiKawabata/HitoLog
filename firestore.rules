@@ -22,6 +22,13 @@ service cloud.firestore {
         && signedInUser().data.isSuspended != true;
     }
 
+    // 低コスト保管モード（Documentation/COST_SAFE_MODE.md）: 旧SNS（みんなの投稿）は読み取り専用。
+    // true に戻すと、投稿・コメント・いいね・リアクション・フォロー・話題フォロー・記事の作成と編集が再開する。
+    // 削除（いいね解除、フォロー解除など）と、投稿・記事・コメントの論理削除はいつでもできる。
+    function legacySocialWritesEnabled() {
+      return false;
+    }
+
     function isActiveAccount() {
       return signedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
@@ -358,7 +365,8 @@ service cloud.firestore {
 
     match /posts/{postID} {
       allow read: if signedIn();
-      allow create: if isOwner(request.resource.data.userID)
+      allow create: if legacySocialWritesEnabled()
+        && isOwner(request.resource.data.userID)
         && isActiveAccount()
         && request.resource.data.keys().hasOnly([
           'userID',
@@ -402,6 +410,11 @@ service cloud.firestore {
         && request.resource.data.reactionCounts is map
         && request.resource.data.reactionCounts.keys().size() == 0;
       allow update: if isOwner(resource.data.userID)
+        && !legacySocialWritesEnabled()
+        && changedOnly(['updatedAt', 'isDeleted'])
+        && request.resource.data.isDeleted == true;
+      allow update: if legacySocialWritesEnabled()
+        && isOwner(resource.data.userID)
         && changedOnly(['body', 'topics', 'searchTokens', 'editCount', 'updatedAt', 'isDeleted', 'commentPermission'])
         && validPostTopics(request.resource.data)
         && validPostSearchTokens(request.resource.data)
@@ -420,7 +433,8 @@ service cloud.firestore {
 
     match /comments/{commentID} {
       allow read: if signedIn();
-      allow create: if isOwner(request.resource.data.userID)
+      allow create: if legacySocialWritesEnabled()
+        && isOwner(request.resource.data.userID)
         && isActiveAccount()
         && request.resource.data.keys().hasOnly([
           'postID',
@@ -464,7 +478,8 @@ service cloud.firestore {
 
     match /likes/{likeID} {
       allow read: if signedIn();
-      allow create: if isOwner(request.resource.data.userID)
+      allow create: if legacySocialWritesEnabled()
+        && isOwner(request.resource.data.userID)
         && isActiveAccount()
         && request.resource.data.keys().hasOnly(['postID', 'userID', 'createdAt'])
         && likeID == request.resource.data.postID + '_' + request.resource.data.userID;
@@ -474,11 +489,13 @@ service cloud.firestore {
 
     match /reactions/{reactionID} {
       allow read: if signedIn();
-      allow create: if isOwner(request.resource.data.userID)
+      allow create: if legacySocialWritesEnabled()
+        && isOwner(request.resource.data.userID)
         && isActiveAccount()
         && validReaction(request.resource.data)
         && reactionID == request.resource.data.postID + '_' + request.resource.data.userID;
-      allow update: if isOwner(resource.data.userID)
+      allow update: if legacySocialWritesEnabled()
+        && isOwner(resource.data.userID)
         && isOwner(request.resource.data.userID)
         && isActiveAccount()
         && validReaction(request.resource.data)
@@ -501,7 +518,8 @@ service cloud.firestore {
 
     match /follows/{followID} {
       allow read: if signedIn();
-      allow create: if isOwner(request.resource.data.followerID)
+      allow create: if legacySocialWritesEnabled()
+        && isOwner(request.resource.data.followerID)
         && isActiveAccount()
         && request.resource.data.keys().hasOnly(['followerID', 'followeeID', 'createdAt'])
         && request.resource.data.followerID is string
@@ -557,7 +575,8 @@ service cloud.firestore {
 
     match /topicFollows/{followID} {
       allow read: if isOwner(resource.data.userID);
-      allow create: if isOwner(request.resource.data.userID)
+      allow create: if legacySocialWritesEnabled()
+        && isOwner(request.resource.data.userID)
         && request.resource.data.keys().hasOnly(['userID', 'topic', 'createdAt'])
         && validTopicValue(request.resource.data.topic)
         && followID == request.resource.data.userID + '_' + request.resource.data.topic;
@@ -685,7 +704,8 @@ service cloud.firestore {
 
     match /articles/{articleID} {
       allow read: if signedIn();
-      allow create: if isOwner(request.resource.data.userID)
+      allow create: if legacySocialWritesEnabled()
+        && isOwner(request.resource.data.userID)
         && isActiveAccount()
         && request.resource.data.keys().hasOnly([
           'userID', 'title', 'freePreviewBody', 'status', 'price',
@@ -707,6 +727,11 @@ service cloud.firestore {
         && request.resource.data.status in ['draft', 'published', 'unpublished']
         && request.resource.data.price in ['free', 'yen100', 'yen300', 'yen500', 'yen800', 'yen1000'];
       allow update: if isOwner(resource.data.userID)
+        && !legacySocialWritesEnabled()
+        && changedOnly(['updatedAt', 'isDeleted'])
+        && request.resource.data.isDeleted == true;
+      allow update: if legacySocialWritesEnabled()
+        && isOwner(resource.data.userID)
         && changedOnly(['title', 'freePreviewBody', 'status', 'topics', 'searchTokens', 'updatedAt', 'isDeleted', 'commentPermission'])
         && (!request.resource.data.diff(resource.data).changedKeys().hasAny(['isDeleted'])
           || request.resource.data.isDeleted == true);
