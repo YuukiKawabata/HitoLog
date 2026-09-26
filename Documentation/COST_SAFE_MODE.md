@@ -57,6 +57,13 @@ Wamori（旧 HitoLog、App ID 6772677155）は App Store に公開したまま�
 - `functions/test/legacy-readonly-rules.test.cjs` で、エミュレータを使って、書き込みの拒否、削除の許可、プロフィールの「京都 → 大阪」の保存ができることを確認している（`npm run test:rules`）。
 - デプロイ時に、Storage のルールから Firestore を読むための権限（`roles/firebaserules.firestoreServiceAgent`）を Storage のサービスエージェントに付けた。**それまでこの権限がなかったため、本番では輪の画像のルール（メンバー判定）が働かず、アップロードと表示が拒否されていた可能性が高い。**
 
+### 3. GCP 予算（2026-09-26 変更済み）
+
+- 対象の予算: `Firebase Project hitolog-e22d2`（請求アカウント `01B1AB-F4E762-468956`、予算ID `b5054d1f-f243-494e-ad2a-79f435f5996c`）
+- 変更前: 1,000円/月、実績額の 50% / 90% / 100% で通知
+- 変更後: **300円/月**、実績額の 50% / 90% / 100% と、**予測額の 100%** で通知
+- 予算は通知だけで、請求そのものは止まらない。請求を止める仕組みは、Functions のインスタンス上限とルールが担う。
+
 ## 対応していないこと・残っているリスク
 
 - **ダイジェストのインデックス**: `sendDailyDigest` は少なくとも 2026-09-17 から毎日「インデックスが必要」というエラーで失敗していた（通知は送られていなかった）。再開する場合は、先に `notifications` の複合インデックス（`isRead` と `createdAt`）を `firestore.indexes.json` に追加する。
@@ -71,9 +78,10 @@ Wamori（旧 HitoLog、App ID 6772677155）は App Store に公開したまま�
 1. 旧SNSを再開する: `firestore.rules` の `legacySocialWritesEnabled()` と `storage.rules` の `legacySocialUploadsEnabled()` を `true` に戻し、`remoteconfig.template.json` の `show_legacy_public_timeline` を `true` にして、`firebase deploy --only firestore:rules,storage,remoteconfig --project hitolog-e22d2` を実行する。
 1. ダイジェストを再開する（先に上記のインデックスを追加する）: `functions/.env` に `WAMORI_DAILY_DIGEST_ENABLED=true` を書き、Functions を再デプロイする。
 2. Functions を再デプロイする: `firebase deploy --only functions --project hitolog-e22d2`
-3. 本格的に再開する場合: インスタンス上限をこのブランチの変更前に戻し（`git revert`）、予算額を見直す。
+3. 本格的に再開する場合: インスタンス上限をこのブランチの変更前に戻し（`git revert`）、予算額を見直す（`gcloud billing budgets update b5054d1f-f243-494e-ad2a-79f435f5996c --billing-account=01B1AB-F4E762-468956 --budget-amount=<額>JPY`）。
 
 ## 確認日
 
 - 2026-09-26: 現状把握（CLI・Cloud Monitoring）、Functions の変更、単体テスト（12件成功）、エミュレータでのルールと輪の関数のテスト（11件成功）
 - 2026-09-26: 本番にデプロイした（ユーザーが実行。functions・firestore:rules・storage・remoteconfig）。全46関数の `maxScale` が 3（スケジュール関数4個は1）になったこと、Remote Config の `show_legacy_public_timeline=false`、Storage サービスエージェントの権限、デプロイ後1時間のエラーログがないことを確認した
+- 2026-09-26: GCP 予算を 300円/月に変更し、予測額の100%通知を追加した（ユーザーが実行、反映を確認）
