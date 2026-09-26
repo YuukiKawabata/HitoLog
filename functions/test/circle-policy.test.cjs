@@ -47,7 +47,7 @@ test("daily Circle prompts are deterministic for a date and locale", () => {
 
 test("every Circle mutation callable uses the App Check-enforced options", () => {
   const source = fs.readFileSync(path.resolve(__dirname, "../src/circles.ts"), "utf8");
-  assert.match(source, /const callableOptions = \{ region: "asia-northeast1", enforceAppCheck: true \}/);
+  assert.match(source, /const callableOptions = \{ region: "asia-northeast1", enforceAppCheck: true, maxInstances: MAX_INSTANCES \}/);
   const names = [
     "createCircle", "updateCircle", "createCircleInvite", "listCircleInvites", "revokeCircleInvite",
     "previewCircleInvite", "joinCircleByInvite", "createCircleEntry", "updateCircleEntry", "deleteCircleEntry",

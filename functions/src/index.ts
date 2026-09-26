@@ -9,7 +9,8 @@ import { logger } from "firebase-functions";
 import { makeCompletePurchaseHandler, makeCreatePurchaseIntentHandler } from "./purchases";
 
 if (getApps().length === 0) initializeApp();
-setGlobalOptions({ region: "asia-northeast1" });
+// Cost-safe mode: cap every function so abuse cannot scale instances (see docs/COST_SAFE_MODE.md).
+setGlobalOptions({ region: "asia-northeast1", maxInstances: 3 });
 
 export {
   createCircle,
@@ -40,12 +41,12 @@ export {
 const db = getFirestore();
 
 export const createPurchaseIntent = onCall(
-  { region: "asia-northeast1", enforceAppCheck: true },
+  { region: "asia-northeast1", enforceAppCheck: true, maxInstances: 3 },
   makeCreatePurchaseIntentHandler(db)
 );
 
 export const completePurchase = onCall(
-  { region: "asia-northeast1", enforceAppCheck: true },
+  { region: "asia-northeast1", enforceAppCheck: true, maxInstances: 3 },
   makeCompletePurchaseHandler(db)
 );
 
@@ -715,14 +716,22 @@ export const publicPage = onRequest(async (request, response) => {
 //
 // フォロー中の新着や自分の投稿への反応を1日分まとめて配信し、毎日開く理由をつくる。
 // スパムにならないよう「未読がある人」だけに1日1通。ユーザー設定（notificationsEnabled）で制御。
+// 低コスト保管モード: WAMORI_DAILY_DIGEST_ENABLED=true のときだけ送る（未設定なら停止）。
+const DAILY_DIGEST_NOTIFICATION_READ_LIMIT = 500;
+
 export const sendDailyDigest = onSchedule(
-  { schedule: "0 19 * * *", timeZone: "Asia/Tokyo" },
+  { schedule: "0 19 * * *", timeZone: "Asia/Tokyo", maxInstances: 1 },
   async () => {
+    if (process.env.WAMORI_DAILY_DIGEST_ENABLED !== "true") {
+      logger.info("Daily digest skipped (cost-safe mode)");
+      return;
+    }
+
     const since = Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
     const snapshot = await db.collection("notifications")
       .where("createdAt", ">=", since)
       .where("isRead", "==", false)
-      .limit(5000)
+      .limit(DAILY_DIGEST_NOTIFICATION_READ_LIMIT)
       .get();
 
     // 受信者ごとに未読件数を集計する。
@@ -747,7 +756,7 @@ export const sendDailyDigest = onSchedule(
 );
 
 export const expireCreatorMemberships = onSchedule(
-  { schedule: "15 3 * * *", timeZone: "Asia/Tokyo" },
+  { schedule: "15 3 * * *", timeZone: "Asia/Tokyo", maxInstances: 1 },
   async () => {
     const now = Timestamp.now();
     const snapshot = await db.collection("creatorMemberships")

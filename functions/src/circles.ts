@@ -10,7 +10,9 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 
 if (getApps().length === 0) initializeApp();
 const db = getFirestore();
-const callableOptions = { region: "asia-northeast1", enforceAppCheck: true } as const;
+// Cost-safe mode: cap every function so abuse cannot scale instances (see docs/COST_SAFE_MODE.md).
+const MAX_INSTANCES = 3;
+const callableOptions = { region: "asia-northeast1", enforceAppCheck: true, maxInstances: MAX_INSTANCES } as const;
 const MAX_MEMBERS = 5;
 const MAX_OWNED = 5;
 const MAX_JOINED = 20;
@@ -298,7 +300,7 @@ function escapeHTML(value: string): string {
   return value.replace(/[&<>"']/g, character => entities[character]);
 }
 
-export const publicCircleInvitePreview = onRequest({ region: "asia-northeast1" }, async (request, response) => {
+export const publicCircleInvitePreview = onRequest({ region: "asia-northeast1", maxInstances: MAX_INSTANCES }, async (request, response) => {
   const addressHash = createHash("sha256").update(request.ip || "unknown").digest("hex");
   try { await enforceRateLimit(addressHash, "public-preview", 60, 60 * 60 * 1000); } catch { response.status(429).type("text").send("Too many requests"); return; }
   response.set("Cache-Control", "private, max-age=0, no-store");
