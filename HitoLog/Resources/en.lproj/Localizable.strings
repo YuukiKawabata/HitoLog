@@ -494,3 +494,5 @@
 "誰かの言葉を読み、静かに反応する" = "Read someone else's words and respond quietly";
 "今日の言葉を見にいく" = "See today's words";
 "これまでの言葉" = "Your words so far";
+"みんなの投稿は閲覧のみです" = "Public posts are read-only";
+"みんなの投稿への新しい投稿・コメント・いいね・フォローは、現在受け付けていません。輪での記録・コメント・リアクションは、これまでどおり使えます。" = "New posts, comments, likes, and follows in public posts are no longer accepted. Circle entries, comments, and reactions work as before.";

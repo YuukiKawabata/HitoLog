@@ -96,6 +96,7 @@ private struct RootView: View {
     @Environment(\.requestReview) private var requestReview
     @EnvironmentObject private var authSession: AuthSessionStore
     @EnvironmentObject private var appReviewService: AppReviewService
+    @EnvironmentObject private var store: AppDataStore
     @Binding var hasCompletedInitialExperience: Bool
     @AppStorage("hasSeenWamoriMigrationV2") private var hasSeenWamoriMigration = false
     @State private var step: InitialExperienceStep = .login
@@ -116,6 +117,11 @@ private struct RootView: View {
             guard let pendingRequest else { return }
             appReviewService.markPromptRequested(pendingRequest)
             requestReview()
+        }
+        .alert("みんなの投稿は閲覧のみです", isPresented: $store.isShowingLegacyReadOnlyNotice) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("みんなの投稿への新しい投稿・コメント・いいね・フォローは、現在受け付けていません。輪での記録・コメント・リアクションは、これまでどおり使えます。")
         }
     }
 

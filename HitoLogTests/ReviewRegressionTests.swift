@@ -23,7 +23,7 @@ final class ReviewRegressionTests: XCTestCase {
     }
 
     func testBlockingEveryFollowedUserClearsBothCountAndList() {
-        let store = AppDataStore()
+        let store = AppDataStore(legacySocialWritesEnabled: { true })
         let targetUsers = (1...3).map { makeUser(id: "target-\($0)") }
         store.installUsersForTesting(targetUsers)
         let targetIDs = targetUsers.map(\.id)
@@ -133,17 +133,44 @@ final class ReviewRegressionTests: XCTestCase {
         XCTAssertEqual(CircleDataStore.dateKey(for: date, timeZone: TimeZone(secondsFromGMT: 0)!), "2024-12-31")
     }
 
-    func testCircleFeatureFlagsStartConservativelyDisabled() {
+    func testFeatureFlagDefaultsMatchPublishedRemoteConfig() {
         let flags = FeatureFlagService.shared
 
-        XCTAssertFalse(flags.enableCircles)
-        XCTAssertFalse(flags.circlesAsDefaultHome)
-        XCTAssertFalse(flags.enableCircleImages)
-        XCTAssertFalse(flags.enableCircleComments)
-        XCTAssertFalse(flags.enableCircleReactions)
-        XCTAssertFalse(flags.enableCirclePush)
+        XCTAssertTrue(flags.enableCircles)
+        XCTAssertTrue(flags.circlesAsDefaultHome)
+        XCTAssertTrue(flags.enableCircleImages)
+        XCTAssertTrue(flags.enableCircleComments)
+        XCTAssertTrue(flags.enableCircleReactions)
+        XCTAssertTrue(flags.enableCirclePush)
         XCTAssertFalse(flags.enableCircleMoments)
-        XCTAssertTrue(flags.showLegacyPublicTimeline)
+        XCTAssertFalse(flags.showLegacyPublicTimeline)
+        XCTAssertFalse(flags.legacySocialWritesEnabled)
+    }
+
+    func testReadOnlyLegacySocialDoesNotFakeSuccessfulWrites() {
+        let store = AppDataStore(legacySocialWritesEnabled: { false })
+        let target = makeUser(id: "target-readonly")
+        store.installUsersForTesting([target])
+
+        store.toggleFollow(userID: target.id)
+
+        XCTAssertEqual(store.followingCount(for: store.currentUser.id), 0)
+        XCTAssertTrue(store.isShowingLegacyReadOnlyNotice)
+    }
+
+    func testReadOnlyLegacySocialStillAllowsUnfollow() {
+        var writesEnabled = true
+        let store = AppDataStore(legacySocialWritesEnabled: { writesEnabled })
+        let target = makeUser(id: "target-unfollow")
+        store.installUsersForTesting([target])
+        store.toggleFollow(userID: target.id)
+        XCTAssertEqual(store.followingCount(for: store.currentUser.id), 1)
+
+        writesEnabled = false
+        store.toggleFollow(userID: target.id)
+
+        XCTAssertEqual(store.followingCount(for: store.currentUser.id), 0)
+        XCTAssertFalse(store.isShowingLegacyReadOnlyNotice)
     }
 
     func testAnalyticsDropsPrivateCircleProperties() {

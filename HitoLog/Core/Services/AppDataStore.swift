@@ -97,6 +97,8 @@ final class AppDataStore: ObservableObject {
     @Published private(set) var isLoadingTimelinePage = false
     @Published private(set) var isRemoteSyncEnabled = false
     @Published private(set) var lastSyncErrorMessage: String?
+    /// 旧SNS（みんなの投稿）が閲覧のみのときに、作成・編集しようとすると true になる。ルートでお知らせを出す。
+    @Published var isShowingLegacyReadOnlyNotice = false
     @Published private(set) var articles: [Article] = []
     @Published private(set) var articleSearchResults: [Article] = []
     @Published private(set) var unlockedArticleIDs: Set<String> = []
@@ -105,6 +107,7 @@ final class AppDataStore: ObservableObject {
     @Published private(set) var creatorEarnings: CreatorEarnings = .empty
 
     private let remoteStore: FirebaseDataStore
+    private let legacySocialWritesEnabled: @MainActor () -> Bool
     private var remoteUserID: String?
     private var remoteListenerRegistrations: [RemoteListenerRegistration] = []
     private static let pendingInviteCodeKey = "pendingInviteCode"
@@ -253,9 +256,13 @@ final class AppDataStore: ObservableObject {
             .map { $0 }
     }
 
-    init(remoteStore: FirebaseDataStore = FirebaseDataStore()) {
+    init(
+        remoteStore: FirebaseDataStore = FirebaseDataStore(),
+        legacySocialWritesEnabled: @escaping @MainActor () -> Bool = { FeatureFlagService.shared.legacySocialWritesEnabled }
+    ) {
         let placeholderUser = Self.makePlaceholderUser()
         self.remoteStore = remoteStore
+        self.legacySocialWritesEnabled = legacySocialWritesEnabled
         self.currentUser = placeholderUser
         self.users = [placeholderUser]
         self.posts = []
@@ -418,7 +425,7 @@ final class AppDataStore: ObservableObject {
     }
 
     func insert(_ post: Post) {
-        guard canCurrentUserCreateContent else { return }
+        guard canCurrentUserCreateContent, allowsLegacySocialWrite() else { return }
         posts.insert(post, at: 0)
         refreshLocalTopicRoomsFromPosts()
         AnalyticsService.shared.capture("post_created", properties: [
@@ -443,7 +450,8 @@ final class AppDataStore: ObservableObject {
         let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedBody.isEmpty,
               canCurrentUserCreateContent,
-              let index = posts.firstIndex(where: { $0.id == postID && $0.userId == currentUser.id && isVisiblePost($0) }) else {
+              let index = posts.firstIndex(where: { $0.id == postID && $0.userId == currentUser.id && isVisiblePost($0) }),
+              allowsLegacySocialWrite() else {
             return
         }
 
@@ -498,6 +506,7 @@ final class AppDataStore: ObservableObject {
             deletePost(postID: existingRepost.id)
             return
         }
+        guard allowsLegacySocialWrite() else { return }
 
         let now = Date()
         let repost = Post(
@@ -543,7 +552,8 @@ final class AppDataStore: ObservableObject {
         guard !trimmedBody.isEmpty,
               trimmedBody.count <= AppConstants.maxPostLength,
               canCurrentUserCreateContent,
-              let requestedPost = post(for: sourcePostID) else {
+              let requestedPost = post(for: sourcePostID),
+              allowsLegacySocialWrite() else {
             return
         }
 
@@ -656,6 +666,8 @@ final class AppDataStore: ObservableObject {
         guard canCurrentUserCreateContent,
               let index = posts.firstIndex(where: { $0.id == postID && isVisiblePost($0) }) else { return }
 
+        guard likedPostIDs.contains(postID) || allowsLegacySocialWrite() else { return }
+
         let isLiked: Bool
         if likedPostIDs.contains(postID) {
             likedPostIDs.remove(postID)
@@ -690,6 +702,7 @@ final class AppDataStore: ObservableObject {
               let index = posts.firstIndex(where: { $0.id == postID && isVisiblePost($0) }) else { return }
 
         let previous = reactionByPostID[postID]
+        guard previous == kind || allowsLegacySocialWrite() else { return }
         let resolved: ReactionKind?
 
         if previous == kind {
@@ -766,7 +779,8 @@ final class AppDataStore: ObservableObject {
         let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedBody.isEmpty,
               canCurrentUserCreateContent,
-              commentPermissionStatus(for: postID).canComment else {
+              commentPermissionStatus(for: postID).canComment,
+              allowsLegacySocialWrite() else {
             return
         }
 
@@ -880,6 +894,7 @@ final class AppDataStore: ObservableObject {
         }
 
         let isFollowing = followingUserIDs.contains(userID)
+        guard isFollowing || allowsLegacySocialWrite() else { return }
         if isFollowing {
             removeFollowLocally(followerID: currentUser.id, followeeID: userID)
         } else {
@@ -1058,6 +1073,7 @@ final class AppDataStore: ObservableObject {
         }
 
         let isFollowing = followedTopicIDs.contains(normalizedTopic)
+        guard isFollowing || allowsLegacySocialWrite() else { return }
         if isFollowing {
             followedTopicIDs.remove(normalizedTopic)
             adjustTopicFollowerCount(topic: normalizedTopic, amount: -1)
@@ -1237,7 +1253,7 @@ final class AppDataStore: ObservableObject {
     }
 
     func insertArticle(_ article: Article, paidBody: String) {
-        guard canCurrentUserCreateContent else { return }
+        guard canCurrentUserCreateContent, allowsLegacySocialWrite() else { return }
         articles.insert(article, at: 0)
         AnalyticsService.shared.capture("article_created", properties: [
             "article_id": article.id,
@@ -2274,6 +2290,15 @@ final class AppDataStore: ObservableObject {
 
     private var canCurrentUserCreateContent: Bool {
         !currentUser.isDeleted && !currentUser.isSuspended
+    }
+
+    /// 旧SNSの作成・編集は、サーバーのルールと同じく `legacy_social_writes_enabled` が true のときだけ行う。
+    /// 閲覧のみのときは画面上の数字を変えずに、お知らせを出す（保存されないのに成功したように見せない）。
+    /// 解除系（いいね取り消し、フォロー解除、削除）はルールで許可しているため、この判定を通さない。
+    private func allowsLegacySocialWrite() -> Bool {
+        guard !legacySocialWritesEnabled() else { return true }
+        isShowingLegacyReadOnlyNotice = true
+        return false
     }
 
     private func containsMutedWord(_ post: Post) -> Bool {
