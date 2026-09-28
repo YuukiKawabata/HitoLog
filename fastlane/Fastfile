@@ -75,7 +75,9 @@ platform :ios do
       release_notes: {
         "ja" => "「みんなの投稿」は閲覧のみになりました。輪での記録・コメント・リアクションは、これまでどおりご利用いただけます。初回起動時の表示を改善し、そのほか軽微な不具合を修正しました。"
       },
-      reset_ratings: true,
+      # reset_ratings fails with an API key (no public resetRatingsRequests endpoint,
+      # fastlane/fastlane#21328). Tick "Reset summary rating" in App Store Connect instead.
+      reset_ratings: false,
       automatic_release: true,
       submit_for_review: true,
       submission_information: { add_id_info_uses_idfa: false },

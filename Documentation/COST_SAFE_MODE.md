@@ -57,6 +57,20 @@ Wamori（旧 HitoLog、App ID 6772677155）は App Store に公開したまま�
 - `functions/test/legacy-readonly-rules.test.cjs` で、エミュレータを使って、書き込みの拒否、削除の許可、プロフィールの「京都 → 大阪」の保存ができることを確認している（`npm run test:rules`）。
 - デプロイ時に、Storage のルールから Firestore を読むための権限（`roles/firebaserules.firestoreServiceAgent`）を Storage のサービスエージェントに付けた。**それまでこの権限がなかったため、本番では輪の画像のルール（メンバー判定）が働かず、アップロードと表示が拒否されていた可能性が高い。**
 
+### 2-1. アプリ 2.0.1（ビルド13、コミット `7edf893`）
+
+ルールで旧SNSの書き込みを止めただけでは、2.0 のアプリで次の2つの問題が残るため、アプリも更新した。
+
+| 変更 | 内容 | 理由 |
+|---|---|---|
+| `FeatureFlagService` の既定値 | 公開中の Remote Config に合わせた（輪の各フラグをオン、`show_legacy_public_timeline=false`、`legacy_social_writes_enabled=false`） | 2.0 の既定値は「輪オフ・旧SNSを表示」だった。初回起動やオフラインで Remote Config を取得できないと、閲覧のみの旧SNSが表示されてしまう |
+| `AppDataStore` | 旧SNSの作成・編集（投稿・コメント・いいね・リアクション・フォロー・話題フォロー・記事）を `allowsLegacySocialWrite()` で止め、ルート画面に「みんなの投稿は閲覧のみです」のアラートを出す。解除（いいね・フォローの取り消しなど）と削除はできる | 2.0 では画面上は先に反映され（楽観的更新）、ルールに拒否されて保存されないため、利用者から見ると「消える」不具合になる |
+
+- 旧SNSを再開するときは、ルールのスイッチ（下の「元に戻す・再開する手順」）に加えて、Remote Config に `legacy_social_writes_enabled=true` を追加する。これがないと 2.0.1 以降のアプリは書き込まない。
+- 2026-09-28 23:13（JST）に審査へ提出した。提出時に「概要評価をリセット」を選んだ（2.0 以前の星の平均と件数が消える。レビュー本文は残る。元に戻せない）。★2レビュー（2026-07-09）には返信していない。
+- 提出の流れ: `fastlane submit_review`（`fastlane/Fastfile`）でバージョン 2.0.1 を作り、新機能の文章を登録した → API でビルド13を割り当てた → 「概要評価をリセット」と「審査へ提出」は、ユーザーが App Store Connect の画面で行った。App Store Connect API には評価リセットの窓口（`resetRatingsRequests`）がなく、fastlane の `reset_ratings` は API キーでは失敗するため（fastlane/fastlane#21328）。
+- 署名: `fastlane beta` はこのとき署名エラーで失敗した。Xcode 管理の App Store 用プロファイルに、キーチェーンにある Apple Distribution 証明書（`NM4KKMKRHY`、2026-09-23 作成）が入っておらず、API キーにはクラウド署名の権限がないため自動更新もできなかった。手動のプロファイル「Wamori App Store (manual) 20260928」（`A53U7PQHQA`）を作り、アーカイブを手動署名で書き出して `xcrun altool` でアップロードした。また、fastlane はシェルのロケールが UTF-8 でないと xcpretty が止まるため、`LANG=en_US.UTF-8` を付けて実行する。
+
 ### 3. GCP 予算（2026-09-26 変更済み）
 
 - 対象の予算: `Firebase Project hitolog-e22d2`（請求アカウント `01B1AB-F4E762-468956`、予算ID `b5054d1f-f243-494e-ad2a-79f435f5996c`）
@@ -75,7 +89,7 @@ Wamori（旧 HitoLog、App ID 6772677155）は App Store に公開したまま�
 
 ## 元に戻す・再開する手順
 
-1. 旧SNSを再開する: `firestore.rules` の `legacySocialWritesEnabled()` と `storage.rules` の `legacySocialUploadsEnabled()` を `true` に戻し、`remoteconfig.template.json` の `show_legacy_public_timeline` を `true` にして、`firebase deploy --only firestore:rules,storage,remoteconfig --project hitolog-e22d2` を実行する。
+1. 旧SNSを再開する: `firestore.rules` の `legacySocialWritesEnabled()` と `storage.rules` の `legacySocialUploadsEnabled()` を `true` に戻し、`remoteconfig.template.json` の `show_legacy_public_timeline` を `true` にし、`legacy_social_writes_enabled=true` を追加して（2.0.1 以降のアプリはこれがないと書き込まない）、`firebase deploy --only firestore:rules,storage,remoteconfig --project hitolog-e22d2` を実行する。
 1. ダイジェストを再開する（先に上記のインデックスを追加する）: `functions/.env` に `WAMORI_DAILY_DIGEST_ENABLED=true` を書き、Functions を再デプロイする。
 2. Functions を再デプロイする: `firebase deploy --only functions --project hitolog-e22d2`
 3. 本格的に再開する場合: インスタンス上限をこのブランチの変更前に戻し（`git revert`）、予算額を見直す（`gcloud billing budgets update b5054d1f-f243-494e-ad2a-79f435f5996c --billing-account=01B1AB-F4E762-468956 --budget-amount=<額>JPY`）。
@@ -85,3 +99,4 @@ Wamori（旧 HitoLog、App ID 6772677155）は App Store に公開したまま�
 - 2026-09-26: 現状把握（CLI・Cloud Monitoring）、Functions の変更、単体テスト（12件成功）、エミュレータでのルールと輪の関数のテスト（11件成功）
 - 2026-09-26: 本番にデプロイした（ユーザーが実行。functions・firestore:rules・storage・remoteconfig）。全46関数の `maxScale` が 3（スケジュール関数4個は1）になったこと、Remote Config の `show_legacy_public_timeline=false`、Storage サービスエージェントの権限、デプロイ後1時間のエラーログがないことを確認した
 - 2026-09-26: GCP 予算を 300円/月に変更し、予測額の100%通知を追加した（ユーザーが実行、反映を確認）
+- 2026-09-28: 2.0.1（ビルド13）をアップロードし（処理結果 VALID）、概要評価をリセットして審査に提出した。API で `appStoreState=WAITING_FOR_REVIEW` を確認した
