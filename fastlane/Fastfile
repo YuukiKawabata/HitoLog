@@ -63,6 +63,28 @@ platform :ios do
     )
   end
 
+  desc "Submit Wamori 2.0.1 (build 13) for review and reset the summary rating"
+  lane :submit_review do
+    deliver(
+      api_key: connect_api_key,
+      app_identifier: "com.yukikawabata.HitoLog",
+      app_version: "2.0.1",
+      build_number: "13",
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      release_notes: {
+        "ja" => "「みんなの投稿」は閲覧のみになりました。輪での記録・コメント・リアクションは、これまでどおりご利用いただけます。初回起動時の表示を改善し、そのほか軽微な不具合を修正しました。"
+      },
+      reset_ratings: true,
+      automatic_release: true,
+      submit_for_review: true,
+      submission_information: { add_id_info_uses_idfa: false },
+      precheck_include_in_app_purchases: false,
+      run_precheck_before_submit: false,
+      force: true
+    )
+  end
+
   desc "Validate Wamori App Store metadata before review submission"
   lane :release_precheck do
     precheck(
