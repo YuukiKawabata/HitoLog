@@ -76,7 +76,7 @@ Wamori（旧 HitoLog、App ID 6772677155）は App Store に公開したまま�
 ### 2-2. App Check と PostHog（2026-09-28）
 
 - **Firestore の App Check を強制した**（Firebase コンソール）。直前の7日間は 834件中834件（100%）が検証済みで、未検証は0件だった。
-- **Storage は未強制**。コンソールに指標が出ておらず（直近のリクエストがない）、検証済みの割合を確認できないため。
+- **Storage の App Check も強制した**（ユーザーの判断）。コンソールに指標が出ておらず（直近7日間のリクエストがない）、検証済みの割合は確認できなかった。アプリには初版から App Check が入っており、Firestore で 100% 検証済みのため、同じ仕組みで Storage のリクエストにもトークンが付く想定。旧SNSや輪の画像が表示されないという報告があれば、まずこれを疑い、コンソールの「適用解除」で戻す。
 - Authentication（プレビュー）は 100% 検証済みで、モニタリングのまま。
 - **PostHog**（US、組織「HitoLog」）は無料プランで、カードは未登録。各製品の Billing limit は無料枠と同じ値で、請求は発生しない。
 
@@ -109,4 +109,4 @@ Wamori（旧 HitoLog、App ID 6772677155）は App Store に公開したまま�
 - 2026-09-26: 本番にデプロイした（ユーザーが実行。functions・firestore:rules・storage・remoteconfig）。全46関数の `maxScale` が 3（スケジュール関数4個は1）になったこと、Remote Config の `show_legacy_public_timeline=false`、Storage サービスエージェントの権限、デプロイ後1時間のエラーログがないことを確認した
 - 2026-09-26: GCP 予算を 300円/月に変更し、予測額の100%通知を追加した（ユーザーが実行、反映を確認）
 - 2026-09-28: 2.0.1（ビルド13）をアップロードし（処理結果 VALID）、概要評価をリセットして審査に提出した。API で `appStoreState=WAITING_FOR_REVIEW` を確認した
-- 2026-09-28: Firestore の App Check を強制した（直前7日間の検証率 100%）。PostHog が無料プランでカード未登録であることを確認した
+- 2026-09-28: Firestore（直前7日間の検証率 100%）と Storage（指標なし）の App Check を強制し、両方「適用済み」を確認した。PostHog が無料プランでカード未登録であることを確認した
