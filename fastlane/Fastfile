@@ -1,3 +1,9 @@
+# fastlane and xcpretty crash on Japanese build output under a US-ASCII locale
+# (e.g. shells started without LANG). Force UTF-8 for this process and children.
+ENV["LANG"] = "en_US.UTF-8"
+ENV["LC_ALL"] = "en_US.UTF-8"
+Encoding.default_external = Encoding::UTF_8
+
 default_platform(:ios)
 
 platform :ios do
@@ -23,17 +29,43 @@ platform :ios do
     UI.success("Latest TestFlight build for 2.0.1: #{latest}")
   end
 
-  desc "Build and upload Wamori to TestFlight"
-  lane :beta do
+  desc "Build a signed App Store IPA for Wamori without uploading"
+  lane :build do
     api_key = connect_api_key
+
+    # The Xcode-managed store profile lacks the current Apple Distribution
+    # certificate, and the API key has no cloud signing permission, so export
+    # with the manual profile instead. readonly: never creates portal profiles.
+    get_provisioning_profile(
+      api_key: api_key,
+      app_identifier: "com.yukikawabata.HitoLog",
+      provisioning_name: "Wamori App Store (manual) 20260928",
+      ignore_profiles_with_different_name: true,
+      readonly: true
+    )
 
     build_app(
       project: "HitoLog.xcodeproj",
       scheme: "HitoLog",
       configuration: "Release",
-      export_method: "app-store",
-      clean: true
+      clean: true,
+      export_options: {
+        method: "app-store-connect",
+        signingStyle: "manual",
+        signingCertificate: "Apple Distribution",
+        teamID: "976WT2WW6X",
+        provisioningProfiles: {
+          "com.yukikawabata.HitoLog" => lane_context[SharedValues::SIGH_UUID]
+        }
+      }
     )
+  end
+
+  desc "Build and upload Wamori to TestFlight"
+  lane :beta do
+    api_key = connect_api_key
+
+    build
 
     upload_to_testflight(
       api_key: api_key,

@@ -69,7 +69,9 @@ Wamori（旧 HitoLog、App ID 6772677155）は App Store に公開したまま�
 - 旧SNSを再開するときは、ルールのスイッチ（下の「元に戻す・再開する手順」）に加えて、Remote Config に `legacy_social_writes_enabled=true` を追加する。これがないと 2.0.1 以降のアプリは書き込まない。
 - 2026-09-28 23:13（JST）に審査へ提出した。提出時に「概要評価をリセット」を選んだ（2.0 以前の星の平均と件数が消える。レビュー本文は残る。元に戻せない）。★2レビュー（2026-07-09）には返信していない。
 - 提出の流れ: `fastlane submit_review`（`fastlane/Fastfile`）でバージョン 2.0.1 を作り、新機能の文章を登録した → API でビルド13を割り当てた → 「概要評価をリセット」と「審査へ提出」は、ユーザーが App Store Connect の画面で行った。App Store Connect API には評価リセットの窓口（`resetRatingsRequests`）がなく、fastlane の `reset_ratings` は API キーでは失敗するため（fastlane/fastlane#21328）。
-- 署名: `fastlane beta` はこのとき署名エラーで失敗した。Xcode 管理の App Store 用プロファイルに、キーチェーンにある Apple Distribution 証明書（`NM4KKMKRHY`、2026-09-23 作成）が入っておらず、API キーにはクラウド署名の権限がないため自動更新もできなかった。手動のプロファイル「Wamori App Store (manual) 20260928」（`A53U7PQHQA`）を作り、アーカイブを手動署名で書き出して `xcrun altool` でアップロードした。また、fastlane はシェルのロケールが UTF-8 でないと xcpretty が止まるため、`LANG=en_US.UTF-8` を付けて実行する。
+- 署名: `fastlane beta` はこのとき署名エラーで失敗した。Xcode 管理の App Store 用プロファイルに、キーチェーンにある Apple Distribution 証明書（`NM4KKMKRHY`、2026-09-23 作成）が入っておらず、API キーにはクラウド署名の権限がないため自動更新もできなかった。手動のプロファイル「Wamori App Store (manual) 20260928」（`A53U7PQHQA`）を作り、アーカイブを手動署名で書き出して `xcrun altool` でアップロードした。また、シェルのロケールが UTF-8 でないと fastlane と xcpretty が日本語の出力で止まった。
+- 2026-09-28 に `fastlane/Fastfile` を直した。`build` レーン（アップロードしない）で上の手動プロファイルを読み取り専用で取得し（`readonly: true`。Portal 側は変更しない）、手動署名で書き出す。`beta` はこれを呼んでからアップロードする。ファイルの先頭で UTF-8 を強制している。LANG なしのシェルで `fastlane ios build` が成功し、IPA が Apple Distribution で署名されることを確認した。
+- 手動プロファイルの期限は Apple Distribution 証明書と同じ 2027-09-23。証明書を作り直したときは、プロファイルも作り直して Fastfile の `provisioning_name` を合わせる。
 
 ### 3. GCP 予算（2026-09-26 変更済み）
 

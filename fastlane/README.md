@@ -23,6 +23,14 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 
 Show the latest TestFlight build number for version 2.0.1
 
+### ios build
+
+```sh
+[bundle exec] fastlane ios build
+```
+
+Build a signed App Store IPA for Wamori without uploading
+
 ### ios beta
 
 ```sh
