@@ -73,6 +73,13 @@ Wamori（旧 HitoLog、App ID 6772677155）は App Store に公開したまま�
 - 2026-09-28 に `fastlane/Fastfile` を直した。`build` レーン（アップロードしない）で上の手動プロファイルを読み取り専用で取得し（`readonly: true`。Portal 側は変更しない）、手動署名で書き出す。`beta` はこれを呼んでからアップロードする。ファイルの先頭で UTF-8 を強制している。LANG なしのシェルで `fastlane ios build` が成功し、IPA が Apple Distribution で署名されることを確認した。
 - 手動プロファイルの期限は Apple Distribution 証明書と同じ 2027-09-23。証明書を作り直したときは、プロファイルも作り直して Fastfile の `provisioning_name` を合わせる。
 
+### 2-2. App Check と PostHog（2026-09-28）
+
+- **Firestore の App Check を強制した**（Firebase コンソール）。直前の7日間は 834件中834件（100%）が検証済みで、未検証は0件だった。
+- **Storage は未強制**。コンソールに指標が出ておらず（直近のリクエストがない）、検証済みの割合を確認できないため。
+- Authentication（プレビュー）は 100% 検証済みで、モニタリングのまま。
+- **PostHog**（US、組織「HitoLog」）は無料プランで、カードは未登録。各製品の Billing limit は無料枠と同じ値で、請求は発生しない。
+
 ### 3. GCP 予算（2026-09-26 変更済み）
 
 - 対象の予算: `Firebase Project hitolog-e22d2`（請求アカウント `01B1AB-F4E762-468956`、予算ID `b5054d1f-f243-494e-ad2a-79f435f5996c`）
@@ -102,3 +109,4 @@ Wamori（旧 HitoLog、App ID 6772677155）は App Store に公開したまま�
 - 2026-09-26: 本番にデプロイした（ユーザーが実行。functions・firestore:rules・storage・remoteconfig）。全46関数の `maxScale` が 3（スケジュール関数4個は1）になったこと、Remote Config の `show_legacy_public_timeline=false`、Storage サービスエージェントの権限、デプロイ後1時間のエラーログがないことを確認した
 - 2026-09-26: GCP 予算を 300円/月に変更し、予測額の100%通知を追加した（ユーザーが実行、反映を確認）
 - 2026-09-28: 2.0.1（ビルド13）をアップロードし（処理結果 VALID）、概要評価をリセットして審査に提出した。API で `appStoreState=WAITING_FOR_REVIEW` を確認した
+- 2026-09-28: Firestore の App Check を強制した（直前7日間の検証率 100%）。PostHog が無料プランでカード未登録であることを確認した
