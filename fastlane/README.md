@@ -21,7 +21,7 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 [bundle exec] fastlane ios latest_build
 ```
 
-Show the latest TestFlight build number for version 2.0
+Show the latest TestFlight build number for version 2.0.1
 
 ### ios beta
 
@@ -37,7 +37,23 @@ Build and upload Wamori to TestFlight
 [bundle exec] fastlane ios release_screenshots
 ```
 
-Upload the prepared App Store screenshots for version 2.0
+Upload the prepared App Store screenshots for version 2.0.1
+
+### ios submit_review
+
+```sh
+[bundle exec] fastlane ios submit_review
+```
+
+Submit Wamori 2.0.1 (build 13) for review and reset the summary rating
+
+### ios release_precheck
+
+```sh
+[bundle exec] fastlane ios release_precheck
+```
+
+Validate Wamori App Store metadata before review submission
 
 ----
 
